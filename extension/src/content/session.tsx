@@ -40,6 +40,7 @@ export function startSession(gameId: string): () => void {
   // The hero's decision clock, reported once per turn so Claude's deadline can follow it.
   const clock = new ClockEstimate();
   let clockReported = false;
+  let clockTurn: string | null = null;
 
   const status = () => store.get().status;
   const show = (next: BackendStatus) => store.set({ status: next });
@@ -75,11 +76,14 @@ export function startSession(gameId: string): () => void {
   }
 
   function reportClock() {
-    if (store.get().turn === null) {
+    const turn = store.get().turn;
+    // A new decision can follow the last within one check, with no gap in between.
+    if (turn !== clockTurn) {
+      clockTurn = turn;
       clock.reset();
       clockReported = false;
-      return;
     }
+    if (turn === null) return;
     if (clockReported || status().state !== "ready") return;
     const secondsLeft = clock.sample(performance.now(), readTimeBar(document));
     if (secondsLeft !== null && send({ type: "clock", gameId, secondsLeft })) clockReported = true;

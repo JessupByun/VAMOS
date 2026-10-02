@@ -79,3 +79,9 @@ def test_nobody_left_to_raise():
     stacks = {HERO: "10.00", V1: "3.00", V2: "10.00"}
     h, spot = hand(stacks, *FLOP, f"{P[V1]} bets 2.40 and go all in", f"{P[V2]} folds")
     assert legal(h, HERO, spot) == ["fold", "call"]
+
+
+def test_the_betting_state_carries_what_the_rules_allow():
+    stacks = {HERO: "10.00", V1: "3.00", V2: "10.00"}
+    h, spot = hand(stacks, *FLOP, f"{P[V1]} bets 2.40 and go all in", f"{P[V2]} folds")
+    assert betting(h, HERO, spot).legal == ("fold", "call")

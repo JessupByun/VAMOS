@@ -75,3 +75,18 @@ def test_the_note_is_revealed():
         reveal=lambda s: s.replace("Player A", "alex"),
     )
     assert a.note == "alex overbluffs"
+
+
+def test_raising_closed_drops_raises_and_turns_all_in_into_a_call():
+    closed = Spot(
+        pot=160,
+        to_call=40,
+        street_bet=0,
+        price=40,
+        min_raise=40,
+        behind=940,
+        big_blind=20,
+        legal=("fold", "call"),
+    )
+    a = settle(answer(("raise", 75, 0.5), ("allin", 0, 0.5)), closed, seed="n")
+    assert a.mix == (Choice("call", 40, 1.0),)

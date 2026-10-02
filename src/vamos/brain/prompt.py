@@ -43,13 +43,15 @@ How to answer (the JSON shape is enforced):
 - note: what Hero should know, in the voice of a sharp friend. Lead with the reason that
   decides the spot, name the opponent's specific tendency when it matters, and plan the next
   street if that is useful. As short as the spot allows; no filler, no generic warnings.
-- Refer to players only by the names given (Player A, Player B, ..., Hero).
+- In the note, speak to Hero as "you"; refer to everyone else only by the names given
+  (Player A, Player B, ...).
 """
 
 
 @dataclass(frozen=True)
 class Prefix:
     blocks: list[dict]  # the system prompt, cache breakpoint on the last block
+    user_text: str  # the part the user wrote (profiles), after hiding, for the leak check
 
     @property
     def text(self) -> str:
@@ -65,15 +67,18 @@ def prefix(profiles: ProfileSet, pseudonyms: Pseudonyms) -> Prefix:
     for key in sorted(profiles.profiles, key=lambda k: pseudonyms.label(k)):
         profile = profiles.profiles[key]
         # The body only: the frontmatter's names and PokerNow IDs are of no use to Claude.
-        tag = f" ({profile.tag})" if profile.tag else ""
-        described.append(f"## {pseudonyms.label(key)}{tag}\n\n{profile.body}")
+        # Only the user's own text is hidden: a player called "river" must not rewrite
+        # the guide.
+        tag = f" ({pseudonyms.hide(profile.tag)})" if profile.tag else ""
+        described.append(f"## {pseudonyms.label(key)}{tag}\n\n{pseudonyms.hide(profile.body)}")
+    user_text = "\n\n".join(described)
     if described:
-        sections.append("# Opponent profiles\n\n" + "\n\n".join(described))
-    blocks = [{"type": "text", "text": pseudonyms.hide(s)} for s in sections]
+        sections.append("# Opponent profiles\n\n" + user_text)
+    blocks = [{"type": "text", "text": s} for s in sections]
     # One hour, not five minutes: answers use structured output, which rules out the
     # zero-token keep-warm request, and breaks between hands can run past five minutes.
     blocks[-1]["cache_control"] = {"type": "ephemeral", "ttl": "1h"}
-    return Prefix(blocks)
+    return Prefix(blocks, user_text)
 
 
 def _bb(cents: int, big_blind: int) -> float:
@@ -88,7 +93,7 @@ def spot_message(
     facts: dict,
     legal: list[str],
     tonight: dict[str, dict] | None = None,
-    notes: str = "",
+    notes: str = "",  # already pseudonymized
 ) -> str:
     """The hand so far from Hero's seat, as JSON inside a short user message."""
     bb = hand.big_blind or 1

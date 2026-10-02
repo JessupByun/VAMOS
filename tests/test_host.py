@@ -346,3 +346,25 @@ def test_the_dial_and_the_heros_names_come_from_settings(tmp_path):
     backend.handle(FLOP_TURN)
     sent_text = json.dumps(fake.requests[-1].system)
     assert "Jessica" not in sent_text and "when Hero check-raises" in sent_text
+
+
+def test_notes_are_sent_under_pseudonyms(tmp_path):
+    backend, fake, _ = claude_backend(tmp_path, [Reply(BET_HALF, "end_turn", {})])
+    backend.handle({"type": "notes", "text": "alex is on tilt"})
+    backend.handle(page(*FLOP_HAND))
+    backend.handle(FLOP_TURN)
+    content = fake.requests[0].messages[0]["content"]
+    assert "Player A is on tilt" in content and "alex" not in content
+
+
+def test_each_new_decision_restarts_the_clock(tmp_path):
+    profiles = tmp_path / "profiles"
+    profiles.mkdir()
+    now = [100.0]
+    backend = Backend(tmp_path / "data", profiles, provider=FakeProvider([]), clock=lambda: now[0])
+    backend.handle({**FLOP_TURN, "key": "k1"})
+    backend.handle({"type": "clock", "gameId": GAME, "secondsLeft": 10})
+    assert backend._deadline(GAME) == 105.0  # five seconds to spare
+    now[0] = 112.0
+    backend.handle({**FLOP_TURN, "key": "k2"})  # the next decision, with no gap in between
+    assert backend._deadline(GAME) == 137.0  # 25 seconds until its own clock is read

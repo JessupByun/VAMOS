@@ -22,6 +22,7 @@ def betting(hand: Hand, hero: str, spot: Decision) -> Spot:
         min_raise=max(hand.min_raise, spot.big_blind or 0),
         behind=spot.behind,
         big_blind=spot.big_blind or 0,
+        legal=tuple(legal(hand, hero, spot)),
     )
 
 

@@ -80,7 +80,9 @@ class Backend:
         self.preset = saved.get("preset") if saved.get("preset") in PRESETS else "balanced"
         self.hero_names = [str(n) for n in saved.get("heroNames", []) if isinstance(n, str)]
         self.notes = ""  # tonight's quick notes, never saved
-        self.pseudonyms: dict[str, Pseudonyms] = {}
+        # One set of pseudonyms for the whole session, so the notes (shared by every table)
+        # hide a name seen at any table.
+        self.names = Pseudonyms()
         # Per table: the preset locked for the current hand, when the hero's turn began, and
         # when the table's clock says it ends.
         self._hand_preset: dict[str, tuple[int, str]] = {}
@@ -130,8 +132,13 @@ class Backend:
                 self.advisor.stop(game_id)
                 # Tells the side panel the decision it shows has passed.
                 return [{"type": "facts", "gameId": game_id, "key": "", "facts": None}]
+            previous = self.turns.get(game_id)
+            if previous is None or previous.get("key") != message.get("key"):
+                # A new decision can follow the last one with no gap the extension sees, so
+                # each new table state restarts the clock until the extension reads it again.
+                self._turn_started[game_id] = self.clock()
+                self._turn_ends.pop(game_id, None)
             self.turns[game_id] = message
-            self._turn_started.setdefault(game_id, self.clock())
             return [self._spot_facts(game_id)]
         if kind == "clock":
             return self._clock(message)
@@ -253,7 +260,7 @@ class Backend:
             return
         preset = ask or self._preset_for(game_id, hand)
         profiles = self.profiles()
-        names = self._pseudonyms(game_id, profiles, hero)
+        names = self._pseudonyms(profiles, hero)
         labels = {
             s.player.id: names.label(self._person(game_id, s.player.id, profiles))
             for s in hand.seats
@@ -262,17 +269,17 @@ class Backend:
         labels[hero] = HERO
         counts = self._session(game_id).counts()
         tonight = {pid: {"hands": c.hands, "vpip": c.vpip} for pid, c in counts.items()}
-        message = names.hide(
-            prompt.spot_message(
-                hand,
-                hero,
-                labels,
-                positions(hand),
-                claude_facts(hand, spot, card),
-                legal(hand, hero, spot),
-                tonight,
-                self.notes,
-            )
+        # The hand itself names players only by pseudonym; the notes are the user's own words.
+        notes = names.hide(self.notes)
+        message = prompt.spot_message(
+            hand,
+            hero,
+            labels,
+            positions(hand),
+            claude_facts(hand, spot, card),
+            legal(hand, hero, spot),
+            tonight,
+            notes,
         )
         system = prompt.prefix(profiles, names)
         request = Request(PRESETS[preset], system.blocks, [{"role": "user", "content": message}])
@@ -285,7 +292,7 @@ class Backend:
         )
         refuse = None
         try:
-            names.check(system.text + "\n" + message)
+            names.check(system.user_text + "\n" + notes)
         except LeakError as error:
             log.error("[VAMOS] %s", error)
             refuse = "blocked: a real name was left in the prompt"
@@ -296,25 +303,28 @@ class Backend:
         resolution = self._resolve(pid, profiles, self._session(game_id).log.aliases)
         return resolution.profile if resolution.kind == "profile" and resolution.profile else pid
 
-    def _pseudonyms(self, game_id: str, profiles: ProfileSet, hero: str) -> Pseudonyms:
-        """This table's pseudonyms, with every name known so far registered."""
-        names = self.pseudonyms.setdefault(game_id, Pseudonyms())
+    def _pseudonyms(self, profiles: ProfileSet, hero: str) -> Pseudonyms:
+        """The session's pseudonyms, with every name seen at any table registered."""
+        names = self.names
         for name in self.hero_names:
             names.add_hero_name(name)
         # Profiles first, in key order, so their letters do not depend on who sat first.
         for key in sorted(profiles.profiles):
             profile = profiles.profiles[key]
             names.add(key, [profile.name, *profile.aliases], shown=profile.name)
-        game_log = self._session(game_id).log
-        for hand in game_log.hands:
-            for pid, nickname in hand.names.items():
-                pid = game_log.current_id(pid)
-                if pid == hero:
-                    names.add_hero_name(nickname)
-                    continue
-                person = self._person(game_id, pid, profiles)
-                profile = profiles.profiles.get(person)
-                names.add(person, [nickname], shown=profile.name if profile else nickname)
+        for game_id, session in self.sessions.items():
+            game_log = session.log
+            for hand in game_log.hands:
+                for pid, nickname in hand.names.items():
+                    pid = game_log.current_id(pid)
+                    if pid == hero:
+                        names.add_hero_name(nickname)
+                        continue
+                    person = self._person(game_id, pid, profiles)
+                    if person != pid and names.knows(pid):
+                        names.merge(pid, person)  # mapped to a profile since first seen
+                    profile = profiles.profiles.get(person)
+                    names.add(person, [nickname], shown=profile.name if profile else nickname)
         return names
 
     def _resolve(self, pid: str, profiles: ProfileSet, aliases: dict[str, str]) -> Resolution:
@@ -360,7 +370,14 @@ class Backend:
             "gameId": game_id,
             "players": players,
             "profiles": [{"key": p.key, "name": p.name} for p in profiles.profiles.values()],
-            "problems": list(profiles.problems),
+            "problems": [
+                *profiles.problems,
+                *(
+                    f'"{name}" is too short or too generic to keep from Claude; '
+                    "give that player a longer alias or nickname"
+                    for name in sorted(self.names.unusable)
+                ),
+            ],
         }
 
     def _record_page(self, message: Message) -> None:

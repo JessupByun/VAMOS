@@ -5,8 +5,9 @@ legal action on the card.
 The strategy comes first in the schema so it streams before the note. Claude's sizes are
 a percentage of the pot: a bet of that share of the pot, or a raise of that share of the pot
 after calling. Code, not the model, makes the answer legal: actions the spot does not allow
-are dropped, frequencies are renormalized, sizes are snapped between the minimum and the
-stack (within 10% of the stack becomes all in), and one action is sampled per decision.
+are dropped (an all in where only calling is allowed counts as a call), frequencies are
+renormalized, sizes are snapped between the minimum and the stack (within 10% of the stack
+becomes all in), and one action is sampled per decision.
 """
 
 import json
@@ -53,6 +54,9 @@ class Spot:
     min_raise: Cents  # the smallest raise increment allowed
     behind: Cents  # the hero's chips not yet in the pot
     big_blind: Cents
+    # What the rules allow here (see spot.legal): no raise after a short all-in that did not
+    # reopen betting, or when nobody else has chips left.
+    legal: tuple[str, ...] = ACTIONS
 
 
 @dataclass(frozen=True)
@@ -78,6 +82,10 @@ def _all_in(spot: Spot) -> Cents:
 
 
 def _legal(spot: Spot, action: str, pct: float) -> Choice | None:
+    if action == "allin" and "allin" not in spot.legal and "call" in spot.legal:
+        action = "call"  # with raising closed, the most Hero can put in is a call
+    if action not in spot.legal:
+        return None
     all_in = _all_in(spot)
     if action == "fold":
         return Choice("fold", 0, 0) if spot.to_call > 0 else None

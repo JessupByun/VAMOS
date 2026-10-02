@@ -75,3 +75,20 @@ def test_names_that_are_pseudonyms_are_never_substituted():
     text = p.hide("Hero raises and Bob calls")
     assert text == "Hero raises and Player A calls"
     p.check(text)
+
+
+def test_reveal_reads_names_literally_and_speaks_to_the_hero():
+    p = Pseudonyms()
+    p.add("x", [r"\o/"], shown=r"\o/")
+    assert p.reveal("Player A bluffs. Hero's range is capped; Hero should call.") == (
+        r"\o/ bluffs. Your range is capped; you should call."
+    )
+
+
+def test_a_player_mapped_mid_session_hides_under_their_profile():
+    p = Pseudonyms()
+    p.add("alex", ["alex"], shown="alex")
+    p.add("pid123", ["newname"], shown="newname")
+    p.merge("pid123", "alex")
+    assert p.hide("newname and alex") == "Player A and Player A"
+    assert p.label("pid123") == "Player B"  # the letter stays taken

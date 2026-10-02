@@ -110,10 +110,14 @@ function Advice({ claude }: { claude: LatestClaude }) {
         </>
       ) : (
         <p class="muted">
-          {advice.state === "thinking" ? `${advice.asked} is thinking...` : `No answer: ${advice.reason}`}
+          {advice.state !== "thinking"
+            ? `No answer: ${advice.reason}`
+            : live
+              ? `${advice.asked} is thinking...`
+              : "No answer before you acted."}
         </p>
       )}
-      {answered && advice.asked !== advice.model && advice.state === "thinking" && (
+      {live && answered && advice.asked !== advice.model && advice.state === "thinking" && (
         <p class="muted">asking {advice.asked}...</p>
       )}
       {answered && advice.asked !== advice.model && advice.state === "failed" && (

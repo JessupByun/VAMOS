@@ -228,6 +228,10 @@ class Advisor:
                     continue
                 self._finish(game_id, call, reason="unreadable answer")
                 return
+            except Exception:
+                log.exception("[VAMOS] could not read Claude's answer")
+                self._finish(game_id, call, reason="internal error")
+                return
             self._finish(game_id, call, answer=answer)
             return
 

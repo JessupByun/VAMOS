@@ -72,9 +72,9 @@ def test_the_spot_message_describes_the_hand_without_names():
         facts,
         ["fold", "call", "raise", "allin"],
         tonight={"alexid0001": {"hands": 30, "vpip": 21}},
-        notes="alex is tilted after losing a big pot",
+        notes=names.hide("alex is tilted after losing a big pot"),
     )
-    hidden = names.hide(text)
+    hidden = text
     names.check(hidden)
     assert "Player A is tilted" in hidden
     spot = json.loads(hidden[hidden.index("{") : hidden.rindex("}") + 1])
@@ -99,3 +99,16 @@ def test_the_spot_message_describes_the_hand_without_names():
     by_name = {p["name"]: p for p in spot["players"]}
     assert (by_name["Hero"]["behind_bb"], by_name["Player A"]["behind_bb"]) == (47.0, 53.0)
     assert [name for name, p in by_name.items() if p.get("folded")] == ["Player B"]
+
+
+def test_a_name_that_is_a_poker_word_is_hidden_only_in_the_users_text():
+    profiles = ProfileSet(
+        {"riv": parse_profile("riv", "---\nname: river\n---\nShoves the turn, folds the river.\n")},
+        (),
+    )
+    names = Pseudonyms()
+    names.add("riv", ["river"], shown="river")
+    built = prefix(profiles, names)
+    assert "folds the Player A" in built.user_text  # privacy first in what the user wrote
+    assert "the river" in built.text.split("# Opponent profiles")[0]  # the guide is untouched
+    names.check(built.user_text)

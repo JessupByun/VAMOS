@@ -65,6 +65,18 @@ class Pseudonyms:
             return
         into.add(name)
 
+    def merge(self, old: str, new: str) -> None:
+        """
+        `old` turned out to be `new` (a player mapped to a profile mid-session): their names
+        now hide as `new`'s pseudonym. `old` keeps its letter so no one else's changes.
+        """
+        if old in self._names and new in self._names and old != new:
+            self._names[new] |= self._names[old]
+            self._names[old] = set()
+
+    def knows(self, person: str) -> bool:
+        return person in self._labels
+
     def label(self, person: str) -> str:
         return self._labels[person]
 
@@ -90,5 +102,15 @@ class Pseudonyms:
     def reveal(self, text: str) -> str:
         """Claude's answer with pseudonyms turned back into names for the card."""
         for person in sorted(self._labels, key=lambda p: -len(self._labels[p])):
-            text = re.sub(rf"\b{re.escape(self._labels[person])}\b", self._shown[person], text)
-        return re.sub(rf"\b{HERO}\b", "you", text)
+            # A function, so a name with a backslash is not read as an escape.
+            text = re.sub(
+                rf"\b{re.escape(self._labels[person])}\b",
+                lambda _, shown=self._shown[person]: shown,
+                text,
+            )
+        # Claude is asked to say "you"; this covers the times it says "Hero" anyway.
+        text = re.sub(rf"\b{HERO}'s\b", "your", text)
+        text = re.sub(rf"\b{HERO}\b", "you", text)
+        return re.sub(
+            r"(^|[.!?]\s+)(you|your)\b", lambda m: m.group(1) + m.group(2).capitalize(), text
+        )
