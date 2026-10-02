@@ -10,6 +10,7 @@ Current phase: P0 (bootstrap + spikes).
 uv sync                      # install
 uv run pytest                # tests (slow and integration tests deselected by default)
 uv run pytest -m slow        # long reference checks
+uv run python scripts/fetch_corpus.py && uv run pytest -m corpus   # parser vs ~6,600 real hands
 uv run ruff check . && uv run ruff format --check .
 uv run vamos install         # register the native host with Chrome (re-run if the repo moves)
 
@@ -24,7 +25,8 @@ After a rebuild, reload VAMOS in `chrome://extensions` and then reload the Poker
 
 - `src/vamos/` backend package (`cards.py` card + hand-class helpers, `money.py` chip parsing, `host/` native messaging host and installer).
 - `extension/` the MV3 extension (`src/background` worker, `src/content` pill + log poller, `src/sidepanel`) and its Playwright e2e suite in `e2e/`.
-- `docs/pokernow.md` verified facts about PokerNow's log endpoint, log lines and DOM. Read it before touching parsing or DOM code.
+- `src/vamos/log/` the log parser: `grammar.py` (line -> event) and `hands.py` (events -> hands with chip accounting).
+- `docs/pokernow.md` verified facts about PokerNow's log endpoint, log lines and DOM; `docs/log-grammar.md` the full line grammar with evidence. Read both before touching parsing or DOM code.
 - `tests/` pytest suite, one test file per module.
 - `profiles/` the user's opponent profiles, gitignored except `_TEMPLATE.md` and `_PROMPT.md`.
 - `data/` VAMOS's own local state (identity map, advice log, cost ledger, logs), gitignored.
@@ -41,6 +43,7 @@ After a rebuild, reload VAMOS in `chrome://extensions` and then reload the Poker
 ### Correctness
 - Amounts are parsed with `money.parse_chips` into integer cents; never use `float()` on PokerNow values. It returns `None` for non-amounts such as "All In"; handle `None` explicitly.
 - Cards are two-character strings ("As", "Th"). Convert log cards with `cards.parse_log_card`.
+- Log amounts are the player's street total, not the increment. Unrecognized lines become `unknown` events and are surfaced, never guessed; extend the grammar only from real examples.
 - The PokerNow game log is the authoritative action stream; the DOM is only for whose turn it is, legal actions, hero cards, seats and the countdown.
 - DOM seat classes (`table-player-N`) are hero-relative positions, not physical seats; join DOM to log by player ID (`/players/<id>` link).
 - Respect PokerNow's rate limit (about one log request per 2s per IP): back off on 429/503, never add parallel pollers.

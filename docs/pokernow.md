@@ -24,24 +24,31 @@ PokerNow publishes none of this; re-verify when something breaks.
 
 ## Log lines
 
-Observed live:
+Observed live (two consecutive hands, in log order):
 
 ```
+The player "Hero @ heroid0001" requested a seat.
+The admin approved the player "Hero @ heroid0001" participation with a stack of 1000.
 -- starting hand #1 (id: ywhe4rpsfvih)  No Limit Texas Hold'em (dealer: "TestVillain @ FKxeoYccvW") --
+The player "TestVillain @ FKxeoYccvW" joined the game with a stack of 1000.
+The player "Hero @ heroid0001" joined the game with a stack of 1000.
 Player stacks: #1 "TestVillain @ FKxeoYccvW" (1000) | #2 "Hero @ heroid0001" (1000)
-Your hand is 4♠, 10♠
+Your hand is 3♠, 4♥
 "TestVillain @ FKxeoYccvW" posts a small blind of 10
 "Hero @ heroid0001" posts a big blind of 20
-"Hero @ heroid0001" calls 20
 "TestVillain @ FKxeoYccvW" folds
 Uncalled bet of 10 returned to "Hero @ heroid0001"
 "Hero @ heroid0001" collected 20 from pot
 -- ending hand #1 --
-The player "TestVillain @ FKxeoYccvW" requested a seat.
-The admin approved the player "TestVillain @ FKxeoYccvW" participation with a stack of 1000.
-The player "Hero @ heroid0001" joined the game with a stack of 1000.
+-- starting hand #2 (id: 31q3mb1wzm0w)  No Limit Texas Hold'em (dealer: "Hero @ heroid0001") --
+Player stacks: #1 "TestVillain @ FKxeoYccvW" (990) | #2 "Hero @ heroid0001" (1010)
+Your hand is 4♠, 10♠
+"Hero @ heroid0001" posts a small blind of 10
+"TestVillain @ FKxeoYccvW" posts a big blind of 20
+"Hero @ heroid0001" calls 20
 ```
 
+- Amounts are the player's street total: in hand #2 the small blind's `calls 20` adds 10. The full grammar, verified against thousands of real hands, is in `docs/log-grammar.md`.
 - Players are always `"Name @ ID"`; the ID survives nickname changes.
 - Tens are written `10`, e.g. `10♠`.
 - "Your hand is" rows are private: each viewer sees only their own, and the other players' rows are missing from the sequence (e.g. `...103` then `...105`). Gaps are normal, not lost data.

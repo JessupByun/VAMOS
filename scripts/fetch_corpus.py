@@ -1,0 +1,42 @@
+"""
+Fetch the parser regression corpus into tests/corpus/ (gitignored).
+
+Source: https://github.com/Jaaaayden/pokernow-tracker, MIT License. Its `pnt/logs` exports
+(hero hands redacted except at showdown) go to `jaaaayden/logs/` and its unredacted
+`tests/fixtures` copies to `jaaaayden/unredacted/`, with the license alongside.
+Run: uv run python scripts/fetch_corpus.py
+"""
+
+import json
+import urllib.request
+from pathlib import Path
+
+REPO = "Jaaaayden/pokernow-tracker"
+FOLDERS = {"pnt/logs": "logs", "tests/fixtures": "unredacted"}
+DEST = Path(__file__).resolve().parents[1] / "tests" / "corpus" / "jaaaayden"
+
+
+def get(url: str) -> bytes:
+    with urllib.request.urlopen(url, timeout=60) as response:
+        return response.read()
+
+
+def main() -> None:
+    DEST.mkdir(parents=True, exist_ok=True)
+    (DEST / "LICENSE").write_bytes(get(f"https://raw.githubusercontent.com/{REPO}/main/LICENSE"))
+    for folder, target in FOLDERS.items():
+        listing = json.loads(get(f"https://api.github.com/repos/{REPO}/contents/{folder}"))
+        out = DEST / target
+        out.mkdir(exist_ok=True)
+        for entry in listing:
+            if not entry["name"].endswith(".csv"):
+                continue
+            data = get(entry["download_url"])
+            # The folder also holds an ID-to-alias table; keep only PokerNow exports.
+            if data.startswith(b"entry,at,order"):
+                (out / entry["name"]).write_bytes(data)
+        print(f"[VAMOS] {target}: {len(list(out.glob('*.csv')))} logs")
+
+
+if __name__ == "__main__":
+    main()

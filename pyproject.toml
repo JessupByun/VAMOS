@@ -33,10 +33,15 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 
+[tool.ruff.lint.per-file-ignores]
+# Tests quote real PokerNow log lines verbatim, and those are long.
+"tests/*" = ["E501"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-m 'not slow and not integration'"
+addopts = "-m 'not slow and not integration and not corpus'"
 markers = [
     "slow: long-running reference checks (run with -m slow)",
     "integration: hits a live external service",
+    "corpus: parser regression over the third-party log corpus in tests/corpus",
 ]
