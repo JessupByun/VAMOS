@@ -36,6 +36,7 @@ def test_no_real_name_reaches_the_prefix():
     profiles, names = setup()
     text = prefix(profiles, names).text
     names.check(text)
+    assert "# Strategy guide for this game" in text
     assert "## Player A (calling-station)" in text and "## Player B\n" in text
     assert "player_id" not in text and "alexid0001" not in text
     assert "Folds to Hero on the river; Player B bluffs him." in text

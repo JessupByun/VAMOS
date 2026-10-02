@@ -2,7 +2,7 @@
 
 VAMOS (PAIv2) is a real-time poker assistant for PokerNow NLH cash games: a Chrome MV3 extension reads the table, a local Python backend (launched by Chrome native messaging) does the math, and Claude gives postflop advice with the user's opponent profiles in context.
 The approved plan, with every design decision and the phase list, is in `~/.claude/plans/im-starting-a-new-ticklish-yao.md`.
-Current phase: P2 (engine and the preflop baseline; P0 and P1 are done).
+Current phase: P3 (the postflop brain; P0 to P2 are done, and preflop is frozen as good enough).
 
 ## Commands
 
@@ -30,6 +30,7 @@ After a rebuild, reload VAMOS in `chrome://extensions` and then reload the Poker
 - `extension/` the MV3 extension (`src/background` worker, `src/content` pill + log poller, `src/sidepanel`) and its Playwright e2e suite in `e2e/`.
 - `src/vamos/log/` the log parser: `grammar.py` (line -> event) and `hands.py` (events -> hands with chip accounting).
 - `src/vamos/engine/` live decision facts: equity, decision state and turn order, made-hand text, the action card's facts.
+- `src/vamos/brain/` Claude's postflop advice: `pseudonyms.py` (names never reach the API), `prompt.py` (cached prefix + the hand as JSON), `strategy_guide.md` (the principles in every prompt; the user reviews changes), `provider.py` (streaming calls), `advisor.py` (background calls, deadline, stale-node cancel), `answer.py` (schema and legal sizing), `spot.py` (legal actions), `costs.py` (ledger in `data/costs.jsonl`).
 - `src/vamos/preflop/` the home-built preflop solver and its generated tables in `data/` (committed); `docs/preflop.md` lists every approximation with its measured size. Read it before changing the solver.
 - `docs/pokernow.md` verified facts about PokerNow's log endpoint, log lines and DOM; `docs/log-grammar.md` the full line grammar with evidence. Read both before touching parsing or DOM code.
 - `tests/` pytest suite, one test file per module.
