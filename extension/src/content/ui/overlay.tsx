@@ -18,61 +18,56 @@ function Pill({ store }: { store: Store }) {
   );
 }
 
-function AdviceLines({ facts }: { facts: SpotFacts }) {
-  const advice = facts.advice;
-  if (advice === null) return <div class="source instant">INSTANT · math only</div>;
-  if (advice.action === null) {
-    return (
-      <>
-        <div class="source instant">INSTANT · math only</div>
-        <div class="line note">no preflop baseline for this spot</div>
-      </>
-    );
-  }
-  return (
-    <>
-      <div class="source instant">{advice.source} · approximate</div>
-      <div class="action">{advice.action}</div>
-      {advice.mix && <div class="line mix">{advice.mix.join(" · ")}</div>}
-    </>
-  );
-}
-
-function FactLines({ facts }: { facts: SpotFacts }) {
-  const where = [facts.position, facts.pot && `pot ${facts.pot}`].filter(Boolean).join(" · ");
+function factsLine(facts: SpotFacts, advised: boolean): string {
   const need = facts.need === null ? "" : ` · need ${facts.need}%`;
-  return (
-    <>
-      <div class="line">{where}</div>
-      <div class="line">{facts.toCall ? `to call ${facts.toCall}` : "nothing to call"}</div>
-      <div class="line">{`equity ${facts.equity}% vs ${facts.equityVs}${need}`}</div>
-      <div class="line made">{facts.madeHand}</div>
-    </>
-  );
+  const parts = [
+    facts.position,
+    facts.pot && `pot ${facts.pot}`,
+    !advised && facts.toCall && `to call ${facts.toCall}`,
+    // Equity is against random hands until the charts give ranges; said so, briefly.
+    `${facts.equity}% vs random${need}`,
+    advised && facts.madeHand,
+  ];
+  return parts.filter(Boolean).join(" · ");
 }
 
-/** Shown only while the hero is seated; numbers only on the hero's turn. */
+/** Just above the hero's own seat, where their eyes are on their turn. */
+function above(seat: Element) {
+  const rect = seat.getBoundingClientRect();
+  return { left: `${rect.left + rect.width / 2}px`, top: `${rect.top - 10}px` };
+}
+
+/** Shown only while the hero is seated; the decision only on the hero's turn. */
 function ActionCard({ store }: { store: Store }) {
-  const { heroSeated, turn, facts } = useStore(store);
-  if (!heroSeated) return null;
+  const { heroSeat, turn, facts } = useStore(store);
+  if (!heroSeat) return null;
+  const style = above(heroSeat);
   if (turn === null) {
-    return <div class="action-card waiting">waiting for your turn</div>;
+    return (
+      <div class="action-card waiting" style={style}>
+        waiting for your turn
+      </div>
+    );
   }
   // Facts computed for an earlier state of the table are never shown.
   const current = facts?.key === turn ? facts.facts : null;
+  if (!current) {
+    return (
+      <div class="action-card" style={style}>
+        <div class="source math">Math</div>
+        <div class="line syncing">syncing with the log...</div>
+      </div>
+    );
+  }
+  const advice = current.advice;
+  const chart = advice?.action ? advice : null;
   return (
-    <div class="action-card">
-      {current ? (
-        <>
-          <AdviceLines facts={current} />
-          <FactLines facts={current} />
-        </>
-      ) : (
-        <>
-          <div class="source instant">INSTANT · math only</div>
-          <div class="line syncing">syncing with the log...</div>
-        </>
-      )}
+    <div class="action-card" style={style}>
+      <div class={`source ${chart ? "chart" : "math"}`}>{chart ? "Chart" : "Math"}</div>
+      <div class="action">{chart ? chart.action : current.madeHand}</div>
+      {chart?.mix && <div class="line mix">{chart.mix.join(" · ")}</div>}
+      {advice && !advice.action && <div class="line note">no chart for this spot</div>}
+      <div class="line facts">{factsLine(current, chart !== null)}</div>
     </div>
   );
 }

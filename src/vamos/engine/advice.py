@@ -11,7 +11,7 @@ from vamos.preflop.lookup import Table
 
 PUSH_FOLD_MAX = 15.0  # at or below this effective stack, the push/fold tables apply
 MIX_SHOWN_BELOW = 0.9  # the mix line is hidden when one action has this share or more
-SOURCE = "INSTANT · preflop baseline"
+SOURCE = "Chart"
 
 
 def preflop_advice(

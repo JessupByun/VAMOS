@@ -7,7 +7,8 @@ export interface ViewState {
   status: BackendStatus;
   players: Players | null;
   seats: SeatElement[];
-  heroSeated: boolean;
+  /** The hero's own seat element, or null when the hero is not seated. */
+  heroSeat: Element | null;
   /** The key of the table at the hero's turn, or null when it is not the hero's turn. */
   turn: string | null;
   facts: Facts | null;

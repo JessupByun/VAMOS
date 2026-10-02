@@ -269,13 +269,18 @@ test("the action card shows facts on the hero's turn only once the log has caugh
   await expect(card).toContainText("syncing with the log");
 
   harness.addLogLines([`"new guy @ ${STRANGER_ID}" folds`]);
-  // Preflop the baseline tables advise, labeled as approximate, above the facts.
-  await expect(card).toContainText("INSTANT · preflop baseline · approximate");
-  await expect(card.locator(".action")).toHaveText(/^(FOLD|CALL 0\.10 \(0\.5bb\)|RAISE TO \d+\.\d\d \(\d+(\.\d)?bb\)|ALL IN .*)$/);
-  await expect(card).toContainText("SB · pot 1.5bb");
-  await expect(card).toContainText("to call 0.10 (0.5bb)");
-  await expect(card).toContainText(/equity \d+% vs a random hand · need 25%/);
-  await expect(card).toContainText("ATo");
+  // Preflop the chart decides; one facts line follows.
+  await expect(card.locator(".source")).toHaveText("Chart");
+  await expect(card.locator(".action")).toHaveText(
+    /^(FOLD|CALL 0\.10 \(0\.5bb\)|RAISE TO \d+\.\d\d \(\d+(\.\d)?bb\)|ALL IN .*)$/,
+  );
+  await expect(card.locator(".facts")).toHaveText(/^SB · pot 1\.5bb · \d+% vs random · need 25% · ATo$/);
+  // The card sits just above the hero's own seat.
+  const [cardBox, seatBox] = await Promise.all([
+    card.boundingBox(),
+    page.locator(".you-player").boundingBox(),
+  ]);
+  expect(cardBox && seatBox && cardBox.y + cardBox.height <= seatBox.y).toBe(true);
 
   await page.evaluate(() => document.querySelector(".you-player")?.classList.remove("decision-current"));
   await expect(card).toHaveText("waiting for your turn");

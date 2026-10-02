@@ -22,9 +22,9 @@ function chipsText(element: Element | null): string {
   return element?.querySelector(".chips-value .normal-value")?.textContent?.trim() ?? "";
 }
 
-/** Whether the local user has a seat at this table. */
-export function heroSeated(root: ParentNode): boolean {
-  return root.querySelector(".table-player.you-player") !== null;
+/** The local user's seat, or null when they are not seated at this table. */
+export function heroSeat(root: ParentNode): Element | null {
+  return root.querySelector(".table-player.you-player");
 }
 
 /** The table at the hero's turn, or null when it is not the hero's turn. */

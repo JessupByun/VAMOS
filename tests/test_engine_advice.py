@@ -50,7 +50,7 @@ def test_a_clear_raise_shows_no_mix_line():
     hand, spot = spot_after(["Your hand is A♠, A♦", *BLINDS])
     advice = preflop_advice(hand, spot, HERO, tables())
     assert advice == {
-        "source": "INSTANT · preflop baseline",
+        "source": "Chart",
         "action": "RAISE TO 60 (3bb)",
         "mix": None,
     }
