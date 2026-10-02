@@ -47,6 +47,10 @@ class ChipPayoffs:
         self.showdown = m.given * m.equity  # P(j | i) times i's equity against j
         self.joint = joint
         self.flop = flop
+        # Share table times link, stacked with the link: (2, 169, b, ...). Showdown tables
+        # are keyed by player count, flop tables by identity (flop models cache them, so
+        # the same spot returns the same array).
+        self._stacked: dict[tuple, tuple[np.ndarray, np.ndarray]] = {}
 
     def reach(self, reach: np.ndarray) -> np.ndarray:
         """How likely an opponent with this reach is still in, for each class of ours."""
@@ -108,11 +112,22 @@ class ChipPayoffs:
         labels = joint.labels[players]
         onehot = np.eye(labels.max() + 1)[labels]  # (169, buckets)
         # For each class of ours, how likely each opponent holds a hand from each bucket.
-        weights = [(self.given * reach[q]) @ onehot for q in opponents]
-        link = joint.link[players]
+        weights = [self.given @ (reach[q][:, None] * onehot) for q in opponents]
         if terminal is None or terminal.kind == "showdown" or self.flop is None:
-            share = joint.share[players][..., 0]
+            key, share = ("showdown", players), None
         else:
             share = self.flop.multiway(terminal, player, opponents)
-        spec = "ib,ic,ibc->i" if players == 3 else "ib,ic,id,ibcd->i"
-        return np.einsum(spec, *weights, link * share), np.einsum(spec, *weights, link)
+            key = ("flop", id(share))
+        if key not in self._stacked:
+            link = joint.link[players]
+            values = joint.share[players][..., 0] if share is None else share
+            # The share array is kept alongside so its identity cannot be reused.
+            self._stacked[key] = (share, np.stack([link * values, link]))
+        table = self._stacked[key][1]  # (2, 169, b, ...)
+        # Contract one opponent axis at a time, last first, as batched matrix products.
+        for w in reversed(weights):
+            rest = table.shape[2:-1]
+            flat = table.reshape(2, len(w), -1, w.shape[1])
+            table = (flat @ w[None, :, :, None]).reshape(2, len(w), *rest)
+        won, still_in = table
+        return won, still_in
