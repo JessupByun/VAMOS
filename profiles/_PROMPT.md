@@ -14,8 +14,11 @@ The players are: [list each person and every nickname or ID they used].
 Write one Markdown profile per player except [your name], following the attached template exactly: same frontmatter fields, same section headings, same order.
 
 Requirements:
+- `name`: the file name without `.md` (lowercase first name or handle).
 - `tag`: 1 to 3 words describing their style (it is shown on a small seat badge).
 - `aliases`: every nickname they used in these logs.
+- `player_id`: the PokerNow ID after the "@" in "Name @ ID". If they used more than one ID (another device), list them all: `player_id: [ID1, ID2]`. VAMOS uses this to recognize them at the table.
+- `hands`, `sessions`, `hole_cards_known`, `last_updated`: how much data the profile rests on and when it was written.
 - Compute stats from the logs; give every number with its sample size, e.g. "fold to 3-bet 70% (14/20)". Never state a percentage without the counts.
 - Use the revealed hole cards to describe what hands they actually play and bluff with, not just how often.
 - Mark any pattern backed by fewer than about 10 examples as low confidence.

@@ -11,11 +11,20 @@ uv sync                      # install
 uv run pytest                # tests (slow and integration tests deselected by default)
 uv run pytest -m slow        # long reference checks
 uv run ruff check . && uv run ruff format --check .
+uv run vamos install         # register the native host with Chrome (re-run if the repo moves)
+
+cd extension
+npm run typecheck && npm run build
+npx playwright test          # e2e: throwaway Chrome for Testing + real host + fake PokerNow
 ```
+
+After a rebuild, reload VAMOS in `chrome://extensions` and then reload the PokerNow tab.
 
 ## Layout
 
-- `src/vamos/` backend package (`cards.py` card + hand-class helpers, `money.py` chip parsing).
+- `src/vamos/` backend package (`cards.py` card + hand-class helpers, `money.py` chip parsing, `host/` native messaging host and installer).
+- `extension/` the MV3 extension (`src/background` worker, `src/content` pill + log poller, `src/sidepanel`) and its Playwright e2e suite in `e2e/`.
+- `docs/pokernow.md` verified facts about PokerNow's log endpoint, log lines and DOM. Read it before touching parsing or DOM code.
 - `tests/` pytest suite, one test file per module.
 - `profiles/` the user's opponent profiles, gitignored except `_TEMPLATE.md` and `_PROMPT.md`.
 - `data/` VAMOS's own local state (identity map, advice log, cost ledger, logs), gitignored.
@@ -33,6 +42,8 @@ uv run ruff check . && uv run ruff format --check .
 - Amounts are parsed with `money.parse_chips` into integer cents; never use `float()` on PokerNow values. It returns `None` for non-amounts such as "All In"; handle `None` explicitly.
 - Cards are two-character strings ("As", "Th"). Convert log cards with `cards.parse_log_card`.
 - The PokerNow game log is the authoritative action stream; the DOM is only for whose turn it is, legal actions, hero cards, seats and the countdown.
+- DOM seat classes (`table-player-N`) are hero-relative positions, not physical seats; join DOM to log by player ID (`/players/<id>` link).
+- Respect PokerNow's rate limit (about one log request per 2s per IP): back off on 429/503, never add parallel pollers.
 - Never advise on stale state: advice is stamped with its decision node and only shown while that node is current.
 - Every piece of advice shows its source (`VAMOS · Sonnet`, `VAMOS · Opus`, `INSTANT · math only`); fallbacks are never silent.
 - Prompts use pseudonyms; no real name, alias or PokerNow nickname may reach the API.
