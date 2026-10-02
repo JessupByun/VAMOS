@@ -5,12 +5,12 @@ import numpy as np
 import pytest
 
 from vamos.preflop.matchups import CLASSES, INDEX
-from vamos.preflop.payoffs import HeadsUpShowdown
-from vamos.preflop.solver import Solver, action_values
+from vamos.preflop.payoffs import ChipPayoffs
+from vamos.preflop.solver import Solver, action_values, evaluate
 from vamos.preflop.tree import PUSH_FOLD, build
 
 HRC = Path(__file__).parent / "corpus" / "hrc"
-PAYOFFS = HeadsUpShowdown()
+PAYOFFS = ChipPayoffs()
 
 
 def solve(stack: float, iterations: int = 1000):
@@ -58,3 +58,15 @@ def test_push_fold_matches_holdem_resources(stack):
         for k, hand in enumerate(CLASSES):
             if abs(strategy[a, k] - reference[hand]) > 0.05:
                 assert gap[k] < 1e-3, (stack, action, hand, strategy[a, k], reference[hand])
+
+
+@pytest.mark.parametrize(
+    ("players", "bound"), [(3, 0.01), pytest.param(4, 0.02, marks=pytest.mark.slow)]
+)
+def test_chips_nearly_balance_with_more_players(players, bound):
+    # Exact zero-sum only heads-up; with more players the bucketed multiway odds differ
+    # slightly between seats (+0.009bb a hand three-handed after solving, 2026-10-02).
+    tree = build(players, 50)
+    uniform = {d.id: np.full((len(d.actions), 169), 1 / len(d.actions)) for d in tree.decisions}
+    ev, _ = evaluate(tree, PAYOFFS, uniform)
+    assert abs(ev.sum()) < bound

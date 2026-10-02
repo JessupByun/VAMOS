@@ -49,11 +49,15 @@ def test_the_big_blind_closes_the_action():
     assert isinstance(node, Decision) and tree.positions[node.player] == "BB"
 
 
-def test_cold_calls_can_be_turned_off():
+def test_no_cold_calls_of_a_three_bet():
+    # CO opens, BTN folds, SB 3-bets: the big blind has put in only the blind.
     open_three_bet = ("raise 2.5", "fold", "raise 10")
-    assert "call" in at(build(4, 50), *open_three_bet).actions  # the big blind may call
-    node = at(build(4, 50, Menu(cold_calls=False)), *open_three_bet)
-    assert tuple(node.actions) == ("fold", "jam")
+    assert at(build(4, 50), *open_three_bet).actions == ("fold", "jam")
+    assert "call" in at(build(4, 50, Menu(cold_calls=True)), *open_three_bet).actions
+    # The opener, who put chips in voluntarily, may still call.
+    assert "call" in at(build(4, 50), *open_three_bet, "fold").actions
+    # Facing an all-in, a player who has put nothing in may call.
+    assert "call" in at(build(4, 50), "raise 2.5", "raise 10", "jam").actions
 
 
 def test_push_fold():

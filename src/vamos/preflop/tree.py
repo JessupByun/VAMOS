@@ -26,7 +26,10 @@ class Menu:
     three_bets: tuple[float, ...] = (3.0, 4.0)
     iso: float = 4.0  # over one limper; one more big blind per extra limper
     limps: bool = True
-    cold_calls: bool = True  # calling a 3-bet without having put chips in voluntarily
+    # Calling a 3-bet without having put chips in voluntarily. Off in the baseline (agreed
+    # 2026-10-02): solvers rarely do it short-handed, and it makes the multiway pots the
+    # flop model handles worst.
+    cold_calls: bool = False
     open_jam: bool = False
 
 
@@ -114,8 +117,9 @@ class _Builder:
         return sorted({min(x, self.stack) for x in sizes if x > price})
 
     def cold(self, s: _State, p: int) -> bool:
+        # Facing an all-in anyone may call; only a 3-bet cannot be called cold.
         blind = BLINDS.get(self.positions[p], 0.0)
-        return s.level >= 2 and s.committed[p] <= blind
+        return s.level == 2 and s.committed[p] <= blind
 
     def actions(self, s: _State, p: int) -> list[tuple[str, _State]]:
         price = self.price(s)
