@@ -269,7 +269,9 @@ test("the action card shows facts on the hero's turn only once the log has caugh
   await expect(card).toContainText("syncing with the log");
 
   harness.addLogLines([`"new guy @ ${STRANGER_ID}" folds`]);
-  await expect(card).toContainText("INSTANT · math only");
+  // Preflop the baseline tables advise, labeled as approximate, above the facts.
+  await expect(card).toContainText("INSTANT · preflop baseline · approximate");
+  await expect(card.locator(".action")).toHaveText(/^(FOLD|CALL 0\.10 \(0\.5bb\)|RAISE TO \d+\.\d\d \(\d+(\.\d)?bb\)|ALL IN .*)$/);
   await expect(card).toContainText("SB · pot 1.5bb");
   await expect(card).toContainText("to call 0.10 (0.5bb)");
   await expect(card).toContainText(/equity \d+% vs a random hand · need 25%/);

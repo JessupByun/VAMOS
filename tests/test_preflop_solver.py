@@ -88,7 +88,14 @@ def test_the_average_strategy_is_weighted_by_own_reach():
     # 0.72 (measured 2026-10-02).
     from vamos.preflop.realization import Realization
 
-    solver = Solver(build(2, 50), ChipPayoffs(flop=Realization(50)))
+    # The flop model's values are pinned here so a refit does not move the threshold.
+    flop = Realization(
+        50,
+        theta=np.array([2.8142, 1.0593, 1.2693, 1.3583, -0.7426]),
+        out_of_position=0.7199,
+        cap=2.8346,
+    )
+    solver = Solver(build(2, 50), ChipPayoffs(flop=flop))
     solver.run(300)
     assert solver.solution().nash_conv * 1000 < 0.85
 

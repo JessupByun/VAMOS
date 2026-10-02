@@ -15,15 +15,14 @@ bucketed, to within a few percent; see docs/preflop.md). As the stack-to-pot rat
 blends back to raw equity, reaching it at an all-in: blend = 1 - exp(-spr / SPR_SCALE).
 
 The weights are tuned on GTO Wizard's heads-up 50bb solution with a 2.1bb small-blind
-open and checked once on its 3.5bb open, held back (scripts/fit_realization.py): the
-big blind's pot shares after calling, and VAMOS's own solve of the same game compared hand
-by hand with GTO Wizard's strategies. On the held-back spot the small blind folds / limps /
-raises 1.8 / 63.9 / 34.2% (GTO Wizard 0.2 / 67.6 / 32.2) and the big blind folds / calls /
-3-bets 54.6 / 31.2 / 14.2% (51.4 / 28.3 / 20.3), against 27.4 / 56.1 / 16.5% at raw
-equity. Known misses: against the small open the big blind folds 26% instead of 17%, and
-a higher low card counts slightly against a hand (it overlaps with connectedness). The
-player in position, and pots with three or four players, use the same model with nothing
-to check it against: approximate.
+open (scripts/fit_realization.py): the big blind's pot shares after calling, and VAMOS's
+own solve of the same game compared hand by hand with GTO Wizard's strategies. Checked on
+its 3.5bb open, which was not used for fitting or choosing but was looked at while the
+procedure was developed: the small blind folds / limps / raises 1.8 / 58.4 / 39.8% (GTO
+Wizard 0.2 / 67.6 / 32.2) and the big blind folds / calls / 3-bets 46.7 / 37.0 / 16.3%
+(51.4 / 28.3 / 20.3), against 27.4 / 56.1 / 16.5% at raw equity. The player in position,
+and pots with three or four players, use the same model with nothing to check it against:
+approximate.
 """
 
 from dataclasses import dataclass, field
@@ -37,13 +36,13 @@ from vamos.preflop.matchups import CLASSES
 from vamos.preflop.tree import POSITIONS, POSTFLOP_ORDER, Terminal
 
 FEATURES = ("pair", "suited", "connected", "high", "low")
-# Fitted 2026-10-02 by scripts/fit_realization.py, the best of four variants on the tuning
-# spot (with or without the low card, with or without the cap).
-THETA = np.array([2.8142, 1.0593, 1.2693, 1.3583, -0.7426])
-OUT_OF_POSITION = 0.7199
-# Largest tilt, in log-weight, any hand type may give a matchup. Without one, pairs got so
-# much weight that weak hands kept almost nothing against them and both players overfolded.
-CAP: float | None = 2.8346
+# Fitted 2026-10-02 by scripts/fit_realization.py: the lowest tuning loss of four variants
+# (with or without the low card, with or without the cap) from four fixed starts each.
+THETA = np.array([1.0706, 0.642, 0.7371, 0.5682, 0.0])
+OUT_OF_POSITION = 0.7741
+# Largest tilt, in log-weight, any hand type may give a matchup; None is no limit. Offered
+# to the fit as a variant, which did not choose it.
+CAP: float | None = None
 # Assumed, not fitted (one reference depth cannot pin down its shape): by a stack-to-pot
 # ratio of 3 about two thirds of the effect is present, by 9 about 95%.
 SPR_SCALE = 3.0

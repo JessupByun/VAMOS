@@ -33,21 +33,23 @@ It is a stand-in until HRC Pro tables replace it; every number it produces is la
 
 ## Realization model
 
-- Each class gets a weight from five features (pair, suited, connectedness, high card, low card), capped so no hand type can tilt a matchup too far.
-- Every player but the last to act after the flop has the weight scaled down (0.72).
+- Each class gets a weight from four features (pair, suited, connectedness, high card).
+- Every player but the last to act after the flop has the weight scaled down (0.77).
 - The pot is split in proportion to equity times weight, so heads-up shares always sum to one, and the split blends back to raw equity as the stack-to-pot ratio falls (`1 - exp(-spr / 3)`, assumed, not fitted).
 - In 3-4 way pots each seat sees its own exact hand against the others' buckets, each bucket weighted by the hands that opponent actually holds there; the seats' shares then sum to about 0.96-0.97 of a limped pot with random hands, and chips balance to +0.0055bb a hand at a solved 3-handed strategy (weighting buckets as dealt instead created +0.04bb three-handed and +0.11bb four-handed).
 - Tuned on GTO Wizard's heads-up 50bb solution with a 2.1bb small-blind open (0.12bb ante, AI solver): the big blind's pot shares after calling, and VAMOS's own solve of the same game compared hand by hand.
-- Checked once on the same article's 3.5bb open, held back:
+  Four variants (with or without a low-card feature and a cap on how far a hand type can tilt a matchup) are fitted from four fixed starts each, and the lowest tuning loss wins.
+- On the tuning spot the big blind folds / calls / 3-bets 18.0 / 61.2 / 20.9% against GTO Wizard's 16.9 / 61.2 / 21.9.
+- Checked on the same article's 3.5bb open, which was not used for fitting or choosing (but was looked at while the procedure was developed, so it is a check rather than an untouched holdout):
 
 | | Raw equity | Model | GTO Wizard |
 |---|---|---|---|
-| Small blind first in (fold / limp / raise) | 8.6 / 56.0 / 35.4 | 1.8 / 63.9 / 34.2 | 0.2 / 67.6 / 32.2 |
-| Big blind vs 3.5bb (fold / call / 3-bet) | 27.4 / 56.1 / 16.5 | 54.6 / 31.2 / 14.2 | 51.4 / 28.3 / 20.3 |
-| Same main action as GTO Wizard (small blind / big blind) | 61% / 65% | 74% / 84% | |
-| Big blind's pot share after calling, mean error | 6.7% of the pot | 4.9% | |
+| Small blind first in (fold / limp / raise) | 8.6 / 56.0 / 35.4 | 1.8 / 58.4 / 39.8 | 0.2 / 67.6 / 32.2 |
+| Big blind vs 3.5bb (fold / call / 3-bet) | 27.4 / 56.1 / 16.5 | 46.7 / 37.0 / 16.3 | 51.4 / 28.3 / 20.3 |
+| Same main action as GTO Wizard (small blind / big blind) | 61% / 65% | 72% / 86% | |
+| Big blind's pot share after calling, mean error | 6.7% of the pot | 4.45% | |
 
-- Known misses: against the 2.1bb open the big blind folds 26% instead of 17%, and it 3-bets 14% instead of 20% against the 3.5bb open.
+- Known misses: on the 3.5bb spot the small blind raises about 8 points more and limps 9 points less than GTO Wizard, and the big blind calls 9 points more.
 - The reference shares the solver, ante and article with the tuning spot, so it cannot catch a bias common to both.
 - Only the big blind's out-of-position calls have a reference; in-position play and 3-4 way pots use the same model unchecked.
 - The chart numbers are private test data (`tests/corpus/gtowizard/`, gitignored; GTO Wizard's content is not for redistribution).
@@ -74,5 +76,5 @@ It is a stand-in until HRC Pro tables replace it; every number it produces is la
 ```bash
 uv run python scripts/gen_matchups.py      # about 1 minute
 uv run python scripts/gen_multiway.py      # about 4 minutes
-uv run python scripts/fit_realization.py   # about 10 minutes; needs the private chart data
+uv run python scripts/fit_realization.py   # about an hour; needs the private chart data
 ```

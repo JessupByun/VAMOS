@@ -81,8 +81,9 @@ GTO_WIZARD = Path(__file__).parent / "corpus" / "gtowizard" / "hu50.json"
 @pytest.mark.corpus
 @pytest.mark.skipif(not GTO_WIZARD.exists(), reason="private chart data not present")
 def test_held_back_gto_wizard_spot():
-    # The 3.5bb spot was not used for fitting. Thresholds sit just outside what was measured
-    # when the weights were fitted (2026-10-02), so this guards against regressions.
+    # The 3.5bb spot was not used for fitting or choosing. Thresholds sit just outside what
+    # was measured when the weights were fitted (2026-10-02), so this guards against
+    # regressions: share error 0.0445, fold gaps 1.6 and 4.7 points, agreement 72% and 86%.
     sys.path.insert(0, str(Path(__file__).parents[1] / "scripts"))
     import fit_realization as fit
 
@@ -94,7 +95,7 @@ def test_held_back_gto_wizard_spot():
     assert np.abs(shares - spot.target).mean() < 0.8 * raw_error
     solution = fit.solve(spot, model.theta, model.out_of_position, model.cap)
     prior = matchups.COMBO_COUNTS / 1326
-    checks = {"small blind first in": (3.0, 0.70), "big blind vs 3.5bb": (5.0, 0.80)}
+    checks = {"small blind first in": (3.0, 0.70), "big blind vs 3.5bb": (6.0, 0.80)}
     for name, (ours, theirs) in fit.nodes(spot, solution).items():
         fold_gap, agreement = checks[name]
         assert abs(100 * prior @ (ours[0] - theirs[0])) < fold_gap, name
