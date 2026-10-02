@@ -142,3 +142,14 @@ def test_three_way_flops_favor_the_last_to_act_and_vanish_when_stacks_are_short(
     assert btn.mean() > raw.mean()
     shallow = Terminal((49.9, 49.9, 49.9), (0, 1, 2), "flop")  # 0.1bb behind: nearly all in
     assert np.allclose(model.multiway(shallow, 0, [1, 2], flat), raw, atol=0.01)
+
+
+def test_seats_in_a_three_way_flop_value_the_pot_consistently():
+    # Each seat sees its own exact hand and the others' buckets; the seats' expected values
+    # should still nearly add up to zero (measured -0.02bb in this 3bb pot). Leaving the
+    # opponents' position out of each seat's view breaks that (-0.35bb).
+    payoffs = ChipPayoffs(flop=Realization(50))
+    terminal = Terminal((1.0, 1.0, 1.0), (0, 1, 2), "flop")
+    prior = matchups.COMBO_COUNTS / 1326
+    total = sum(float(prior @ payoffs(terminal, p, [np.ones(169)] * 3)) for p in range(3))
+    assert abs(total) < 0.05

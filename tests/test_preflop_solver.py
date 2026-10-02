@@ -131,3 +131,15 @@ def test_action_values_agree_with_the_evs():
     assert PRIOR @ (strategy * values).sum(axis=0) == pytest.approx(solution.ev[0], abs=1e-9)
     # Aces gain far more by jamming than by folding (about 3.5bb at 10bb).
     assert values[1, 0] - values[0, 0] > 3
+
+
+def test_hands_that_never_reach_a_spot_still_get_a_sensible_answer():
+    # 72o never opens, so it never faces a 3-bet in the solve; its average there would be
+    # early near-uniform iterates. A loose player can get there, so it must fold.
+    from vamos.preflop.realization import Realization
+
+    solver = Solver(build(2, 50), ChipPayoffs(flop=Realization(50)))
+    solver.run(300)
+    node, strategy = solver.solution().at(("SB:raise 2.5", "BB:raise 10"))
+    assert strategy[node.actions.index("fold"), INDEX["72o"]] > 0.95
+    assert strategy[node.actions.index("jam"), INDEX["AA"]] > 0.95

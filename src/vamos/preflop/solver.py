@@ -20,6 +20,9 @@ from vamos.preflop.matchups import COMBO_COUNTS
 from vamos.preflop.tree import Decision, Node, Terminal, Tree
 
 ALPHA, BETA, GAMMA = 1.5, 0.0, 2.0
+# A hand reaching a decision less often than this (weighted over iterations) is answered
+# from the current strategy rather than the average.
+RARE = 1e-3
 PRIOR = COMBO_COUNTS / COMBO_COUNTS.sum()  # how often each class is dealt
 
 
@@ -127,11 +130,20 @@ class Solver:
                 report(t)
 
     def average(self) -> dict[int, np.ndarray]:
+        """
+        The average strategy, except for hands that almost never reach a decision: their
+        average is mostly early, near-uniform iterates (72o facing a 3-bet after opening
+        came out a third each fold / call / all-in), so they get the current regret-matched
+        strategy, which keeps learning there because regrets do not depend on own reach.
+        A loose player reaches such spots, so they need a sensible answer.
+        """
+        most = sum(float(t) ** GAMMA for t in range(1, self.iterations + 1))
         out = {}
         for i, total in self.total.items():
             s = total.sum(axis=0)
-            uniform = np.full_like(total, 1 / len(total))
-            out[i] = np.where(s > 0, total / np.where(s > 0, s, 1), uniform)
+            reached = s > RARE * most
+            average = total / np.where(reached, s, 1)
+            out[i] = np.where(reached, average, _matching(self.regret[i]))
         return out
 
     def solution(self) -> Solution:
