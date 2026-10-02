@@ -56,9 +56,10 @@ class Job:
 
 
 class Call:
-    def __init__(self, job: Job, deadline: float):
+    def __init__(self, job: Job, deadline: float, started: float):
         self.job = job
         self.deadline = deadline
+        self.started = started
         self.cancelled = threading.Event()
         self.state = "thinking"  # thinking, done, failed or cancelled
         self.answer: Answer | None = None
@@ -135,7 +136,7 @@ class Advisor:
                 self._answered.pop(game_id, None)
             if current is not None:
                 self._cancel(current)
-            call = Call(job, deadline)
+            call = Call(job, deadline, self._clock())
             self._calls[game_id] = call
             if refuse is None and deadline - self._clock() < MIN_SECONDS:
                 refuse = "not enough time on the clock"
@@ -275,6 +276,9 @@ class Advisor:
             "model": call.model,
             "state": call.state,
             "reason": call.reason,
+            # From the call's start: how long it took, and how long it was allowed.
+            "seconds": round(self._clock() - call.started, 2),
+            "allowed": round(call.deadline - call.started, 1),
             # Which profiles and guide the answer saw, without storing them again.
             "prefix": hashlib.sha256(system.encode()).hexdigest()[:16],
             "spot": request.messages[-1]["content"] if request.messages else None,
