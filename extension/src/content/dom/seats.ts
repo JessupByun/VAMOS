@@ -16,13 +16,18 @@ export function readSeats(root: ParentNode): SeatElement[] {
   const seats: SeatElement[] = [];
   for (const element of root.querySelectorAll(".table-player")) {
     if (element.classList.contains("you-player")) continue;
-    const href = element.querySelector('a[href^="/players/"]')?.getAttribute("href") ?? "";
-    const id = href.match(PLAYER_LINK)?.[1];
+    const id = playerId(element);
     if (!id) continue;
     const name = element.querySelector(".table-player-name")?.textContent?.trim() ?? "";
     seats.push({ id, name, element });
   }
   return seats;
+}
+
+/** The PokerNow ID of the player in a `.table-player` seat. */
+export function playerId(seat: Element): string | null {
+  const href = seat.querySelector('a[href^="/players/"]')?.getAttribute("href") ?? "";
+  return href.match(PLAYER_LINK)?.[1] ?? null;
 }
 
 /** A stable key for "which players sit where", to report only real changes. */

@@ -174,3 +174,43 @@ def test_a_player_whose_id_changed_is_still_recognized(backend):
     [alex] = players["players"]
     assert alex["profile"]["key"] == "alex"
     assert alex["tonight"] == {"hands": 1, "vpip": 1}
+
+
+HERO_HAND = [
+    (200, '-- starting hand #2 (id: h2)  No Limit Texas Hold\'em (dealer: "Hero @ heroid0001") --'),
+    (201, 'Player stacks: #1 "Hero @ heroid0001" (1000) | #2 "alex @ Qw3rTy7UiO" (1000)'),
+    (202, "Your hand is A♠, A♦"),
+    (203, '"Hero @ heroid0001" posts a small blind of 10'),
+    (204, '"alex @ Qw3rTy7UiO" posts a big blind of 20'),
+]
+TURN = {
+    "type": "turn",
+    "gameId": GAME,
+    "key": "k1",
+    "table": {
+        "heroId": "heroid0001",
+        "heroCards": ["As", "Ad"],
+        "board": [],
+        "pot": "0",
+        "bets": ["10", "20", ""],
+    },
+}
+
+
+def test_turn_facts_wait_for_the_log_then_follow_it(backend):
+    backend.handle(page(*HERO_HAND[:-1]))
+    # The big blind is on the table but not yet in the log.
+    assert backend.handle(TURN) == [{"type": "facts", "gameId": GAME, "key": "k1", "facts": None}]
+    [reply] = backend.handle(page(*HERO_HAND))
+    assert (reply["type"], reply["key"]) == ("facts", "k1")
+    found = reply["facts"]
+    assert (found["position"], found["pot"], found["toCall"], found["need"]) == (
+        "BTN",
+        "1.5bb",
+        "10 (0.5bb)",
+        25,
+    )
+    assert found["madeHand"] == "AA"
+    # Once the turn is over, new rows no longer produce facts.
+    assert backend.handle({"type": "turn", "gameId": GAME, "table": None}) == []
+    assert backend.handle(page(*HERO_HAND, (205, '"Hero @ heroid0001" calls 20'))) == []

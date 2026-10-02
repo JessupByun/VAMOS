@@ -52,6 +52,8 @@ function connectHost() {
       // Each content script keeps only its own game's players.
       for (const content of contentPorts) content.postMessage(message satisfies WorkerToContent);
       for (const panel of panelPorts) panel.postMessage(message satisfies WorkerToPanel);
+    } else if (message.type === "facts") {
+      for (const content of contentPorts) content.postMessage(message satisfies WorkerToContent);
     } else {
       for (const panel of panelPorts) panel.postMessage(message satisfies WorkerToPanel);
     }

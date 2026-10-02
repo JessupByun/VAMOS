@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from vamos.engine.state import VOLUNTARY, next_to_act, seat_order
 from vamos.log.hands import build_hands
 
 CORPUS = Path(__file__).parent / "corpus"
@@ -75,3 +76,21 @@ def test_positions_put_the_blinds_where_they_were_posted(path):
                 assert labels[action.player] == "SB", hand.number
             if action.kind == "post_bb":
                 assert labels[action.player] == "BB", hand.number
+
+
+def test_next_to_act_is_who_acted_next():
+    mismatches = []
+    for path in FILES:
+        for hand in load(path).hands:
+            order = seat_order(hand)
+            for i, action in enumerate(hand.actions):
+                if action.kind not in VOLUNTARY:
+                    continue
+                expected = next_to_act(order, hand.actions[:i], action.street, hand.big_blind)
+                if expected != action.player:
+                    mismatches.append((path.name, hand.number, hand.dealer))
+    # A dead button's seat is not in the log. In one of the 65 dead-button hands a player who
+    # had just joined sat between the empty button and the small blind and acted first after
+    # the flop, which the log alone cannot show.
+    assert [m for m in mismatches if m[2] is not None] == []
+    assert len(mismatches) <= 1

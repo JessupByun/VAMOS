@@ -12,8 +12,10 @@ from pathlib import Path
 from typing import Any, BinaryIO
 
 from vamos.config import DATA_DIR, PROFILES_DIR, VERSION
+from vamos.engine.facts import TableView, current_spot, facts
 from vamos.host.framing import read_message, write_message
 from vamos.identity import IdentityMap, Resolution
+from vamos.money import parse_chips
 from vamos.profiles import ProfileSet, load_profiles
 from vamos.session import GameSession
 
@@ -33,6 +35,10 @@ class Backend:
         self.sessions: dict[str, GameSession] = {}
         # The players each table last reported as seated, for pushing updated badges.
         self.seated: dict[str, list[Message]] = {}
+        # Per table, the hero's turn in progress (the last "turn" message) and the facts last
+        # computed for it, keyed by decision node.
+        self.turns: dict[str, Message] = {}
+        self._facts: dict[str, tuple[str, Message]] = {}
         self._profiles = ProfileSet({}, ())
         self._profiles_stamp: tuple | None = None
 
@@ -66,6 +72,12 @@ class Backend:
         if kind == "forget_identity":
             self.identity.forget(message["playerId"])
             return [self._players(game_id) for game_id in self.seated]
+        if kind == "turn":
+            if message.get("table") is None:
+                self.turns.pop(message["gameId"], None)
+                return []
+            self.turns[message["gameId"]] = message
+            return [self._spot_facts(message["gameId"])]
         log.warning("unknown message type %r", kind)
         return []
 
@@ -77,8 +89,27 @@ class Backend:
         if self.record:
             self._record_page(message)
         changed = self._session(game_id).add_page(message.get("body"), bool(message.get("fresh")))
-        # New rows can change tonight's counts on the badges.
-        return [self._players(game_id)] if changed and game_id in self.seated else []
+        if not changed:
+            return []
+        # New rows can change tonight's counts on the badges, and can be the ones the hero's
+        # turn was waiting for.
+        replies = [self._players(game_id)] if game_id in self.seated else []
+        if game_id in self.turns:
+            replies.append(self._spot_facts(game_id))
+        return replies
+
+    def _spot_facts(self, game_id: str) -> Message:
+        turn = self.turns[game_id]
+        view = _table_view(turn["table"])
+        spot = current_spot(self._session(game_id).log, view) if view else None
+        payload = None
+        if spot is not None:
+            cached = self._facts.get(game_id)
+            if cached is None or cached[0] != spot.node:
+                cached = (spot.node, facts(spot))
+                self._facts[game_id] = cached
+            payload = cached[1]
+        return {"type": "facts", "gameId": game_id, "key": turn["key"], "facts": payload}
 
     def _resolve(self, pid: str, profiles: ProfileSet, aliases: dict[str, str]) -> Resolution:
         resolution = self.identity.resolve(pid, profiles)
@@ -138,6 +169,20 @@ class Backend:
         path = game_dir / f"dom_{message['capturedAt']}.html"
         path.write_text(message["html"])
         return {"type": "ack", "what": "dom_snapshot", "detail": path.name}
+
+
+def _table_view(table: Message) -> TableView | None:
+    pot = parse_chips(table["pot"])
+    if pot is None:
+        return None
+    # A seat with no bet shows nothing, which means nothing wagered.
+    bets = sum(parse_chips(text) or 0 for text in table["bets"])
+    return TableView(
+        hero_id=table["heroId"],
+        hero_cards=tuple(table["heroCards"]),
+        board=tuple(table["board"]),
+        pot=pot + bets,
+    )
 
 
 def serve(stdin: BinaryIO, stdout: BinaryIO, backend: Backend) -> None:

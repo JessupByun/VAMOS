@@ -1,6 +1,6 @@
 import pytest
 
-from vamos.engine.state import _middle_labels, decision, positions
+from vamos.engine.state import _middle_labels, decision, positions, to_act
 from vamos.log.hands import Street, build_hands
 
 P = {k: f'"{k} @ {k * 10}"' for k in "ABCDEFGHI"}
@@ -123,3 +123,67 @@ Player stacks: #1 {P["A"]} (1000) | #2 {P["B"]} (1000)
     before = decision(hand(text), "AAAAAAAAAA").node
     after = decision(hand(text + f"{P['A']} calls 20\n{P['B']} checks\n"), "AAAAAAAAAA").node
     assert before != after
+
+
+FOUR = f"""\
+-- starting hand #8 (id: h8)  No Limit Texas Hold'em (dealer: {P["D"]}) --
+Player stacks: {roster("A", "B", "C", "D")}
+{P["A"]} posts a small blind of 10
+{P["B"]} posts a big blind of 20
+"""
+
+
+def ids(*names: str) -> list[str]:
+    return [n * 10 for n in names]
+
+
+@pytest.mark.parametrize(
+    ("actions", "expected"),
+    [
+        ("", "C"),
+        (f"{P['C']} calls 20\n{P['D']} calls 20\n{P['A']} calls 20", "B"),
+        # The big blind's option: posting is not acting.
+        (f"{P['C']} folds\n{P['D']} folds\n{P['A']} calls 20", "B"),
+        # A limper acts again after a raise behind, but only once action gets back round.
+        (f"{P['C']} calls 20\n{P['D']} raises to 60", "A"),
+        (f"{P['C']} calls 20\n{P['D']} raises to 60\n{P['A']} folds\n{P['B']} folds", "C"),
+        # An all-in raise too small to reopen still has to be answered by the opener.
+        (
+            f"{P['C']} raises to 60\n{P['D']} folds\n{P['A']} folds\n"
+            f"{P['B']} raises to 70 and go all in",
+            "C",
+        ),
+        # The flop starts with the first player after the button.
+        (
+            f"{P['C']} calls 20\n{P['D']} calls 20\n{P['A']} folds\n{P['B']} checks\n"
+            "Flop:  [K♠, 7♦, 2♣]",
+            "B",
+        ),
+        # Everyone else is all in: nobody is left to bet against.
+        (
+            f"{P['C']} raises to 1000 and go all in\n{P['D']} folds\n{P['A']} folds\n"
+            f"{P['B']} calls 1000\nFlop:  [K♠, 7♦, 2♣]",
+            None,
+        ),
+        # The hand is won without a showdown.
+        (f"{P['C']} folds\n{P['D']} folds\n{P['A']} folds", None),
+    ],
+)
+def test_to_act(actions, expected):
+    h = hand(FOUR + actions)
+    assert to_act(h) == (expected * 10 if expected else None)
+
+
+def test_heads_up_button_acts_first_preflop_and_last_after():
+    text = f"""\
+-- starting hand #9 (id: h9)  No Limit Texas Hold'em (dealer: {P["A"]}) --
+Player stacks: #1 {P["A"]} (1000) | #2 {P["B"]} (1000)
+{P["A"]} posts a small blind of 10
+{P["B"]} posts a big blind of 20
+"""
+    assert to_act(hand(text)) == "AAAAAAAAAA"
+    flop = text + f"{P['A']} calls 20\n{P['B']} checks\nFlop:  [K♠, 7♦, 2♣]\n"
+    assert to_act(hand(flop)) == "BBBBBBBBBB"
+    assert to_act(hand(flop + f"{P['B']} checks\n")) == "AAAAAAAAAA"
+    assert to_act(hand(flop + f"{P['B']} checks\n{P['A']} checks\n")) is None
+    assert to_act(hand(text + f"{P['A']} folds\n-- ending hand #9 --\n")) is None

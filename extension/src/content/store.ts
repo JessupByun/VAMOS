@@ -1,12 +1,16 @@
 import { useEffect, useState } from "preact/hooks";
 
-import type { BackendStatus, Players } from "../shared/protocol";
+import type { BackendStatus, Facts, Players } from "../shared/protocol";
 import type { SeatElement } from "./dom/seats";
 
 export interface ViewState {
   status: BackendStatus;
   players: Players | null;
   seats: SeatElement[];
+  heroSeated: boolean;
+  /** The key of the table at the hero's turn, or null when it is not the hero's turn. */
+  turn: string | null;
+  facts: Facts | null;
 }
 
 export interface Store {

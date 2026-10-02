@@ -1,4 +1,4 @@
-import type { PlayerInfo, Players } from "../../shared/protocol";
+import type { PlayerInfo, Players, SpotFacts } from "../../shared/protocol";
 import type { SeatElement } from "../dom/seats";
 import { type Store, useStore } from "../store";
 
@@ -14,6 +14,36 @@ function Pill({ store }: { store: Store }) {
     <div class={`card ${status.state}`}>
       <span class="brand">VAMOS</span>
       <span class="status">{label}</span>
+    </div>
+  );
+}
+
+function FactLines({ facts }: { facts: SpotFacts }) {
+  const where = [facts.position, facts.pot && `pot ${facts.pot}`].filter(Boolean).join(" · ");
+  const need = facts.need === null ? "" : ` · need ${facts.need}%`;
+  return (
+    <>
+      <div class="line">{where}</div>
+      <div class="line">{facts.toCall ? `to call ${facts.toCall}` : "nothing to call"}</div>
+      <div class="line">{`equity ${facts.equity}% vs ${facts.equityVs}${need}`}</div>
+      <div class="line made">{facts.madeHand}</div>
+    </>
+  );
+}
+
+/** Shown only while the hero is seated; numbers only on the hero's turn. */
+function ActionCard({ store }: { store: Store }) {
+  const { heroSeated, turn, facts } = useStore(store);
+  if (!heroSeated) return null;
+  if (turn === null) {
+    return <div class="action-card waiting">waiting for your turn</div>;
+  }
+  // Facts computed for an earlier state of the table are never shown.
+  const current = facts?.key === turn ? facts.facts : null;
+  return (
+    <div class="action-card">
+      <div class="source instant">INSTANT · math only</div>
+      {current ? <FactLines facts={current} /> : <div class="line syncing">syncing with the log...</div>}
     </div>
   );
 }
@@ -83,6 +113,7 @@ export function Overlay(props: {
   return (
     <>
       <Pill store={props.store} />
+      <ActionCard store={props.store} />
       {seats.map((seat) => (
         <Badge
           key={seat.id}

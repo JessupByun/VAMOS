@@ -54,6 +54,9 @@ Your hand is 4♠, 10♠
 - "Your hand is" rows are private: each viewer sees only their own, and the other players' rows are missing from the sequence (e.g. `...103` then `...105`). Gaps are normal, not lost data.
 - When the decision timer runs out, the log records an ordinary fold.
 - `Player stacks: #N` uses physical seat numbers.
+- Action runs in rising seat number from the button: preflop from the seat after the big blind, postflop from the seat after the button.
+  `engine.state.next_to_act` reproduces 60,547 of 60,548 actions in the corpus.
+  The exception is a dead-button hand, whose log does not say where the button is: a player who had just joined sat between the empty button and the small blind and acted first after the flop.
 
 ## DOM
 
@@ -63,8 +66,12 @@ Your hand is 4♠, 10♠
 - Dealer: `.dealer-button-ctn.dealer-position-<P>`, in the same rotated frame as the seats.
 - Pot: `.table-pot-size .main-value` excludes the current street's bets; the `total` add-on includes them.
 - Chip values: read `span.chips-value > span.normal-value`; big-blind display mode adds a `bb-value` span.
+- Street bets sit on each seat as `.table-player-bet-value`; the pot `.main-value` plus every seat's bet equals the `total` add-on.
+- Cards: a face-up card is `.card-container.card-<suit>.card-s-<rank>`, with the rank written `T` for ten in the class (the visible text says `10`); face-down cards carry neither class.
+  The hero's cards are in the `you-player` seat's `.table-player-cards`; the board is `.table-cards.run-1` (`run-2` for a second run).
 - Action buttons: `.game-decisions-ctn .action-button.{call,raise,check,fold}`; inapplicable ones are rendered but `disabled`, and `call` only exists when calling is legal.
   "Your Turn" is `p.action-signal`.
+  The buttons stay up between turns as pre-actions (with a "Check or Fold" button), so they do not mean it is the hero's turn; `decision-current` on the `you-player` seat does.
 - Decision timer: `.decision-current .time-to-talk` holds `.normal-time` and `.time-bank` bars whose inline `width` is the percentage left; it redraws every 100ms.
   Seconds are not in the DOM; derive them from how fast the bar shrinks.
 

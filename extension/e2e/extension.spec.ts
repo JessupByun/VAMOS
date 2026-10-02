@@ -216,3 +216,65 @@ test("leaving the table and coming back with the back button restores VAMOS", as
   await expect(pillStatus(page)).toHaveText(/backend ready/);
   await expect(badge(page, KNOWN_ID)).toHaveText(/alex · Calling station/);
 });
+
+const HAND_START = [
+  `-- starting hand #1 (id: e2eh1)  No Limit Texas Hold'em (dealer: "new guy @ ${STRANGER_ID}") --`,
+  `Player stacks: #1 "TestHero @ ${HERO_ID}" (10.00) | #2 "alex @ ${KNOWN_ID}" (10.00) | #3 "new guy @ ${STRANGER_ID}" (10.00)`,
+  "Your hand is A♠, 10♦",
+  `"TestHero @ ${HERO_ID}" posts a small blind of 0.10`,
+  `"alex @ ${KNOWN_ID}" posts a big blind of 0.20`,
+];
+
+/** Puts the fake table where PokerNow would be after "new guy" folds: the hero's turn in the small blind. */
+async function heroTurn(page: Page) {
+  await page.evaluate(
+    ({ hero, known, stranger }) => {
+      const chips = (value: string) =>
+        `<span class="chips-value"><span class="normal-value">${value}</span></span>`;
+      const seat = (id: string) =>
+        document.querySelector(`a[href="/players/${id}"]`)?.closest(".table-player") as Element;
+      const heroSeat = seat(hero);
+      heroSeat.classList.add("decision-current");
+      heroSeat.insertAdjacentHTML(
+        "beforeend",
+        `<p class="table-player-bet-value">${chips("0.10")}</p>` +
+          '<div class="table-player-cards"><div class="card-container card-s card-s-A flipped"></div>' +
+          '<div class="card-container card-d card-s-T flipped"></div></div>',
+      );
+      seat(known).insertAdjacentHTML(
+        "beforeend",
+        `<p class="table-player-bet-value">${chips("0.20")}</p>` +
+          '<div class="table-player-cards"><div class="card-container"></div><div class="card-container"></div></div>',
+      );
+      seat(stranger).classList.add("fold");
+      document
+        .querySelector(".table")
+        ?.insertAdjacentHTML(
+          "afterbegin",
+          `<div class="table-pot-size"><div class="main-value">${chips("0.00")}</div></div><div class="table-cards run-1"></div>`,
+        );
+    },
+    { hero: HERO_ID, known: KNOWN_ID, stranger: STRANGER_ID },
+  );
+}
+
+test("the action card shows facts on the hero's turn only once the log has caught up", async () => {
+  const page = await openTable();
+  const card = page.locator("#vamos-root .action-card");
+  await expect(card).toHaveText("waiting for your turn");
+
+  harness.addLogLines(HAND_START);
+  await heroTurn(page);
+  // The fold that made it the hero's turn is not in the log yet.
+  await expect(card).toContainText("syncing with the log");
+
+  harness.addLogLines([`"new guy @ ${STRANGER_ID}" folds`]);
+  await expect(card).toContainText("INSTANT · math only");
+  await expect(card).toContainText("SB · pot 1.5bb");
+  await expect(card).toContainText("to call 0.10 (0.5bb)");
+  await expect(card).toContainText(/equity \d+% vs a random hand · need 25%/);
+  await expect(card).toContainText("ATo");
+
+  await page.evaluate(() => document.querySelector(".you-player")?.classList.remove("decision-current"));
+  await expect(card).toHaveText("waiting for your turn");
+});

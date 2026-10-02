@@ -2,6 +2,7 @@ import { render } from "preact";
 
 import type { BackendStatus, ContentToWorker, WorkerToContent } from "../shared/protocol";
 import { readSeats, seatsKey } from "./dom/seats";
+import { heroSeated, readHeroTurn } from "./dom/table";
 import { startLogPoller } from "./log/poller";
 import { createStore } from "./store";
 import overlayCss from "./ui/overlay.css?inline";
@@ -20,6 +21,9 @@ export function startSession(gameId: string): () => void {
     status: { type: "backend", state: "connecting" },
     players: null,
     seats: [],
+    heroSeated: false,
+    turn: null,
+    facts: null,
   });
   let port: chrome.runtime.Port | null = null;
   let stopped = false;
@@ -29,6 +33,8 @@ export function startSession(gameId: string): () => void {
   // of this game's rows or seats, so both are sent again.
   let backendLost = false;
   let reportedSeats: string | null = null;
+  // The turn key the backend last heard about; undefined until it has heard anything.
+  let reportedTurn: string | null | undefined;
 
   const status = () => store.get().status;
   const show = (next: BackendStatus) => store.set({ status: next });
@@ -50,10 +56,24 @@ export function startSession(gameId: string): () => void {
     if (send({ type: "seats", gameId, players })) reportedSeats = key;
   }
 
+  function reportTurn(force = false) {
+    const table = readHeroTurn(document);
+    const key = table && JSON.stringify(table);
+    if (key !== store.get().turn) {
+      // The rows that led to this turn are usually not fetched yet.
+      if (key !== null) poller.soon();
+      store.set({ turn: key });
+    }
+    if (!force && key === reportedTurn) return;
+    if (status().state !== "ready") return;
+    if (send({ type: "turn", gameId, key: key ?? "", table })) reportedTurn = key;
+  }
+
   const seatTimer = setInterval(() => {
     // Re-render every tick so badges follow their seats when the layout moves.
-    store.set({ seats: readSeats(document) });
+    store.set({ seats: readSeats(document), heroSeated: heroSeated(document) });
     reportSeats();
+    reportTurn();
   }, SEAT_CHECK_MS);
 
   // After the extension is reloaded or removed this script keeps running but can no longer
@@ -81,9 +101,14 @@ export function startSession(gameId: string): () => void {
           backendLost = false;
           poller.resync();
         }
-        if (becameReady) reportSeats(true);
+        if (becameReady) {
+          reportSeats(true);
+          reportTurn(true);
+        }
       } else if (message.type === "players") {
         if (message.gameId === gameId) store.set({ players: message });
+      } else if (message.type === "facts") {
+        if (message.gameId === gameId) store.set({ facts: message });
       } else if (message.type === "snapshot_request") {
         send({
           type: "dom_snapshot",

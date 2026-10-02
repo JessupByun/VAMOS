@@ -2,6 +2,8 @@ import type { LogPage } from "../../shared/protocol";
 
 export const POLL_MS = 2000;
 export const MAX_BACKOFF_MS = 30000;
+/** The closest two requests may be when one is pulled forward with `soon()`. */
+export const MIN_GAP_MS = 1000;
 /** PokerNow's maximum rows per response (per open-source trackers; not yet seen live). */
 export const PAGE_SIZE = 50;
 
@@ -13,6 +15,8 @@ export interface LogPoller {
   stop: () => void;
   /** Forget the cursor so the next poll re-sends the newest rows (e.g. to a fresh backend). */
   resync: () => void;
+  /** Poll as soon as the minimum gap allows, e.g. when the hero's turn starts. */
+  soon: () => void;
 }
 
 /** Rows strictly between `floor` and `before` still need fetching; then the cursor moves to `target`. */
@@ -36,6 +40,8 @@ export function startLogPoller(gameId: string, deliver: (page: LogPage) => boole
   let generation = 0;
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let inFlight = false;
+  let lastStart = -Infinity;
 
   function query(): string {
     if (backfill) return `?after_at=${backfill.floor}&before_at=${backfill.before}`;
@@ -72,6 +78,8 @@ export function startLogPoller(gameId: string, deliver: (page: LogPage) => boole
 
   async function tick() {
     const requestedIn = generation;
+    inFlight = true;
+    lastStart = Date.now();
     try {
       const response = await fetch(`/games/${gameId}/log${query()}`, { credentials: "same-origin" });
       if (response.status === 429 || response.status === 503) {
@@ -87,6 +95,7 @@ export function startLogPoller(gameId: string, deliver: (page: LogPage) => boole
     } catch {
       delay = Math.min(delay * 2, MAX_BACKOFF_MS);
     }
+    inFlight = false;
     if (!stopped) timer = setTimeout(tick, delay);
   }
 
@@ -100,6 +109,12 @@ export function startLogPoller(gameId: string, deliver: (page: LogPage) => boole
       generation += 1;
       cursor = null;
       backfill = null;
+    },
+    soon: () => {
+      // A request already on its way brings the rows; a backoff after 429s stands.
+      if (stopped || inFlight || delay !== POLL_MS) return;
+      clearTimeout(timer);
+      timer = setTimeout(tick, Math.max(0, lastStart + MIN_GAP_MS - Date.now()));
     },
   };
 }

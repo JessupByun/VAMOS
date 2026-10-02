@@ -6,10 +6,13 @@ positions come from physical seats, anchored on the button. With a dead button t
 blind anchors them instead.
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
-from vamos.log.hands import Hand, Street
+from vamos.log.hands import Action, Hand, Street
 from vamos.money import Cents
+
+VOLUNTARY = {"check", "call", "bet", "raise", "fold"}
 
 
 def _middle_labels(count: int) -> list[str]:
@@ -22,26 +25,92 @@ def _middle_labels(count: int) -> list[str]:
     return ["UTG", *[f"UTG+{i}" for i in range(1, count - 3)], *tail]
 
 
-def positions(hand: Hand) -> dict[str, str]:
-    """Position label per player ID dealt into the hand."""
+def seat_order(hand: Hand) -> list[str]:
+    """Player IDs dealt in, from the first seat after the button round to the button."""
     ids = [s.player.id for s in sorted(hand.seats, key=lambda s: s.number)]
     if len(ids) < 2:
-        return {}
+        return []
     if hand.dealer in ids:
         button = ids.index(hand.dealer)
     else:
         big_blind = next((a.player for a in hand.actions if a.kind == "post_bb"), None)
         if big_blind not in ids:
-            return {}
+            return []
         # The empty button seat sits before the small blind (or before the big blind when
         # the small blind is dead too); label the player before it as the button.
         offset = 2 if any(a.kind == "post_sb" for a in hand.actions) else 1
         button = (ids.index(big_blind) - offset) % len(ids)
-    order = ids[button + 1 :] + ids[: button + 1]  # first after the button ... the button
+    return ids[button + 1 :] + ids[: button + 1]
+
+
+def positions(hand: Hand) -> dict[str, str]:
+    """Position label per player ID dealt into the hand."""
+    order = seat_order(hand)
+    if not order:
+        return {}
+    ids = order
     if len(ids) == 2:
         return {order[1]: "BTN", order[0]: "BB"}
     labels = ["SB", "BB", *_middle_labels(len(ids) - 3), "BTN"]
     return dict(zip(order, labels, strict=True))
+
+
+def next_to_act(
+    order: Sequence[str], actions: Sequence[Action], street: Street, big_blind: Cents | None
+) -> str | None:
+    """
+    Who acts next on `street`, given the hand's actions so far (`order` from seat_order).
+
+    A player still to act has not folded or gone all in, and either has not acted on this
+    street (posting a blind is not acting) or owes chips. Action moves on from the last
+    player to act; at the start of a street it begins after the button, or preflop after
+    the biggest live blind.
+    """
+    folded = {a.player for a in actions if a.kind == "fold"}
+    all_in = {a.player for a in actions if a.all_in}
+    current = [a for a in actions if a.street == street]
+    committed: dict[str, Cents] = {}
+    for a in current:
+        if a.to is not None:
+            committed[a.player] = max(committed.get(a.player, 0), a.to)
+    price = max(committed.values(), default=0)
+    if street == Street.PREFLOP and big_blind and any(a.kind == "post_bb" for a in current):
+        # A big blind all in for less still leaves the full blind to call.
+        price = max(price, big_blind)
+    acted = {a.player for a in current if a.kind in VOLUNTARY}
+    if sum(p not in folded for p in order) < 2:
+        return None
+    able = [p for p in order if p not in folded and p not in all_in]
+    if len(able) == 1 and committed.get(able[0], 0) >= price:
+        # Everyone else is all in: nobody is left to bet against.
+        return None
+
+    def owes(p: str) -> bool:
+        return p in able and (p not in acted or committed.get(p, 0) < price)
+
+    voluntary = [a for a in current if a.kind in VOLUNTARY]
+    if voluntary:
+        if voluntary[-1].player not in order:
+            return None
+        start = order.index(voluntary[-1].player) + 1
+    elif street == Street.PREFLOP:
+        blinds = [a for a in current if a.kind in ("post_bb", "post_straddle")]
+        last_blind = max(blinds, key=lambda a: a.to or 0).player if blinds else None
+        start = order.index(last_blind) + 1 if last_blind in order else 0
+    else:
+        start = 0
+    for i in range(len(order)):
+        player = order[(start + i) % len(order)]
+        if owes(player):
+            return player
+    return None
+
+
+def to_act(hand: Hand) -> str | None:
+    """Who the log says must act now in `hand`; None between hands or when betting is over."""
+    if hand.ended:
+        return None
+    return next_to_act(seat_order(hand), hand.actions, hand.street, hand.big_blind)
 
 
 @dataclass(frozen=True)

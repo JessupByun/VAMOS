@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { MAX_BACKOFF_MS, PAGE_SIZE, POLL_MS, startLogPoller } from "../src/content/log/poller";
+import {
+  MAX_BACKOFF_MS,
+  MIN_GAP_MS,
+  PAGE_SIZE,
+  POLL_MS,
+  startLogPoller,
+} from "../src/content/log/poller";
 import type { LogPage } from "../src/shared/protocol";
 
 interface Row {
@@ -196,5 +202,43 @@ describe("log poller", () => {
     poller.stop();
     await vi.advanceTimersByTimeAsync(10 * POLL_MS);
     expect(server.requests).toHaveLength(1);
+  });
+
+  it("soon() pulls the next poll forward, but never closer than the minimum gap", async () => {
+    server.add(1);
+    const poller = startLogPoller("g1", deliver);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(server.requests).toHaveLength(1);
+
+    poller.soon();
+    await vi.advanceTimersByTimeAsync(MIN_GAP_MS - 1);
+    expect(server.requests).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(server.requests).toHaveLength(2);
+
+    // Well after the last request, soon() asks right away and the normal cadence follows.
+    await vi.advanceTimersByTimeAsync(POLL_MS - 100);
+    expect(server.requests).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(server.requests).toHaveLength(3);
+    await vi.advanceTimersByTimeAsync(MIN_GAP_MS + 100);
+    poller.soon();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(server.requests).toHaveLength(4);
+    await vi.advanceTimersByTimeAsync(POLL_MS);
+    expect(server.requests).toHaveLength(5);
+    poller.stop();
+  });
+
+  it("soon() does not cut a backoff short", async () => {
+    server.respond = () => new Response("", { status: 429 });
+    const poller = startLogPoller("g1", deliver);
+    await vi.advanceTimersByTimeAsync(0);
+    poller.soon();
+    await vi.advanceTimersByTimeAsync(2 * POLL_MS - 1);
+    expect(server.requests).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(server.requests).toHaveLength(2);
+    poller.stop();
   });
 });

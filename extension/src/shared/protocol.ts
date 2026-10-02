@@ -73,6 +73,49 @@ export interface Players {
   problems: string[];
 }
 
+/** What the table shows at the hero's turn; amounts stay raw text for the backend to parse. */
+export interface TableView {
+  heroId: string;
+  heroCards: string[];
+  board: string[];
+  /** The pot without this street's bets (`.table-pot-size .main-value`). */
+  pot: string;
+  /** Every seat's bet on this street. */
+  bets: string[];
+}
+
+/** The hero's turn started or changed (`table`), or ended (null). */
+export interface HeroTurn {
+  type: "turn";
+  gameId: string;
+  /** Echoed by the facts reply, so the card only shows facts for what is on the table now. */
+  key: string;
+  table: TableView | null;
+}
+
+export interface SpotFacts {
+  node: string;
+  position: string | null;
+  /** In big blinds, e.g. "8bb". */
+  pot: string | null;
+  /** Chips and big blinds, e.g. "0.40 (2bb)"; null when nothing is owed. */
+  toCall: string | null;
+  /** Equity needed to call, in percent. */
+  need: number | null;
+  equity: number;
+  /** Who the equity is against, e.g. "a random hand". */
+  equityVs: string;
+  madeHand: string;
+}
+
+/** Facts for the hero's turn, or null while the log has not caught up with the table. */
+export interface Facts {
+  type: "facts";
+  gameId: string;
+  key: string;
+  facts: SpotFacts | null;
+}
+
 export interface SnapshotRequest {
   type: "snapshot_request";
 }
@@ -83,12 +126,13 @@ export interface HostAck {
   detail: string;
 }
 
-export type ContentToWorker = LogPage | DomSnapshot | SeatsReport | AssignIdentity;
-export type WorkerToContent = BackendStatus | SnapshotRequest | Players;
+export type ContentToWorker = LogPage | DomSnapshot | SeatsReport | AssignIdentity | HeroTurn;
+export type WorkerToContent = BackendStatus | SnapshotRequest | Players | Facts;
 export type PanelToWorker = SnapshotRequest | AssignIdentity | ForgetIdentity;
 export type WorkerToPanel = BackendStatus | HostAck | Players;
 export type HostToWorker =
   | { type: "ready"; version: string; recording: boolean }
   | HostAck
   | Players
+  | Facts
   | { type: "error"; message: string };
