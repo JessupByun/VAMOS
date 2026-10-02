@@ -7,9 +7,11 @@ __pycache__/
 .ruff_cache/
 .hypothesis/
 
-# Extension build
+# Extension build and test output
 node_modules/
 extension/dist/
+extension/test-results/
+extension/playwright-report/
 
 # Secrets
 .env
