@@ -19,6 +19,7 @@ import math
 import random
 from bisect import bisect_left
 from dataclasses import dataclass, field
+from functools import cached_property
 
 import numpy as np
 
@@ -41,12 +42,40 @@ class Spot:
     unlearned: np.ndarray = field(default_factory=lambda: np.zeros(169, dtype=bool))
 
 
+# A hand that reaches a spot less often than this by its own choices gets no advice there:
+# the solve trained it too little (aces could fold facing an all-in after limping).
+RARE_FOR_ADVICE = 1e-3
+
+
 @dataclass(frozen=True)
 class Table:
     players: int
     stack: float
     spots: dict[tuple[str, ...], Spot]  # keyed by the path of "position:action" steps
     provenance: str = ""
+
+    @cached_property
+    def untrained(self) -> dict[tuple[str, ...], np.ndarray]:
+        """
+        Per spot, the hands with no trustworthy answer: unlearned, still on the solver's
+        starting point (an exact even split), or reaching the spot less often than
+        RARE_FOR_ADVICE by their own choices.
+        """
+        out = {}
+
+        def walk(path, reach):
+            spot = self.spots.get(path)
+            if spot is None:
+                return
+            even = np.abs(spot.strategy - 1 / len(spot.actions)).max(axis=0) < 1.5e-3
+            out[path] = spot.unlearned | even | (reach[spot.position] < RARE_FOR_ADVICE)
+            for a, action in enumerate(spot.actions):
+                nxt = dict(reach)
+                nxt[spot.position] = reach[spot.position] * spot.strategy[a]
+                walk((*path, f"{spot.position}:{action}"), nxt)
+
+        walk((), {p: np.ones(169) for p in POSITIONS[self.players]})
+        return out
 
 
 def table_from(solution: Solution, provenance: str = "") -> Table:
@@ -179,7 +208,7 @@ def advise(
         path = translate(table, moves)
         spot = None if path is None else table.spots.get(path)
         hand = INDEX[hand_class(*cards)]
-        if spot is None or spot.position != hero_position or spot.unlearned[hand]:
+        if spot is None or spot.position != hero_position or table.untrained[path][hand]:
             continue
         column = spot.strategy[:, hand]
         for action, freq in zip(spot.actions, column, strict=True):

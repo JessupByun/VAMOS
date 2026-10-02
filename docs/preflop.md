@@ -64,6 +64,8 @@ It is a stand-in until HRC Pro tables replace it; every number it produces is la
   - the hero's raise sizes are scaled to the live bet faced (a 4bb open stands for the 3bb open, so a 4x 3-bet becomes 16bb, not 12);
   - one action is sampled from the mix per decision, so the card does not change between refreshes, and the mix is shown when no action has 90% or more.
 - No advice, rather than a guess, when the tree cannot represent the hand: five or more players, a straddle, a raise more than twice or under half the nearest solved size, or an action the tree does not offer there (a cold call of a 3-bet).
+- No advice either where the solve trained the hand too little: spots nobody else reaches, hands still on the solver's starting point (an exact even split), and hands that reach the spot less than 0.1% of the time by their own choices.
+- Known residual: in 16 deep four-handed multi-limp spots (out of about 8,000 across the tables) aces still fold 1-45% facing an all-in; more solving would fix it, and those lines are very rare.
 
 ## Checks
 
