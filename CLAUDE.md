@@ -13,6 +13,8 @@ uv run pytest -m slow        # long reference checks
 uv run python scripts/fetch_corpus.py && uv run pytest -m corpus   # parser vs ~6,600 real hands
 uv run ruff check . && uv run ruff format --check .
 uv run vamos install         # register the native host with Chrome (re-run if the repo moves)
+uv run vamos install --record   # test tables only: save raw log pages to data/recordings/
+uv run vamos verify <game_id> <export.csv>   # live-built hands vs PokerNow's exported log
 
 cd extension
 npm run typecheck && npm run build

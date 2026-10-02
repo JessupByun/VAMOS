@@ -21,12 +21,14 @@ def install(
     launcher_dir: Path = LAUNCHER_DIR,
     hosts_dir: Path = CHROME_HOSTS_DIR,
     python: str = sys.executable,
+    record: bool = False,
 ) -> Path:
     # Chrome launches `path` directly with no arguments of ours, so a launcher script pins
-    # the project's interpreter.
+    # the project's interpreter (and, for test-table sessions, turns recording on).
     launcher = launcher_dir / "vamos-host"
     launcher_dir.mkdir(parents=True, exist_ok=True)
-    launcher.write_text(f'#!/bin/sh\nexec "{python}" -m vamos host "$@"\n')
+    env = "VAMOS_RECORD=1 " if record else ""
+    launcher.write_text(f'#!/bin/sh\n{env}exec "{python}" -m vamos host "$@"\n')
     launcher.chmod(0o755)
 
     manifest = {

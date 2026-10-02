@@ -40,7 +40,12 @@ function connectHost() {
   port.onMessage.addListener((message: HostToWorker) => {
     if (message.type === "ready") {
       retry.ready(Date.now());
-      setStatus({ type: "backend", state: "ready", version: message.version });
+      setStatus({
+        type: "backend",
+        state: "ready",
+        version: message.version,
+        recording: message.recording,
+      });
     } else if (message.type === "error") {
       setStatus({ type: "backend", state: "down", detail: message.message });
     } else if (message.type === "players") {

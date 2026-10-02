@@ -52,7 +52,7 @@ class Backend:
     def handle(self, message: Any) -> list[Message]:
         kind = message.get("type") if isinstance(message, dict) else None
         if kind == "hello":
-            return [{"type": "ready", "version": VERSION}]
+            return [{"type": "ready", "version": VERSION, "recording": self.record}]
         if kind == "log_page":
             return self._log_page(message)
         if kind == "dom_snapshot":

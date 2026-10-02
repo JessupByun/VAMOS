@@ -119,6 +119,7 @@ function Panel() {
         <p class={`state ${status.state}`}>
           {status.state}
           {status.version ? ` · v${status.version}` : ""}
+          {status.recording ? " · recording log pages" : ""}
           {status.detail ? ` · ${status.detail}` : ""}
         </p>
       </section>

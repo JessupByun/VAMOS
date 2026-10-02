@@ -6,7 +6,7 @@ function Pill({ store }: { store: Store }) {
   const { status } = useStore(store);
   const label =
     status.state === "ready"
-      ? `backend ready (v${status.version})`
+      ? `backend ready (v${status.version})${status.recording ? " · recording" : ""}`
       : status.state === "connecting"
         ? "connecting..."
         : `backend down: ${status.detail ?? "unknown"}`;

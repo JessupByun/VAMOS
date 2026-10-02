@@ -73,7 +73,9 @@ def backend(tmp_path):
 
 
 def test_hello_reports_ready(backend):
-    assert backend.handle({"type": "hello"}) == [{"type": "ready", "version": VERSION}]
+    assert backend.handle({"type": "hello"}) == [
+        {"type": "ready", "version": VERSION, "recording": False}
+    ]
 
 
 def test_seated_players_resolve_to_profiles_or_ask(backend):
@@ -129,7 +131,7 @@ def test_serve_survives_a_bad_message(backend):
     stdin = io.BytesIO(frame({"type": "seats"}) + frame({"type": "hello"}))
     stdout = io.BytesIO()
     serve(stdin, stdout, backend)
-    assert read_all(stdout) == [{"type": "ready", "version": VERSION}]
+    assert read_all(stdout) == [{"type": "ready", "version": VERSION, "recording": False}]
 
 
 def test_install_writes_launcher_and_manifest(tmp_path):
@@ -145,7 +147,14 @@ def test_install_writes_launcher_and_manifest(tmp_path):
     launcher = tmp_path / "support/vamos-host"
     assert manifest["path"] == str(launcher)
     assert launcher.stat().st_mode & 0o111
-    assert '"/py/bin/python" -m vamos host' in launcher.read_text()
+    assert launcher.read_text() == '#!/bin/sh\nexec "/py/bin/python" -m vamos host "$@"\n'
+    install(
+        launcher_dir=tmp_path / "support",
+        hosts_dir=tmp_path / "hosts",
+        python="/py/bin/python",
+        record=True,
+    )
+    assert launcher.read_text().startswith("#!/bin/sh\nVAMOS_RECORD=1 exec")
 
 
 def test_a_player_whose_id_changed_is_still_recognized(backend):

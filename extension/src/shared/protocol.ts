@@ -9,6 +9,8 @@ export interface BackendStatus {
   state: BackendState;
   version?: string;
   detail?: string;
+  /** Raw log pages are being saved (test-table sessions only). */
+  recording?: boolean;
 }
 
 /** One page of PokerNow's game log, forwarded untouched so the backend owns parsing. */
@@ -86,7 +88,7 @@ export type WorkerToContent = BackendStatus | SnapshotRequest | Players;
 export type PanelToWorker = SnapshotRequest | AssignIdentity | ForgetIdentity;
 export type WorkerToPanel = BackendStatus | HostAck | Players;
 export type HostToWorker =
-  | { type: "ready"; version: string }
+  | { type: "ready"; version: string; recording: boolean }
   | HostAck
   | Players
   | { type: "error"; message: string };
