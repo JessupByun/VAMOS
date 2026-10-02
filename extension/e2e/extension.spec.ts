@@ -275,12 +275,13 @@ test("the action card shows facts on the hero's turn only once the log has caugh
     /^(FOLD|CALL 0\.10 \(0\.5bb\)|RAISE TO \d+\.\d\d \(\d+(\.\d)?bb\)|ALL IN .*)$/,
   );
   await expect(card.locator(".facts")).toHaveText(/^SB · pot 1\.5bb · \d+% vs random · need 25% · ATo$/);
-  // The card sits just above the hero's own seat.
-  const [cardBox, seatBox] = await Promise.all([
+  // The card sits off the table, just above PokerNow's action buttons on the right.
+  const [cardBox, buttonsBox] = await Promise.all([
     card.boundingBox(),
-    page.locator(".you-player").boundingBox(),
+    page.locator(".game-decisions-ctn").boundingBox(),
   ]);
-  expect(cardBox && seatBox && cardBox.y + cardBox.height <= seatBox.y).toBe(true);
+  expect(cardBox && buttonsBox && cardBox.y + cardBox.height <= buttonsBox.y).toBe(true);
+  expect(cardBox && buttonsBox && cardBox.x + cardBox.width >= buttonsBox.x + buttonsBox.width - 8).toBe(true);
 
   await page.evaluate(() => document.querySelector(".you-player")?.classList.remove("decision-current"));
   await expect(card).toHaveText("waiting for your turn");

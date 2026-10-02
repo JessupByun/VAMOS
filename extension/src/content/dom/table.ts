@@ -27,6 +27,14 @@ export function heroSeat(root: ParentNode): Element | null {
   return root.querySelector(".table-player.you-player");
 }
 
+/**
+ * PokerNow's own decision area at the bottom right ("Your Turn" and the action buttons),
+ * which the action card docks above; empty when neither is on the page.
+ */
+export function decisionArea(root: ParentNode): Element[] {
+  return [...root.querySelectorAll("p.action-signal, .game-decisions-ctn")];
+}
+
 /** The table at the hero's turn, or null when it is not the hero's turn. */
 export function readHeroTurn(root: ParentNode): TableView | null {
   const hero = root.querySelector(".table-player.you-player");

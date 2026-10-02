@@ -9,6 +9,8 @@ export interface ViewState {
   seats: SeatElement[];
   /** The hero's own seat element, or null when the hero is not seated. */
   heroSeat: Element | null;
+  /** PokerNow's "Your Turn" signal and action buttons, which the action card sits above. */
+  decisionArea: Element[];
   /** The key of the table at the hero's turn, or null when it is not the hero's turn. */
   turn: string | null;
   facts: Facts | null;

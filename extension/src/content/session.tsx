@@ -2,7 +2,7 @@ import { render } from "preact";
 
 import type { BackendStatus, ContentToWorker, WorkerToContent } from "../shared/protocol";
 import { readSeats, seatsKey } from "./dom/seats";
-import { heroSeat, readHeroTurn } from "./dom/table";
+import { decisionArea, heroSeat, readHeroTurn } from "./dom/table";
 import { startLogPoller } from "./log/poller";
 import { createStore } from "./store";
 import overlayCss from "./ui/overlay.css?inline";
@@ -22,6 +22,7 @@ export function startSession(gameId: string): () => void {
     players: null,
     seats: [],
     heroSeat: null,
+    decisionArea: [],
     turn: null,
     facts: null,
   });
@@ -71,7 +72,11 @@ export function startSession(gameId: string): () => void {
 
   const seatTimer = setInterval(() => {
     // Re-render every tick so badges follow their seats when the layout moves.
-    store.set({ seats: readSeats(document), heroSeat: heroSeat(document) });
+    store.set({
+      seats: readSeats(document),
+      heroSeat: heroSeat(document),
+      decisionArea: decisionArea(document),
+    });
     reportSeats();
     reportTurn();
   }, SEAT_CHECK_MS);

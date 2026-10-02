@@ -26,7 +26,8 @@ function seat(position: number, name: string, id: string, extra = "") {
     <div class="table-player-infos-ctn"><div class="table-player-name"><span><a href="/players/${id}">${name}</a></span></div></div></div>`;
 }
 
-const TABLE_HTML = `<div class="table">${seat(1, "TestHero", HERO_ID, "you-player")}${seat(2, "alex", KNOWN_ID)}${seat(3, "new guy", STRANGER_ID)}</div>`;
+const DECISIONS = `<div class="game-decisions-ctn" style="position:absolute;right:20px;bottom:20px;width:300px;height:80px"><button class="action-button fold">Fold</button></div>`;
+const TABLE_HTML = `<div class="table">${seat(1, "TestHero", HERO_ID, "you-player")}${seat(2, "alex", KNOWN_ID)}${seat(3, "new guy", STRANGER_ID)}</div>${DECISIONS}`;
 
 const PROFILE = `---\nname: alex\ntag: Calling station\nplayer_id: ${KNOWN_ID}\n---\n# alex\n`;
 

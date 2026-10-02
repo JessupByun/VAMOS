@@ -31,17 +31,24 @@ function factsLine(facts: SpotFacts, advised: boolean): string {
   return parts.filter(Boolean).join(" · ");
 }
 
-/** Just above the hero's own seat, where their eyes are on their turn. */
-function above(seat: Element) {
-  const rect = seat.getBoundingClientRect();
-  return { left: `${rect.left + rect.width / 2}px`, top: `${rect.top - 10}px` };
+/**
+ * In the grey margin right of the table, just above PokerNow's "Your Turn" signal and
+ * action buttons, so it never covers cards, bets or the pot.
+ */
+function docked(area: Element[]) {
+  const tops = area
+    .map((element) => element.getBoundingClientRect())
+    .filter((rect) => rect.height > 0)
+    .map((rect) => rect.top);
+  if (tops.length === 0) return { right: "16px", top: "45%" };
+  return { right: "16px", bottom: `${window.innerHeight - Math.min(...tops) + 12}px` };
 }
 
 /** Shown only while the hero is seated; the decision only on the hero's turn. */
 function ActionCard({ store }: { store: Store }) {
-  const { heroSeat, turn, facts } = useStore(store);
+  const { heroSeat, decisionArea, turn, facts } = useStore(store);
   if (!heroSeat) return null;
-  const style = above(heroSeat);
+  const style = docked(decisionArea);
   if (turn === null) {
     return (
       <div class="action-card waiting" style={style}>
