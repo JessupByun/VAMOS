@@ -21,7 +21,7 @@ cookie_file.pkl
 profiles/*
 !profiles/_TEMPLATE.md
 !profiles/_PROMPT.md
-data/
+/data/
 
 # Editors and OS
 .vscode/

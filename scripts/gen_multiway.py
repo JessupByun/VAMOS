@@ -14,7 +14,7 @@ from pathlib import Path
 import numpy as np
 
 from vamos.preflop import matchups
-from vamos.preflop.multiway import BUCKETS, DATA, board_ranks, buckets, deals, pool
+from vamos.preflop.multiway import BUCKETS, DATA, board_ranks, buckets, deals, link, pool
 
 BOARDS = 50_000
 DEALS = {3: 2_000_000, 4: 3_000_000}  # per class of ours
@@ -60,11 +60,12 @@ def main() -> None:
                 f"fewest deals in a cell {int(counts.min())}; "
                 f"generated {datetime.now(UTC):%Y-%m-%d}"
             )
+            # Half precision keeps shares to about 0.0001, far below the sampling noise.
             np.savez_compressed(
                 DATA / f"multiway{players}.npz",
                 labels=labels,
-                share=pool(shares, counts).astype(np.float32),
-                counts=counts.astype(np.int32),
+                share=pool(shares, counts).astype(np.float16),
+                link=link(counts).astype(np.float16),
                 provenance=np.array(provenance),
             )
             print(f"[VAMOS] {provenance} ({time.monotonic() - started:.0f}s)")

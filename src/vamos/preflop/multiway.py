@@ -182,7 +182,7 @@ def load() -> MultiwayTables:
     for players in BUCKETS:
         with np.load(DATA / f"multiway{players}.npz") as data:
             labels[players] = data["labels"]
-            share[players] = data["share"]
-            linked[players] = link(data["counts"].astype(float))
+            share[players] = data["share"].astype(np.float64)
+            linked[players] = data["link"].astype(np.float64)
             provenance.append(str(data["provenance"]))
     return MultiwayTables(labels, share, linked, "; ".join(provenance))
