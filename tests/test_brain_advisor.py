@@ -165,3 +165,12 @@ def test_asking_opus_keeps_the_first_answer_up_meanwhile(rig):
     r.updated()
     view = r.advisor.view("g", "h1:1:8")
     assert (view["action"], view["model"], view["note"]) == ("CHECK", "Opus", "alex traps")
+
+
+def test_a_refused_call_is_never_sent(rig):
+    r = rig([])
+    r.advisor.start("g", r.job(), r.clock.t + 20, refuse="blocked: a real name was left")
+    assert r.advisor.view("g", "h1:1:8")["reason"] == "blocked: a real name was left"
+    assert r.advisor.asked("g", "h1:1:8") and r.advisor.asked("g", "h1:1:8", "balanced")
+    assert not r.advisor.asked("g", "h1:1:8", "deep")
+    assert r.provider.requests == []

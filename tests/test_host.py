@@ -1,9 +1,13 @@
 import io
 import json
+import queue
 import struct
+import threading
+from datetime import datetime
 
 import pytest
 
+from vamos.brain.provider import FakeProvider, Reply
 from vamos.config import VERSION
 from vamos.host.framing import MAX_OUTGOING_BYTES, read_message, write_message
 from vamos.host.install import EXTENSION_ID, HOST_NAME, install
@@ -72,10 +76,15 @@ def backend(tmp_path):
     return Backend(tmp_path / "data", profiles)
 
 
-def test_hello_reports_ready(backend):
-    assert backend.handle({"type": "hello"}) == [
-        {"type": "ready", "version": VERSION, "recording": False}
-    ]
+def test_hello_reports_ready_with_settings_and_costs(backend):
+    ready, settings, costs = backend.handle({"type": "hello"})
+    assert ready == {"type": "ready", "version": VERSION, "recording": False}
+    assert settings == {
+        "type": "settings",
+        "preset": "balanced",
+        "presets": ["fast", "balanced", "deep"],
+    }
+    assert (costs["type"], costs["session"], costs["overCap"]) == ("costs", 0, False)
 
 
 def test_seated_players_resolve_to_profiles_or_ask(backend):
@@ -131,7 +140,7 @@ def test_serve_survives_a_bad_message(backend):
     stdin = io.BytesIO(frame({"type": "seats"}) + frame({"type": "hello"}))
     stdout = io.BytesIO()
     serve(stdin, stdout, backend)
-    assert read_all(stdout) == [{"type": "ready", "version": VERSION, "recording": False}]
+    assert [m["type"] for m in read_all(stdout)] == ["ready", "settings", "costs"]
 
 
 def test_install_writes_launcher_and_manifest(tmp_path):
@@ -214,3 +223,124 @@ def test_turn_facts_wait_for_the_log_then_follow_it(backend):
     # Once the turn is over, new rows no longer produce facts.
     assert backend.handle({"type": "turn", "gameId": GAME, "table": None}) == []
     assert backend.handle(page(*HERO_HAND, (205, '"Hero @ heroid0001" calls 20'))) == []
+
+
+FLOP_HAND = [
+    *HERO_HAND,
+    (205, '"Hero @ heroid0001" raises to 60'),
+    (206, '"alex @ Qw3rTy7UiO" calls 60'),
+    (207, "Flop:  [K♠, 7♦, 2♣]"),
+    (208, '"alex @ Qw3rTy7UiO" checks'),
+]
+FLOP_TURN = {
+    "type": "turn",
+    "gameId": GAME,
+    "key": "k2",
+    "table": {
+        "heroId": "heroid0001",
+        "heroCards": ["As", "Ad"],
+        "board": ["Ks", "7d", "2c"],
+        "pot": "120",
+        "bets": ["", ""],
+    },
+}
+BET_HALF = '{"strategy": [{"action": "bet", "size_pct_pot": 50, "freq": 1}], "note": "Player A calls too wide."}'
+
+
+def claude_backend(tmp_path, script):
+    profiles = tmp_path / "profiles"
+    profiles.mkdir()
+    (profiles / "alex.md").write_text(ALEX)
+    fake = FakeProvider(script)
+    backend = Backend(tmp_path / "data", profiles, provider=fake)
+    sent = queue.Queue()
+    backend.emit = sent.put
+    return backend, fake, sent
+
+
+def test_claude_answers_postflop_under_pseudonyms(tmp_path):
+    gate = threading.Event()
+    backend, fake, sent = claude_backend(
+        tmp_path, [(gate, Reply(BET_HALF, "end_turn", {"input_tokens": 10_000}))]
+    )
+    backend.handle(page(*FLOP_HAND))
+    [reply] = backend.handle(FLOP_TURN)
+    advice = reply["facts"]["advice"]
+    assert (advice["source"], advice["state"], advice["action"]) == ("Claude", "thinking", None)
+
+    [request] = fake.requests
+    assert request.preset.name == "balanced"
+    sent_text = json.dumps(request.system) + json.dumps(request.messages)
+    assert "alex" not in sent_text and "Qw3rTy7UiO" not in sent_text
+    assert "Loose-passive." in sent_text and "Player A" in sent_text
+    assert (
+        '\\"legal_actions\\": [\\n  \\"check\\",\\n  \\"bet\\",\\n  \\"allin\\"\\n ]' in sent_text
+    )
+
+    gate.set()
+    update = sent.get(timeout=3)
+    while update["type"] != "facts":
+        update = sent.get(timeout=3)
+    advice = update["facts"]["advice"]
+    assert (advice["source"], advice["action"], advice["note"]) == (
+        "Claude",
+        "BET 60 (3bb)",
+        "alex calls too wide.",
+    )
+    assert backend.ledger.totals(datetime.now())["allTime"] > 0
+
+    # Later log pages keep the answer and never ask again.
+    again = backend.handle({**FLOP_TURN, "key": "k3"})[0]
+    assert again["facts"]["advice"]["action"] == "BET 60 (3bb)"
+    assert len(fake.requests) == 1
+
+    # Asking Opus adds one deep call for the same decision.
+    fake.script.append(Reply(BET_HALF, "end_turn", {}))
+    backend.handle({"type": "ask", "gameId": GAME, "preset": "deep"})
+    assert [r.preset.name for r in fake.requests] == ["balanced", "deep"]
+
+
+def test_the_turn_ending_stops_claude(tmp_path):
+    gate = threading.Event()
+    backend, _, sent = claude_backend(tmp_path, [(gate, Reply(BET_HALF, "end_turn", {}))])
+    backend.handle(page(*FLOP_HAND))
+    backend.handle(FLOP_TURN)
+    backend.handle({"type": "turn", "gameId": GAME, "table": None})
+    gate.set()
+    with pytest.raises(queue.Empty):
+        sent.get(timeout=0.5)
+
+
+def test_the_dial_is_locked_for_the_rest_of_the_hand(tmp_path):
+    check = '{"strategy": [{"action": "check", "size_pct_pot": 0, "freq": 1}], "note": ""}'
+    backend, fake, _ = claude_backend(tmp_path, [Reply(check, "end_turn", {})] * 2)
+    backend.handle(page(*FLOP_HAND))
+    backend.handle(FLOP_TURN)
+    backend.handle({"type": "turn", "gameId": GAME, "table": None})
+    assert backend.handle({"type": "settings", "preset": "deep"})[0]["preset"] == "deep"
+    turn_card = [
+        (209, '"Hero @ heroid0001" checks'),
+        (210, "Turn: K♠, 7♦, 2♣ [9♥]"),
+        (211, '"alex @ Qw3rTy7UiO" checks'),
+    ]
+    backend.handle(page(*FLOP_HAND, *turn_card))
+    table = {**FLOP_TURN["table"], "board": ["Ks", "7d", "2c", "9h"]}
+    backend.handle({**FLOP_TURN, "key": "k4", "table": table})
+    assert [r.preset.name for r in fake.requests] == ["balanced", "balanced"]
+
+
+def test_the_dial_and_the_heros_names_come_from_settings(tmp_path):
+    backend, fake, _ = claude_backend(tmp_path, [Reply(BET_HALF, "end_turn", {})])
+    backend.handle({"type": "settings", "preset": "fast"})
+    saved = json.loads((tmp_path / "data/settings.json").read_text())
+    assert saved == {"preset": "fast"}
+    saved["heroNames"] = ["Jessica Q"]
+    (tmp_path / "data/settings.json").write_text(json.dumps(saved))
+    (tmp_path / "profiles/alex.md").write_text(ALEX + "Hates it when Jessica Q check-raises.\n")
+
+    backend = Backend(tmp_path / "data", tmp_path / "profiles", provider=fake)
+    assert backend.preset == "fast"
+    backend.handle(page(*FLOP_HAND))
+    backend.handle(FLOP_TURN)
+    sent_text = json.dumps(fake.requests[-1].system)
+    assert "Jessica" not in sent_text and "when Hero check-raises" in sent_text

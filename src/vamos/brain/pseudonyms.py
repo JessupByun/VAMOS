@@ -9,7 +9,8 @@ in all prompt text, profile bodies included. `check` then refuses any text that 
 contains one, and `reveal` maps Claude's answer back to real names for the card.
 
 Names shorter than two characters are not substituted (a player called "A" would rewrite
-every article); they are reported so the user can rename or alias them.
+every article), nor are names that are pseudonyms themselves ("Hero", "Player B"); they are
+reported so the user can rename or alias them. A hero who plays as "Hero" is no leak.
 """
 
 import re
@@ -17,6 +18,7 @@ from dataclasses import dataclass, field
 
 HERO = "Hero"
 MIN_LENGTH = 2
+_PSEUDONYM = re.compile(rf"{HERO}|Player [A-Z]", re.IGNORECASE)
 
 
 class LeakError(Exception):
@@ -39,7 +41,7 @@ class Pseudonyms:
     _names: dict[str, set[str]] = field(default_factory=dict)
     # person key -> the name to show for them in Claude's answer
     _shown: dict[str, str] = field(default_factory=dict)
-    too_short: set[str] = field(default_factory=set)
+    unusable: set[str] = field(default_factory=set)  # too short, or a pseudonym
 
     def add(self, person: str, names: set[str] | list[str] | tuple[str, ...], shown: str) -> str:
         """Register a person (once their first name is known) and return their pseudonym."""
@@ -52,13 +54,14 @@ class Pseudonyms:
         return self._labels[person]
 
     def add_hero_name(self, name: str) -> None:
-        self._remember(self.hero_names, name.strip())
+        if name.strip().lower() != HERO.lower():
+            self._remember(self.hero_names, name.strip())
 
     def _remember(self, into: set[str], name: str) -> None:
         if not name:
             return
-        if len(name) < MIN_LENGTH:
-            self.too_short.add(name)
+        if len(name) < MIN_LENGTH or _PSEUDONYM.fullmatch(name):
+            self.unusable.add(name)
             return
         into.add(name)
 

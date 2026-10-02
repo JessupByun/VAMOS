@@ -56,7 +56,7 @@ def test_a_surviving_name_blocks_the_call_without_echoing_it():
 def test_one_letter_names_are_reported_not_substituted():
     p = Pseudonyms()
     p.add("q", ["Q"], shown="Q")
-    assert p.too_short == {"Q"}
+    assert p.unusable == {"Q"}
     assert p.hide("Q raises") == "Q raises"
 
 
@@ -65,3 +65,13 @@ def test_reveal_turns_pseudonyms_back_into_names():
     assert p.reveal("Player A overcalls; Hero should value bet thinner than vs Player B.") == (
         "alex overcalls; you should value bet thinner than vs rj."
     )
+
+
+def test_names_that_are_pseudonyms_are_never_substituted():
+    p = Pseudonyms()
+    p.add_hero_name("Hero")
+    p.add("x", ["player b", "Bob"], shown="Bob")
+    assert p.unusable == {"player b"}
+    text = p.hide("Hero raises and Bob calls")
+    assert text == "Hero raises and Player A calls"
+    p.check(text)

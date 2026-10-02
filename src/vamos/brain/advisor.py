@@ -103,8 +103,19 @@ class Advisor:
         # on the card while a deeper model is asked.
         self._answered: dict[str, Call] = {}
 
-    def start(self, game_id: str, job: Job, deadline: float) -> bool:
-        """Ask about `job` unless this node was already asked with this preset."""
+    def asked(self, game_id: str, node: str, preset: str | None = None) -> bool:
+        """Whether Claude was asked about `node` (with `preset`, if given)."""
+        with self._lock:
+            call = self._calls.get(game_id)
+            if call is None or call.job.node != node:
+                return False
+            return preset is None or call.job.request.preset.name == preset
+
+    def start(self, game_id: str, job: Job, deadline: float, refuse: str | None = None) -> bool:
+        """
+        Ask about `job` unless this node was already asked with this preset. A `refuse`
+        reason records the call as failed without sending it.
+        """
         with self._lock:
             current = self._calls.get(game_id)
             if current is not None and current.job.node == job.node:
@@ -116,8 +127,10 @@ class Advisor:
                 self._cancel(current)
             call = Call(job, deadline)
             self._calls[game_id] = call
-            if deadline - self._clock() < MIN_SECONDS:
-                call.state, call.reason = "failed", "not enough time on the clock"
+            if refuse is None and deadline - self._clock() < MIN_SECONDS:
+                refuse = "not enough time on the clock"
+            if refuse is not None:
+                call.state, call.reason = "failed", refuse
                 return True
         threading.Thread(target=self._run, args=(game_id, call), daemon=True).start()
         threading.Thread(target=self._watch, args=(game_id, call), daemon=True).start()
