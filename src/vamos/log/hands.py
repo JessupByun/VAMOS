@@ -11,10 +11,10 @@ to that hand. Non-NLH hands are skipped whole.
 
 from collections import defaultdict
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import IntEnum
 
-from vamos.log.grammar import NLH, Event, Seat, parse_line
+from vamos.log.grammar import NLH, Event, Player, Seat, parse_line
 from vamos.money import Cents
 
 
@@ -29,6 +29,10 @@ LIVE_POSTS = {"post_sb", "post_bb", "post_straddle", "post_missed_bb"}
 DEAD_POSTS = {"post_missing_sb", "post_ante"}
 WAGERS = {"call", "bet", "raise"}
 _STREET_OF = {"flop": Street.FLOP, "turn": Street.TURN, "river": Street.RIVER}
+
+# The only hand rows that can follow "-- ending hand" (verified over the corpus). Anything
+# else after an end belongs to a hand whose start row was never received.
+POST_HAND_KINDS = {"show", "undealt", "bounty_paid", "bounty_collected"}
 
 # Rows that describe the table rather than the hand; they are valid anywhere, including
 # between hands and in the middle of one, and never change the hand in progress.
@@ -122,6 +126,11 @@ class HandLog:
     table: list[tuple[int, Event]] = field(default_factory=list)
     unknown: list[tuple[int, str]] = field(default_factory=list)
     skipped_variants: dict[str, int] = field(default_factory=lambda: defaultdict(int))
+    # Player IDs replaced mid-game (e.g. a guest who logs in): old ID -> current ID.
+    aliases: dict[str, str] = field(default_factory=dict)
+
+    def current_id(self, pn_id: str) -> str:
+        return self.aliases.get(pn_id, pn_id)
 
 
 class _Builder:
@@ -137,11 +146,29 @@ class _Builder:
         self.current_bet: Cents = 0
         self.last_raise: Cents = self.big_blind or 0
 
+    def gap(self) -> None:
+        """Rows may be missing from here on: stop adding to the open hand."""
+        self.hand = None
+
+    def _canonical(self, event: Event) -> Event:
+        def fix(player: Player | None) -> Player | None:
+            if player is None or player.id not in self.log.aliases:
+                return player
+            return Player(player.name, self.log.aliases[player.id])
+
+        seats = tuple(replace(s, player=fix(s.player)) for s in event.seats)
+        return replace(event, player=fix(event.player), other=fix(event.other), seats=seats)
+
     def feed(self, order: int, event: Event) -> None:
         kind = event.kind
         if kind == "unknown":
             self.log.unknown.append((order, event.detail or ""))
             return
+        if kind == "id_changed":
+            assert event.player is not None and event.other is not None
+            self._rename(event.other.id, event.player.id)
+        if self.log.aliases:
+            event = self._canonical(event)
         if kind == "hand_start":
             self._start(order, event)
             return
@@ -153,6 +180,9 @@ class _Builder:
         if self.skipping or self.hand is None:
             return
         hand = self.hand
+        if hand.ended and kind not in POST_HAND_KINDS:
+            self.hand = None
+            return
         hand.last_order = order
         if event.player is not None:
             hand.names[event.player.id] = event.player.name
@@ -179,6 +209,34 @@ class _Builder:
     def _ignore(self, hand: Hand, order: int, event: Event) -> None:
         pass
 
+    def _rename(self, old: str, new: str) -> None:
+        if old == new:
+            return
+        aliases = self.log.aliases
+        for source, target in aliases.items():
+            if target == old:
+                aliases[source] = new
+        aliases.pop(new, None)
+        aliases[old] = new
+        hand = self.hand
+        if hand is None or self.skipping:
+            return
+        # Move the open hand's records so its accounting stays whole.
+        for book in (self.committed, hand.put_in, hand.returned, hand.collected):
+            if old in book:
+                book[new] = book.get(new, 0) + book.pop(old)
+        if old in hand.names:
+            hand.names[new] = hand.names.pop(old)
+        if old in hand.shows:
+            hand.shows[new] = hand.shows.pop(old)
+        hand.seats = tuple(
+            replace(s, player=Player(s.player.name, new)) if s.player.id == old else s
+            for s in hand.seats
+        )
+        hand.actions = [replace(a, player=new) if a.player == old else a for a in hand.actions]
+        if hand.dealer == old:
+            hand.dealer = new
+
     def _on_player_stacks(self, hand: Hand, order: int, event: Event) -> None:
         hand.seats = event.seats
         for seat in event.seats:
@@ -195,18 +253,26 @@ class _Builder:
         player, to = event.player.id, event.amount
         added = max(0, to - self.committed[player])
         reopens = None
-        if event.kind == "raise" or event.kind == "post_straddle":
+        if event.kind in ("bet", "raise", "post_straddle"):
+            # A bet is a raise from nothing: a full one sets the minimum raise for the
+            # street. A short all-in leaves it, and does not reopen betting.
             raise_by = to - self.current_bet
-            reopens = raise_by >= self.last_raise
-            if reopens:
+            full = raise_by >= self.last_raise
+            if full:
                 self.last_raise = raise_by
-        if event.kind == "post_bb" and self.big_blind is None:
-            # No stakes row seen yet (e.g. a log window that starts mid-game).
+            if event.kind != "bet":
+                reopens = full
+        if event.kind == "post_bb" and self.big_blind is None and not event.all_in:
+            # No stakes row seen yet (a log window that starts mid-game). A short all-in big
+            # blind posts less than the nominal blind, so only a full post can stand in.
             hand.big_blind = to
             self.big_blind = to
             self.last_raise = to
         self.committed[player] = max(self.committed[player], to)
         self.current_bet = max(self.current_bet, to)
+        if event.kind == "post_bb":
+            # A short all-in big blind does not lower the price to call.
+            self.current_bet = max(self.current_bet, self.big_blind or 0)
         hand.put_in[player] += added
         kind = event.kind
         hand.actions.append(Action(order, street, player, kind, to, added, event.all_in, reopens))
@@ -278,13 +344,18 @@ class _Builder:
         hand.ended = True
 
 
-def build_hands(rows: Iterable[tuple[int, str]]) -> HandLog:
+def build_hands(rows: Iterable[tuple[int, str]], gaps: Iterable[int] = ()) -> HandLog:
     """
     Rebuild hands from (order, text) rows: CSV `order`/`entry` or live `created_at`/`msg`.
     Rows may arrive in any order and with duplicates; they are sorted and deduplicated on
-    `order`, so a page fetched twice or out of order yields the same hands.
+    `order`, so a page fetched twice or out of order yields the same hands. `gaps` are
+    orders before which rows may be missing: the hand open there is left as it was and the
+    rows that follow are dropped until the next hand starts, rather than merged into it.
     """
     builder = _Builder()
+    gap_set = set(gaps)
     for order, text in sorted(dict(rows).items()):
+        if order in gap_set:
+            builder.gap()
         builder.feed(order, parse_line(text))
     return builder.log

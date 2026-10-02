@@ -146,3 +146,22 @@ def test_install_writes_launcher_and_manifest(tmp_path):
     assert manifest["path"] == str(launcher)
     assert launcher.stat().st_mode & 0o111
     assert '"/py/bin/python" -m vamos host' in launcher.read_text()
+
+
+def test_a_player_whose_id_changed_is_still_recognized(backend):
+    # The profile lists alex's guest ID; after logging in the seat shows the new ID.
+    backend.handle(
+        {"type": "seats", "gameId": GAME, "players": [{"id": "alexNew001", "name": "alex"}]}
+    )
+    [players] = backend.handle(
+        page(
+            *HAND,
+            (
+                110,
+                'The player "alex @ alexNew001" changed the ID from Qw3rTy7UiO to alexNew001 because authenticated login.',
+            ),
+        )
+    )
+    [alex] = players["players"]
+    assert alex["profile"]["key"] == "alex"
+    assert alex["tonight"] == {"hands": 1, "vpip": 1}

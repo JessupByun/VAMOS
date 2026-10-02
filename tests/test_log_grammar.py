@@ -177,3 +177,14 @@ def test_id_change_takes_both_ids_from_the_clause():
 def test_unrecognized_lines_are_surfaced_not_guessed(line):
     e = parse_line(line)
     assert (e.kind, e.detail) == ("unknown", line)
+
+
+def test_player_stacks_survive_pipes_and_hashes_in_names():
+    e = parse_line(
+        'Player stacks: #1 "DK | 2 @ aaaaaaaa01" (1000) | #3 "a" | #3 "b @ aaaaaaaa02" (5) | #4 "#4 @ aaaaaaaa03" (7)'
+    )
+    assert [(s.number, s.player.name) for s in e.seats] == [
+        (1, "DK | 2"),
+        (3, 'a" | #3 "b'),
+        (4, "#4"),
+    ]

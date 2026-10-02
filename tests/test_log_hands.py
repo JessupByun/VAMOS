@@ -199,3 +199,115 @@ def test_order_duplicates_and_paging_never_change_the_hands(seed, repeats):
         expected.collected,
         expected.shows,
     )
+
+
+def raises(hand):
+    return [(a.player[0], a.to, a.reopens) for a in hand.actions if a.kind == "raise"]
+
+
+def test_a_postflop_bet_sets_the_minimum_raise():
+    hand = one_hand(f"""\
+-- starting hand #6 (id: h6)  No Limit Texas Hold'em (dealer: {C}) --
+Player stacks: #1 {A} (1000) | #2 {B} (365) | #3 {C} (1000)
+{A} posts a small blind of 10
+{B} posts a big blind of 20
+{C} calls 20
+{A} calls 20
+{B} checks
+Flop:  [10♣, 6♣, 3♥]
+{A} bets 300
+{B} raises to 345 and go all in
+{C} raises to 645
+""")
+    # +45 over a 300 bet is not a full raise; C's +300 over 345 is.
+    assert raises(hand) == [("b", 34500, False), ("c", 64500, True)]
+
+
+def test_a_short_all_in_big_blind_does_not_lower_the_price():
+    hand = one_hand(f"""\
+The game's big blind was changed from 20 to 10.
+-- starting hand #7 (id: h7)  No Limit Texas Hold'em (dealer: {A}) --
+Player stacks: #1 {A} (1000) | #2 {B} (1) | #3 {C} (15)
+{A} posts a small blind of 5
+{B} posts a big blind of 1 and go all in
+{C} raises to 15 and go all in
+""")
+    # The price is the nominal 10, so C's raise is only +5: incomplete.
+    assert raises(hand) == [("c", 1500, False)]
+
+
+def test_the_nominal_big_blind_is_never_learned_from_a_short_all_in_post():
+    log = build_hands(
+        rows(f"""\
+-- starting hand #86 (id: h86)  No Limit Texas Hold'em (dealer: {C}) --
+Player stacks: #1 {A} (1000) | #2 {B} (1) | #3 {C} (1000)
+{A} posts a small blind of 5
+{B} posts a big blind of 1 and go all in
+{C} calls 10
+-- starting hand #87 (id: h87)  No Limit Texas Hold'em (dealer: {A}) --
+Player stacks: #1 {A} (1000) | #3 {C} (1000)
+{C} posts a small blind of 5
+{A} posts a big blind of 10
+{C} raises to 15 and go all in
+""")
+    )
+    assert [h.big_blind for h in log.hands] == [None, 1000]
+    assert raises(log.hands[1]) == [("c", 1500, False)]
+
+
+def test_an_id_change_mid_hand_keeps_one_player_and_balances():
+    henry_old, henry_new = '"Henry @ wgnNFHC2ZI"', '"Henry @ FQN9hzhzP_"'
+    log = build_hands(
+        rows(f"""\
+-- starting hand #3 (id: h3)  No Limit Texas Hold'em (dealer: {A}) --
+Player stacks: #1 {A} (1000) | #2 {henry_old} (1000)
+{A} posts a small blind of 10
+{henry_old} posts a big blind of 20
+{A} raises to 60
+The player {henry_new} changed the ID from wgnNFHC2ZI to FQN9hzhzP_ because authenticated login.
+{henry_new} calls 60
+Flop:  [10♣, 6♣, 3♥]
+{henry_new} checks
+{A} bets 60
+{henry_new} folds
+Uncalled bet of 60 returned to {A}
+{A} collected 120 from pot
+-- ending hand #3 --
+""")
+    )
+    hand = log.hands[0]
+    assert hand.balanced
+    assert hand.put_in == {"aaaaaaaaaa": 12000, "FQN9hzhzP_": 6000}
+    assert [s.player.id for s in hand.seats] == ["aaaaaaaaaa", "FQN9hzhzP_"]
+    assert log.aliases == {"wgnNFHC2ZI": "FQN9hzhzP_"}
+
+
+NEXT_HAND_WITHOUT_START = f"""\
+Player stacks: #1 {A} (1100) | #2 {B} (900)
+{A} posts a small blind of 10
+{B} posts a big blind of 20
+{A} raises to 60
+"""
+
+
+def test_rows_after_an_ended_hand_are_not_merged_into_it():
+    log = build_hands(rows(HEADS_UP + NEXT_HAND_WITHOUT_START))
+    [hand] = log.hands
+    assert hand.ended and hand.balanced
+    assert hand.board == ["Tc", "6c", "3h"]
+    assert len(hand.actions) == 8
+
+
+def test_a_gap_leaves_the_open_hand_alone_until_the_next_start():
+    unfinished = "\n".join(HEADS_UP.splitlines()[:9])
+    after_gap = NEXT_HAND_WITHOUT_START + (
+        f"-- starting hand #9 (id: h9)  No Limit Texas Hold'em (dealer: {B}) --\n"
+        f"Player stacks: #1 {A} (1000) | #2 {B} (1000)\n"
+    )
+    early = rows(unfinished, start=100)
+    late = rows(after_gap, start=500)
+    log = build_hands(early + late, gaps=[500])
+    assert [h.number for h in log.hands] == [2, 9]
+    first = log.hands[0]
+    assert first.board == ["Tc", "6c", "3h"] and not first.ended
+    assert all(a.order < 500 for a in first.actions)

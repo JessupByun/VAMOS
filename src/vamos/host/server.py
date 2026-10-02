@@ -13,7 +13,7 @@ from typing import Any, BinaryIO
 
 from vamos.config import DATA_DIR, PROFILES_DIR, VERSION
 from vamos.host.framing import read_message, write_message
-from vamos.identity import IdentityMap
+from vamos.identity import IdentityMap, Resolution
 from vamos.profiles import ProfileSet, load_profiles
 from vamos.session import GameSession
 
@@ -76,19 +76,34 @@ class Backend:
         game_id = message["gameId"]
         if self.record:
             self._record_page(message)
-        changed = self._session(game_id).add_page(message.get("body"))
+        changed = self._session(game_id).add_page(message.get("body"), bool(message.get("fresh")))
         # New rows can change tonight's counts on the badges.
         return [self._players(game_id)] if changed and game_id in self.seated else []
 
+    def _resolve(self, pid: str, profiles: ProfileSet, aliases: dict[str, str]) -> Resolution:
+        resolution = self.identity.resolve(pid, profiles)
+        if resolution.kind == "unknown":
+            # A player whose ID changed mid-game (a guest logging in) may be known under the
+            # ID they had before.
+            for old, current in aliases.items():
+                if current != pid:
+                    continue
+                earlier = self.identity.resolve(old, profiles)
+                if earlier.kind != "unknown":
+                    return earlier
+        return resolution
+
     def _players(self, game_id: str) -> Message:
         profiles = self.profiles()
-        counts = self._session(game_id).counts()
+        session = self._session(game_id)
+        counts = session.counts()
+        aliases = session.log.aliases
         players = []
         for seated in self.seated.get(game_id, []):
             pid = seated["id"]
-            resolution = self.identity.resolve(pid, profiles)
+            resolution = self._resolve(pid, profiles, aliases)
             profile = profiles.profiles.get(resolution.profile or "")
-            tonight = counts.get(pid)
+            tonight = counts.get(aliases.get(pid, pid))
             players.append(
                 {
                     "id": pid,

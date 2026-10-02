@@ -16,6 +16,8 @@ export interface LogPage {
   type: "log_page";
   gameId: string;
   fetchedAt: number;
+  /** Fetched without a cursor: holds only the newest rows, which may not join up with earlier ones. */
+  fresh: boolean;
   body: unknown;
 }
 

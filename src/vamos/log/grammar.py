@@ -116,16 +116,20 @@ def _hand_end(m: re.Match) -> Event:
     return Event("hand_end", hand_number=int(m.group("n")))
 
 
-@_rule(rf"Player stacks: (?P<body>#\d+ {_P} \({_N}\)(?: \| #\d+ \".*?\" \({_N}\))*)")
+@_rule(r"Player stacks: (?P<body>#.+)")
 def _player_stacks(m: re.Match) -> Event:
-    body = m.group("body")
-    seats = tuple(
-        Seat(int(s.group("seat")), _player(s), _amount(s.group("stack")))
-        for s in _SEAT.finditer(body)
-    )
-    if len(seats) != body.count(" | ") + 1:
-        raise ValueError(f"could not split the roster: {body!r}")
-    return Event("player_stacks", seats=seats)
+    # Tile the row seat by seat: names may themselves contain " | " or "#".
+    body, pos, seats = m.group("body"), 0, []
+    while True:
+        seat = _SEAT.match(body, pos)
+        if seat is None:
+            raise ValueError(f"could not split the roster: {body!r}")
+        seats.append(Seat(int(seat.group("seat")), _player(seat), _amount(seat.group("stack"))))
+        if seat.end() == len(body):
+            return Event("player_stacks", seats=tuple(seats))
+        if not body.startswith(" | ", seat.end()):
+            raise ValueError(f"could not split the roster: {body!r}")
+        pos = seat.end() + 3
 
 
 @_rule(rf"Your hand is (?P<cards>{_CARDS})")

@@ -53,8 +53,9 @@ export function startLogPoller(gameId: string, deliver: (page: LogPage) => boole
       }
       return;
     }
+    const fresh = cursor === null && backfill === null;
     // Not delivered (no backend connected): leave everything as is and ask again next tick.
-    if (!deliver({ type: "log_page", gameId, fetchedAt: Date.now(), body })) return;
+    if (!deliver({ type: "log_page", gameId, fetchedAt: Date.now(), fresh, body })) return;
     const full = rows.length >= PAGE_SIZE;
     if (backfill) {
       if (full) backfill = { ...backfill, before: oldest };

@@ -46,3 +46,17 @@ def test_all_in_players_put_in_exactly_their_stack(path):
 def test_hand_numbers_increase_without_gaps(path):
     numbers = [h.number for h in load(path).hands]
     assert numbers == list(range(numbers[0], numbers[0] + len(numbers)))
+
+
+@pytest.mark.skipif(not list(CORPUS.glob("jaaaayden/logs/*.csv")), reason="corpus not fetched")
+def test_incomplete_all_in_raises_match_the_documented_count():
+    # docs/log-grammar.md: 32 incomplete all-in raises in the pnt/logs exports, none of which
+    # PokerNow let earlier players re-raise.
+    total = sum(
+        1
+        for path in sorted(CORPUS.glob("jaaaayden/logs/*.csv"))
+        for hand in load(path).hands
+        for action in hand.actions
+        if action.kind == "raise" and action.reopens is False
+    )
+    assert total == 32

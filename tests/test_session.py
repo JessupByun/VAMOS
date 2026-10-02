@@ -56,3 +56,39 @@ def test_malformed_rows_are_ignored():
     assert not session.add_page({"logs": [{"msg": "no order"}, {"created_at": "x", "msg": "bad"}]})
     assert not session.add_page({"unexpected": True})
     assert not session.add_page(None)
+
+
+def test_a_fresh_page_that_does_not_reach_known_rows_marks_a_gap():
+    session = GameSession("g")
+    session.add_page(body(*HAND_1[:6]))
+    # A fresh fetch after a long outage: only the newest rows, nothing overlapping.
+    session.add_page(body(*HAND_2[1:]), fresh=True)
+    first, *rest = session.log.hands
+    assert first.number == 1 and not first.ended
+    assert rest == []
+
+
+def test_a_fresh_page_overlapping_known_rows_is_contiguous():
+    session = GameSession("g")
+    session.add_page(body(*HAND_1[:6]))
+    session.add_page(body(*HAND_1[4:], *HAND_2), fresh=True)
+    assert [h.number for h in session.log.hands] == [1, 2]
+    assert session.log.hands[0].ended
+
+
+def test_counts_follow_an_id_change():
+    session = GameSession("g")
+    session.add_page(
+        body(
+            *HAND_1,
+            (
+                150,
+                'The player "Bob @ newbobid01" changed the ID from bbbbbbbbbb to newbobid01 because authenticated login.',
+            ),
+            *[
+                (order, text.replace("Bob @ bbbbbbbbbb", "Bob @ newbobid01"))
+                for order, text in HAND_2
+            ],
+        )
+    )
+    assert session.counts() == {"aaaaaaaaaa": Counts(2, 1), "newbobid01": Counts(2, 1)}
