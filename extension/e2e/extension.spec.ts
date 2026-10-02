@@ -286,3 +286,38 @@ test("the action card shows facts on the hero's turn only once the log has caugh
   await page.evaluate(() => document.querySelector(".you-player")?.classList.remove("decision-current"));
   await expect(card).toHaveText("waiting for your turn");
 });
+
+test("after the flop the card shows Claude's answer and the panel its reasoning", async () => {
+  const page = await openTable();
+  const panel = await harness.context.newPage();
+  await panel.goto(PANEL_URL);
+  const card = page.locator("#vamos-root .action-card");
+  harness.addLogLines([
+    ...HAND_START,
+    `"new guy @ ${STRANGER_ID}" folds`,
+    `"TestHero @ ${HERO_ID}" calls 0.20`,
+    `"alex @ ${KNOWN_ID}" checks`,
+    "Flop:  [K♠, 7♦, 2♣]",
+  ]);
+  await heroTurn(page);
+  await page.evaluate(() => {
+    for (const bet of document.querySelectorAll(".table-player-bet-value")) bet.remove();
+    const pot = document.querySelector(".table-pot-size .normal-value");
+    if (pot) pot.textContent = "0.40";
+    document.querySelector(".table-cards.run-1")!.innerHTML = ["card-s card-s-K", "card-d card-s-7", "card-c card-s-2"]
+      .map((cls) => `<div class="card-container ${cls} flipped"></div>`)
+      .join("");
+  });
+  await expect(card.locator(".source")).toHaveText("Claude");
+  await expect(card.locator(".action")).toHaveText("BET 0.20 (1bb)");
+  await expect(card.locator(".facts")).toHaveText(/^SB · pot 2bb · \d+% vs random · Ace high$/);
+
+  await expect(panel.locator(".advice .note")).toHaveText("alex folds to small bets.");
+  await expect(panel.getByRole("button", { name: "Ask Opus" })).toBeVisible();
+  await expect(panel.getByText(/tonight \$0\.00/)).toBeVisible();
+
+  await page.evaluate(() => document.querySelector(".you-player")?.classList.remove("decision-current"));
+  await expect(card).toHaveText("waiting for your turn");
+  await expect(panel.locator(".advice h2")).toHaveText("Your last decision");
+  await expect(panel.getByRole("button", { name: "Ask Opus" })).toHaveCount(0);
+});

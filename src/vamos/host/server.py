@@ -17,7 +17,7 @@ from typing import Any, BinaryIO
 from vamos.brain import prompt
 from vamos.brain.advisor import DEFAULT_SECONDS, SPARE_SECONDS, Advisor, Job
 from vamos.brain.costs import SOFT_CAP, Ledger
-from vamos.brain.provider import PRESETS, AnthropicProvider, Provider, Request
+from vamos.brain.provider import PRESETS, AnthropicProvider, CannedProvider, Provider, Request
 from vamos.brain.pseudonyms import HERO, LeakError, Pseudonyms
 from vamos.brain.spot import betting, claude_facts, legal
 from vamos.config import DATA_DIR, PROFILES_DIR, VERSION
@@ -128,7 +128,8 @@ class Backend:
                 self._turn_started.pop(game_id, None)
                 self._turn_ends.pop(game_id, None)
                 self.advisor.stop(game_id)
-                return []
+                # Tells the side panel the decision it shows has passed.
+                return [{"type": "facts", "gameId": game_id, "key": "", "facts": None}]
             self.turns[game_id] = message
             self._turn_started.setdefault(game_id, self.clock())
             return [self._spot_facts(game_id)]
@@ -438,8 +439,10 @@ def main() -> None:
     log.info("[VAMOS] host %s started (pid %d)", VERSION, os.getpid())
     started = time.monotonic()
     record = os.environ.get("VAMOS_RECORD") == "1"
+    canned = os.environ.get("VAMOS_CANNED_CLAUDE")  # end-to-end tests only
+    provider = CannedProvider(Path(canned).read_text()) if canned else None
     try:
-        serve(sys.stdin.buffer, stdout, Backend(DATA_DIR, PROFILES_DIR, record))
+        serve(sys.stdin.buffer, stdout, Backend(DATA_DIR, PROFILES_DIR, record, provider))
     except Exception:
         log.exception("[VAMOS] host crashed")
         raise

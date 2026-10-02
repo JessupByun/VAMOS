@@ -221,7 +221,9 @@ def test_turn_facts_wait_for_the_log_then_follow_it(backend):
     )
     assert found["madeHand"] == "AA"
     # Once the turn is over, new rows no longer produce facts.
-    assert backend.handle({"type": "turn", "gameId": GAME, "table": None}) == []
+    assert backend.handle({"type": "turn", "gameId": GAME, "table": None}) == [
+        {"type": "facts", "gameId": GAME, "key": "", "facts": None}
+    ]
     assert backend.handle(page(*HERO_HAND, (205, '"Hero @ heroid0001" calls 20'))) == []
 
 

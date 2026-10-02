@@ -107,6 +107,15 @@
   color: #b9a5e8;
 }
 
+.action-card .source.claude {
+  color: #e8a87c;
+}
+
+.action-card .action.thinking {
+  color: #9aa1ab;
+  font-weight: 600;
+}
+
 .action-card .action {
   margin: 2px 0 4px;
   font-size: 24px;

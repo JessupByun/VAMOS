@@ -29,6 +29,12 @@ function seat(position: number, name: string, id: string, extra = "") {
 const DECISIONS = `<div class="game-decisions-ctn" style="position:absolute;right:20px;bottom:20px;width:300px;height:80px"><button class="action-button fold">Fold</button></div>`;
 const TABLE_HTML = `<div class="table">${seat(1, "TestHero", HERO_ID, "you-player")}${seat(2, "alex", KNOWN_ID)}${seat(3, "new guy", STRANGER_ID)}</div>${DECISIONS}`;
 
+// Profiles get the first pseudonyms, so alex is "Player A" in every prompt.
+const CLAUDE_ANSWER = JSON.stringify({
+  strategy: [{ action: "bet", size_pct_pot: 50, freq: 1 }],
+  note: "Player A folds to small bets.",
+});
+
 const PROFILE = `---\nname: alex\ntag: Calling station\nplayer_id: ${KNOWN_ID}\n---\n# alex\n`;
 
 // PokerNow's start-game page swaps to the table with replaceState, not a page load.
@@ -79,10 +85,13 @@ export async function launch(): Promise<Harness> {
   mkdirSync(profilesDir);
   writeFileSync(join(profilesDir, "alex.md"), PROFILE);
 
+  // Claude's answer is canned, so no test ever reaches the API.
+  const canned = join(root, "claude-answer.json");
+  writeFileSync(canned, CLAUDE_ANSWER);
   const launcher = join(root, "vamos-host");
   writeFileSync(
     launcher,
-    `#!/bin/sh\nVAMOS_DATA_DIR="${dataDir}" VAMOS_PROFILES_DIR="${profilesDir}" VAMOS_RECORD=1 exec "${PYTHON}" -m vamos host "$@"\n`,
+    `#!/bin/sh\nVAMOS_DATA_DIR="${dataDir}" VAMOS_PROFILES_DIR="${profilesDir}" VAMOS_CANNED_CLAUDE="${canned}" VAMOS_RECORD=1 exec "${PYTHON}" -m vamos host "$@"\n`,
   );
   chmodSync(launcher, 0o755);
   const hostsDir = join(userDataDir, "NativeMessagingHosts");

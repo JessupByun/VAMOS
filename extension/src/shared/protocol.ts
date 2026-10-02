@@ -106,8 +106,29 @@ export interface SpotFacts {
   /** Who the equity is against, e.g. "a random hand". */
   equityVs: string;
   madeHand: string;
-  /** Preflop only: the baseline's action, or action null where no table covers the spot. */
-  advice: PreflopAdvice | null;
+  /** Preflop: the charts' action. Postflop: Claude's answer, or why there is none. */
+  advice: PreflopAdvice | ClaudeAdvice | null;
+}
+
+export interface ClaudeAdvice {
+  /** "Math" once a call failed with no earlier answer to show. */
+  source: "Claude" | "Math";
+  /** e.g. "BET 1.20 (6bb)"; null until Claude answers. */
+  action: string | null;
+  mix: string[] | null;
+  /** Claude's reasoning, with real names. */
+  note: string | null;
+  /** The model whose answer is shown (or, before any answer, the one asked). */
+  model: string;
+  /** The model of the latest call, e.g. "Opus" while Ask Opus runs. */
+  asked: string;
+  state: "thinking" | "done" | "failed" | "cancelled";
+  /** Why the latest call gave no answer, e.g. "timed out". */
+  reason: string | null;
+}
+
+export function isClaude(advice: SpotFacts["advice"]): advice is ClaudeAdvice {
+  return advice !== null && "state" in advice;
 }
 
 export interface PreflopAdvice {
@@ -126,6 +147,31 @@ export interface Facts {
   facts: SpotFacts | null;
 }
 
+/** Seconds left on the hero's decision clock, estimated from how fast its bar shrinks. */
+export interface ClockReport {
+  type: "clock";
+  gameId: string;
+  secondsLeft: number;
+}
+
+export type Preset = "fast" | "balanced" | "deep";
+
+export interface Settings {
+  type: "settings";
+  preset: Preset;
+  presets: Preset[];
+}
+
+export interface Costs {
+  type: "costs";
+  /** Dollars. */
+  session: number;
+  month: number;
+  allTime: number;
+  overCap: boolean;
+  softCap: number;
+}
+
 export interface SnapshotRequest {
   type: "snapshot_request";
 }
@@ -136,13 +182,30 @@ export interface HostAck {
   detail: string;
 }
 
-export type ContentToWorker = LogPage | DomSnapshot | SeatsReport | AssignIdentity | HeroTurn;
+export type ContentToWorker =
+  | LogPage
+  | DomSnapshot
+  | SeatsReport
+  | AssignIdentity
+  | HeroTurn
+  | ClockReport;
 export type WorkerToContent = BackendStatus | SnapshotRequest | Players | Facts;
-export type PanelToWorker = SnapshotRequest | AssignIdentity | ForgetIdentity;
-export type WorkerToPanel = BackendStatus | HostAck | Players;
+export type PanelToWorker =
+  | SnapshotRequest
+  | AssignIdentity
+  | ForgetIdentity
+  | { type: "settings"; preset: Preset }
+  | { type: "settings_request" }
+  /** Quick notes for tonight's prompts; kept in memory only. */
+  | { type: "notes"; text: string }
+  /** Re-run the decision on the table with another preset ("Ask Opus"). */
+  | { type: "ask"; gameId: string; preset: Preset };
+export type WorkerToPanel = BackendStatus | HostAck | Players | Facts | Settings | Costs;
 export type HostToWorker =
   | { type: "ready"; version: string; recording: boolean }
   | HostAck
   | Players
   | Facts
+  | Settings
+  | Costs
   | { type: "error"; message: string };

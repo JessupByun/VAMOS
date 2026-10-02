@@ -20,6 +20,8 @@ let host: chrome.runtime.Port | null = null;
 let status: BackendStatus = { type: "backend", state: "down", detail: "no PokerNow table open" };
 const retry = new HostRetry();
 let retryTimer: ReturnType<typeof setTimeout> | undefined;
+// The latest of each, replayed to a side panel when it opens.
+const latest = new Map<string, WorkerToPanel>();
 
 chrome.sidePanel
   .setPanelBehavior({ openPanelOnActionClick: true })
@@ -54,7 +56,10 @@ function connectHost() {
       for (const panel of panelPorts) panel.postMessage(message satisfies WorkerToPanel);
     } else if (message.type === "facts") {
       for (const content of contentPorts) content.postMessage(message satisfies WorkerToContent);
+      latest.set(message.type, message);
+      for (const panel of panelPorts) panel.postMessage(message satisfies WorkerToPanel);
     } else {
+      if (message.type === "settings" || message.type === "costs") latest.set(message.type, message);
       for (const panel of panelPorts) panel.postMessage(message satisfies WorkerToPanel);
     }
   });
@@ -101,6 +106,7 @@ chrome.runtime.onConnect.addListener((port) => {
   } else if (port.name === "panel") {
     panelPorts.add(port);
     port.postMessage(status satisfies WorkerToPanel);
+    for (const message of latest.values()) port.postMessage(message);
     port.onMessage.addListener((message: PanelToWorker) => {
       if (message.type === "snapshot_request") {
         for (const content of contentPorts) content.postMessage(message satisfies WorkerToContent);

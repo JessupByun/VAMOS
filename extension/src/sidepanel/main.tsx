@@ -1,13 +1,18 @@
 import { render } from "preact";
 import { useEffect, useState } from "preact/hooks";
 
-import type {
-  BackendStatus,
-  HostAck,
-  PanelToWorker,
-  PlayerInfo,
-  Players,
-  WorkerToPanel,
+import {
+  type BackendStatus,
+  type ClaudeAdvice,
+  type Costs,
+  type HostAck,
+  isClaude,
+  type PanelToWorker,
+  type PlayerInfo,
+  type Players,
+  type Preset,
+  type Settings,
+  type WorkerToPanel,
 } from "../shared/protocol";
 import "./panel.css";
 
@@ -18,6 +23,15 @@ let port: chrome.runtime.Port | null = null;
 let status: BackendStatus = { type: "backend", state: "connecting" };
 let acks: HostAck[] = [];
 let players: Players | null = null;
+let settings: Settings | null = null;
+let costs: Costs | null = null;
+// Claude's latest answer, and whether its decision is still on the table.
+interface LatestClaude {
+  gameId: string;
+  advice: ClaudeAdvice;
+  live: boolean;
+}
+let claude: LatestClaude | null = null;
 let retryDelay = RECONNECT_MIN_MS;
 const subscribers = new Set<() => void>();
 
@@ -36,7 +50,13 @@ function connect() {
     retryDelay = RECONNECT_MIN_MS;
     if (message.type === "backend") status = message;
     else if (message.type === "players") players = message;
-    else acks = [message, ...acks].slice(0, 20);
+    else if (message.type === "settings") settings = message;
+    else if (message.type === "costs") costs = message;
+    else if (message.type === "facts") {
+      const advice = message.facts?.advice ?? null;
+      if (isClaude(advice)) claude = { gameId: message.gameId, advice, live: true };
+      else if (claude) claude = { ...claude, live: false };
+    } else acks = [message, ...acks].slice(0, 20);
     notifyAll();
   });
   next.onDisconnect.addListener(() => {
@@ -63,7 +83,114 @@ function useWorkerState() {
       subscribers.delete(notify);
     };
   }, []);
-  return { status, acks, players };
+  return { status, acks, players, settings, costs, claude };
+}
+
+const send = (message: PanelToWorker) => port?.postMessage(message);
+
+const PRESET_LABELS: Record<Preset, string> = {
+  fast: "Fast · Haiku",
+  balanced: "Balanced · Sonnet",
+  deep: "Deep · Opus",
+};
+
+function Advice({ claude }: { claude: LatestClaude }) {
+  const { advice, live, gameId } = claude;
+  const answered = advice.action !== null;
+  return (
+    <section class={live ? "advice" : "advice past"}>
+      <h2>{live ? "Claude on this decision" : "Your last decision"}</h2>
+      {answered ? (
+        <>
+          <p class="pick">
+            {advice.action} <span class="muted">· {advice.model}</span>
+          </p>
+          {advice.mix && <p class="muted">{advice.mix.join(" · ")}</p>}
+          {advice.note && <p class="note">{advice.note}</p>}
+        </>
+      ) : (
+        <p class="muted">
+          {advice.state === "thinking" ? `${advice.asked} is thinking...` : `No answer: ${advice.reason}`}
+        </p>
+      )}
+      {answered && advice.asked !== advice.model && advice.state === "thinking" && (
+        <p class="muted">asking {advice.asked}...</p>
+      )}
+      {answered && advice.asked !== advice.model && advice.state === "failed" && (
+        <p class="muted">
+          {advice.asked}: {advice.reason}
+        </p>
+      )}
+      {live && advice.model !== "Opus" && advice.asked !== "Opus" && (
+        <button type="button" onClick={() => send({ type: "ask", gameId, preset: "deep" })}>
+          Ask Opus
+        </button>
+      )}
+    </section>
+  );
+}
+
+function Dial({ settings }: { settings: Settings }) {
+  return (
+    <section>
+      <h2>Claude after the flop</h2>
+      <div class="dial">
+        {settings.presets.map((preset) => (
+          <label key={preset}>
+            <input
+              type="radio"
+              name="preset"
+              checked={settings.preset === preset}
+              onChange={() => send({ type: "settings", preset })}
+            />
+            {PRESET_LABELS[preset]}
+          </label>
+        ))}
+      </div>
+      <p class="muted">A change applies from the next hand.</p>
+    </section>
+  );
+}
+
+const dollars = (amount: number) => `$${amount.toFixed(2)}`;
+
+function Spend({ costs }: { costs: Costs }) {
+  return (
+    <section>
+      <h2>Claude costs</h2>
+      <p class={costs.overCap ? "over" : ""}>
+        tonight {dollars(costs.session)} · this month {dollars(costs.month)} · all time{" "}
+        {dollars(costs.allTime)}
+      </p>
+      {costs.overCap && (
+        <p class="over">Past tonight's {dollars(costs.softCap)} soft cap; advice keeps coming.</p>
+      )}
+    </section>
+  );
+}
+
+let notesTimer: ReturnType<typeof setTimeout> | undefined;
+
+function Notes() {
+  const [text, setText] = useState("");
+  const change = (event: Event) => {
+    const value = (event.currentTarget as HTMLTextAreaElement).value;
+    setText(value);
+    clearTimeout(notesTimer);
+    notesTimer = setTimeout(() => send({ type: "notes", text: value }), 600);
+  };
+  return (
+    <section>
+      <h2>Notes for tonight</h2>
+      <textarea
+        rows={3}
+        value={text}
+        onInput={change}
+        placeholder="e.g. alex is tilted after losing a big pot"
+      />
+      <p class="muted">Sent with every Claude call tonight; never saved.</p>
+    </section>
+  );
 }
 
 const NO_PROFILE = "__none__";
@@ -109,7 +236,7 @@ function TableRow({ player, profiles }: { player: PlayerInfo; profiles: Players[
 }
 
 function Panel() {
-  const { status, acks, players } = useWorkerState();
+  const { status, acks, players, settings, costs, claude } = useWorkerState();
   const requestSnapshot = () =>
     port?.postMessage({ type: "snapshot_request" } satisfies PanelToWorker);
 
@@ -125,6 +252,10 @@ function Panel() {
           {status.detail ? ` · ${status.detail}` : ""}
         </p>
       </section>
+      {claude && <Advice claude={claude} />}
+      {settings && <Dial settings={settings} />}
+      <Notes />
+      {costs && <Spend costs={costs} />}
       {players && (
         <section>
           <h2>Profiles</h2>

@@ -64,3 +64,47 @@ ul {
 .problems {
   color: var(--bad);
 }
+
+.muted {
+  color: var(--muted);
+}
+
+.advice .pick {
+  margin: 4px 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.advice .note {
+  white-space: pre-wrap;
+}
+
+.advice.past {
+  opacity: 0.6;
+}
+
+.dial {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+textarea {
+  box-sizing: border-box;
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--muted);
+  border-radius: 6px;
+  padding: 6px;
+}
+
+.over {
+  color: var(--warn);
+}
+
+button {
+  font: inherit;
+  margin-top: 6px;
+}

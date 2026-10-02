@@ -1,6 +1,7 @@
 import { render } from "preact";
 
 import type { BackendStatus, ContentToWorker, WorkerToContent } from "../shared/protocol";
+import { ClockEstimate, readTimeBar } from "./dom/clock";
 import { readSeats, seatsKey } from "./dom/seats";
 import { decisionArea, heroSeat, readHeroTurn } from "./dom/table";
 import { startLogPoller } from "./log/poller";
@@ -36,6 +37,9 @@ export function startSession(gameId: string): () => void {
   let reportedSeats: string | null = null;
   // The turn key the backend last heard about; undefined until it has heard anything.
   let reportedTurn: string | null | undefined;
+  // The hero's decision clock, reported once per turn so Claude's deadline can follow it.
+  const clock = new ClockEstimate();
+  let clockReported = false;
 
   const status = () => store.get().status;
   const show = (next: BackendStatus) => store.set({ status: next });
@@ -70,6 +74,17 @@ export function startSession(gameId: string): () => void {
     if (send({ type: "turn", gameId, key: key ?? "", table })) reportedTurn = key;
   }
 
+  function reportClock() {
+    if (store.get().turn === null) {
+      clock.reset();
+      clockReported = false;
+      return;
+    }
+    if (clockReported || status().state !== "ready") return;
+    const secondsLeft = clock.sample(performance.now(), readTimeBar(document));
+    if (secondsLeft !== null && send({ type: "clock", gameId, secondsLeft })) clockReported = true;
+  }
+
   const seatTimer = setInterval(() => {
     // Re-render every tick so badges follow their seats when the layout moves.
     store.set({
@@ -79,6 +94,7 @@ export function startSession(gameId: string): () => void {
     });
     reportSeats();
     reportTurn();
+    reportClock();
   }, SEAT_CHECK_MS);
 
   // After the extension is reloaded or removed this script keeps running but can no longer

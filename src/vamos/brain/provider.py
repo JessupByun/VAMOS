@@ -205,6 +205,16 @@ def _failure(error: Exception, usage: dict[str, Any]) -> CallFailed:
     return CallFailed(f"unexpected error ({type(error).__name__})", usage)
 
 
+class CannedProvider:
+    """End-to-end tests: the same answer to every call, so they never reach the API."""
+
+    def __init__(self, text: str):
+        self.text = text
+
+    def run(self, request: Request, cancelled: threading.Event) -> Reply:
+        return Reply(self.text, "end_turn", {})
+
+
 class FakeProvider:
     """A scripted Claude for tests: each call returns (or raises) the next scripted item."""
 
