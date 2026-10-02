@@ -12,15 +12,20 @@ HOST_NAME = "com.vamos.host"
 EXTENSION_ID = "hflgneiimkcoebdkfiblggbfklelebdn"
 
 CHROME_HOSTS_DIR = Path.home() / "Library/Application Support/Google/Chrome/NativeMessagingHosts"
+# Real Chrome on macOS will not start a host whose executable sits in a privacy-protected
+# folder such as ~/Desktop, so the launcher lives outside the repository.
+LAUNCHER_DIR = Path.home() / "Library/Application Support/VAMOS"
 
 
 def install(
-    data_dir: Path, hosts_dir: Path = CHROME_HOSTS_DIR, python: str = sys.executable
+    launcher_dir: Path = LAUNCHER_DIR,
+    hosts_dir: Path = CHROME_HOSTS_DIR,
+    python: str = sys.executable,
 ) -> Path:
     # Chrome launches `path` directly with no arguments of ours, so a launcher script pins
     # the project's interpreter.
-    launcher = data_dir / "host" / "vamos-host"
-    launcher.parent.mkdir(parents=True, exist_ok=True)
+    launcher = launcher_dir / "vamos-host"
+    launcher_dir.mkdir(parents=True, exist_ok=True)
     launcher.write_text(f'#!/bin/sh\nexec "{python}" -m vamos host "$@"\n')
     launcher.chmod(0o755)
 

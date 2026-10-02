@@ -11,10 +11,9 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.command == "install":
-        from vamos.config import DATA_DIR
         from vamos.host.install import install
 
-        print(f"[VAMOS] registered native host: {install(DATA_DIR)}")
+        print(f"[VAMOS] registered native host: {install()}")
     elif args.command == "host":
         from vamos.host.server import main as host_main
 

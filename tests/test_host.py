@@ -66,7 +66,7 @@ def test_serve_ignores_unknown_messages(tmp_path):
 
 def test_install_writes_launcher_and_manifest(tmp_path):
     manifest_path = install(
-        tmp_path / "data", hosts_dir=tmp_path / "hosts", python="/py/bin/python"
+        launcher_dir=tmp_path / "support", hosts_dir=tmp_path / "hosts", python="/py/bin/python"
     )
 
     manifest = json.loads(manifest_path.read_text())
@@ -74,7 +74,7 @@ def test_install_writes_launcher_and_manifest(tmp_path):
     assert manifest["name"] == HOST_NAME
     assert manifest["type"] == "stdio"
     assert manifest["allowed_origins"] == [f"chrome-extension://{EXTENSION_ID}/"]
-    launcher = tmp_path / "data/host/vamos-host"
+    launcher = tmp_path / "support/vamos-host"
     assert manifest["path"] == str(launcher)
     assert launcher.stat().st_mode & 0o111
     assert '"/py/bin/python" -m vamos host' in launcher.read_text()

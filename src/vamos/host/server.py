@@ -5,6 +5,7 @@ closes its stdin when the last one closes, which ends `serve`.
 
 import json
 import logging
+import os
 import sys
 import time
 from pathlib import Path
@@ -53,7 +54,7 @@ def main() -> None:
     # stdout carries framed messages only; a stray print would corrupt the stream.
     stdout = sys.stdout.buffer
     sys.stdout = sys.stderr
-    log.info("[VAMOS] host %s started", VERSION)
+    log.info("[VAMOS] host %s started (pid %d)", VERSION, os.getpid())
     started = time.monotonic()
     try:
         serve(sys.stdin.buffer, stdout, DATA_DIR)
