@@ -70,3 +70,22 @@ def test_chips_nearly_balance_with_more_players(players, bound):
     uniform = {d.id: np.full((len(d.actions), 169), 1 / len(d.actions)) for d in tree.decisions}
     ev, _ = evaluate(tree, PAYOFFS, uniform)
     assert abs(ev.sum()) < bound
+
+
+def test_paths_must_name_the_player_to_act():
+    solution = solve(10)
+    with pytest.raises(ValueError):
+        solution.at(("BB:jam",))
+    with pytest.raises(ValueError):
+        solution.at(("SB:jam", "BB:call"))  # ends at a showdown, not a decision
+
+
+def test_the_average_strategy_is_weighted_by_own_reach():
+    # DCFR averages each decision's strategies weighted by how often the player reaches it.
+    # Without that weighting this solve sits at 1.04 mbb/hand after 300 iterations; with it,
+    # 0.72 (measured 2026-10-02).
+    from vamos.preflop.realization import Realization
+
+    solver = Solver(build(2, 50), ChipPayoffs(flop=Realization(50)))
+    solver.run(300)
+    assert solver.solution().nash_conv * 1000 < 0.85

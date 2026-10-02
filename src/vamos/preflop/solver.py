@@ -42,13 +42,27 @@ class Solution:
         return node, self.strategy[node.id]
 
 
+def _step(tree: Tree, node: Node, step: str) -> int:
+    """The index of `step` ("position:action") at `node`; ValueError if it does not fit."""
+    position, action = step.split(":", 1)
+    if not isinstance(node, Decision) or tree.positions[node.player] != position:
+        raise ValueError(f"{step!r} is not a decision at this point")
+    return node.actions.index(action)
+
+
 def _walk(tree: Tree, path: tuple[str, ...]) -> Decision:
     node = tree.root
     for step in path:
-        assert isinstance(node, Decision)
-        node = node.children[node.actions.index(step.split(":", 1)[1])]
-    assert isinstance(node, Decision)
+        node = node.children[_step(tree, node, step)]
+    if not isinstance(node, Decision):
+        raise ValueError(f"{path!r} does not end at a decision")
     return node
+
+
+def _with(reach: list[np.ndarray], player: int, value: np.ndarray) -> list[np.ndarray]:
+    out = list(reach)
+    out[player] = value
+    return out
 
 
 def _matching(regret: np.ndarray) -> np.ndarray:
@@ -73,7 +87,14 @@ class Solver:
         sigma = _matching(self.regret[node.id])
         mover = node.player
         if mover == player:
-            values = np.stack([self._update(c, player, reach, weight) for c in node.children])
+            # Our own reach is carried down only for the average strategy, which is weighted
+            # by how often we reach each decision; payoffs never read it.
+            values = np.stack(
+                [
+                    self._update(c, player, _with(reach, player, reach[player] * s), weight)
+                    for c, s in zip(node.children, sigma, strict=True)
+                ]
+            )
             value = (sigma * values).sum(axis=0)
             self.regret[node.id] += values - value
             self.total[node.id] += weight * reach[player] * sigma
@@ -164,11 +185,12 @@ def action_values(
     reach = [np.ones(len(PRIOR)) for _ in range(tree.players)]
     node = tree.root
     for step in path:
+        a = _step(tree, node, step)
         assert isinstance(node, Decision)
-        a = node.actions.index(step.split(":", 1)[1])
         reach[node.player] = reach[node.player] * strategy[node.id][a]
         node = node.children[a]
-    assert isinstance(node, Decision)
+    if not isinstance(node, Decision):
+        raise ValueError(f"{path!r} does not end at a decision")
     return np.stack(
         [_value(c, node.player, reach, payoffs, strategy, best=False) for c in node.children]
     )
