@@ -38,12 +38,14 @@ def rig(tmp_path):
             self.clock = Clock()
             self.provider = FakeProvider(script)
             self.ledger = Ledger(tmp_path / "costs.jsonl", datetime(2026, 10, 2, 12))
+            self.advice_log = tmp_path / "advice.jsonl"
             self.advisor = Advisor(
                 self.provider,
                 self.ledger,
                 self.updates.put,
                 clock=self.clock,
                 now=lambda: datetime(2026, 10, 2, 13),
+                advice_log=self.advice_log,
             )
 
         def job(self, node="h1:1:8", preset="balanced"):
@@ -174,3 +176,16 @@ def test_a_refused_call_is_never_sent(rig):
     assert r.advisor.asked("g", "h1:1:8") and r.advisor.asked("g", "h1:1:8", "balanced")
     assert not r.advisor.asked("g", "h1:1:8", "deep")
     assert r.provider.requests == []
+
+
+def test_answers_and_failures_are_logged_under_pseudonyms(rig):
+    r = rig([BET, CallFailed("rate limited")])
+    r.advisor.start("g", r.job("h1:1:8"), r.clock.t + 20)
+    r.updated()
+    r.advisor.start("g", r.job("h1:2:9"), r.clock.t + 20)
+    r.updated()
+    first, second = (json.loads(line) for line in r.advice_log.read_text().splitlines())
+    assert (first["node"], first["state"], first["chosen"]) == ("h1:1:8", "done", ["bet", 90])
+    assert first["model"] == "claude-sonnet-5-5"
+    assert "Player A calls too much" in first["answer"]  # as Claude wrote it
+    assert (second["state"], second["reason"], second["answer"]) == ("failed", "rate limited", None)

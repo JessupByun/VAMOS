@@ -72,6 +72,7 @@ class Backend:
             self._advice_changed,
             self._cost_changed,
             clock=clock,
+            advice_log=data_dir / "advice.jsonl",
         )
         # data/settings.json: the dial, and the hero's own names (real name, nicknames) so
         # they are kept out of prompts like everyone else's.

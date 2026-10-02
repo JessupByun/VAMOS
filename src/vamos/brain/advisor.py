@@ -9,14 +9,21 @@ or 25 seconds after the turn began when the table has no clock. A call that miss
 fails or answers nonsense leaves the math on the card with the reason. A failure that may
 pass on its own (Claude overloaded, a dropped connection, an unreadable answer) is tried
 once more if enough time is left.
+
+Every call that answers or fails is appended to data/advice.jsonl, under pseudonyms: the
+hand as sent, Claude's raw answer and what the card showed, so the presets can later be
+compared on real spots (it cannot be rebuilt afterwards).
 """
 
+import hashlib
+import json
 import logging
 import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from vamos.brain.answer import Answer, BadAnswer, Choice, Spot, settle
@@ -56,6 +63,7 @@ class Call:
         self.state = "thinking"  # thinking, done, failed or cancelled
         self.answer: Answer | None = None
         self.reason: str | None = None
+        self.raw: str | None = None  # Claude's answer as sent, under pseudonyms
 
     @property
     def model(self) -> str:
@@ -89,9 +97,11 @@ class Advisor:
         on_cost: Callable[[], None] = lambda: None,  # a call was billed
         clock: Callable[[], float] = time.monotonic,
         now: Callable[[], datetime] = datetime.now,
+        advice_log: Path | None = None,
     ):
         self._provider = provider
         self._ledger = ledger
+        self._advice_log = advice_log
         self._on_update = on_update
         self._on_cost = on_cost
         self._clock = clock
@@ -220,6 +230,7 @@ class Advisor:
                 self._finish(game_id, call, reason="internal error")
                 return
             self._record(call, reply.usage)
+            call.raw = reply.text
             try:
                 answer = settle(reply.text, call.job.spot, call.job.node, call.job.reveal)
             except BadAnswer as error:
@@ -246,8 +257,38 @@ class Advisor:
             if answer is not None:
                 self._answered[game_id] = call
             current = self._calls.get(game_id) is call
+        self._log_advice(game_id, call)
         if current:
             self._on_update(game_id)
+
+    def _log_advice(self, game_id: str, call: Call) -> None:
+        if self._advice_log is None:
+            return
+        request = call.job.request
+        system = "\n".join(block["text"] for block in request.system)
+        answer = call.answer
+        entry = {
+            "at": self._now().isoformat(timespec="seconds"),
+            "game": game_id,
+            "node": call.job.node,
+            "kind": call.job.kind,
+            "model": call.model,
+            "state": call.state,
+            "reason": call.reason,
+            # Which profiles and guide the answer saw, without storing them again.
+            "prefix": hashlib.sha256(system.encode()).hexdigest()[:16],
+            "spot": request.messages[-1]["content"] if request.messages else None,
+            "answer": call.raw,
+            "mix": [[c.action, c.to, round(c.freq, 4)] for c in answer.mix] if answer else None,
+            "chosen": [answer.chosen.action, answer.chosen.to] if answer else None,
+        }
+        try:
+            with self._ledger_lock:
+                self._advice_log.parent.mkdir(parents=True, exist_ok=True)
+                with self._advice_log.open("a") as f:
+                    f.write(json.dumps(entry) + "\n")
+        except OSError:
+            log.exception("[VAMOS] could not log advice")
 
     def _record(self, call: Call, usage: dict[str, Any]) -> None:
         if not any(isinstance(v, int) and v for v in usage.values()):
