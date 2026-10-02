@@ -1,6 +1,18 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { expect, type Page, test } from "@playwright/test";
 
-import { EXTENSION_ID, GAME_ID, type Harness, launch, ORIGIN } from "./harness";
+import {
+  EXTENSION_ID,
+  GAME_ID,
+  type Harness,
+  HERO_ID,
+  KNOWN_ID,
+  launch,
+  ORIGIN,
+  STRANGER_ID,
+} from "./harness";
 
 const POLL_MS = 2000;
 const PANEL_URL = `chrome-extension://${EXTENSION_ID}/src/sidepanel/index.html`;
@@ -133,4 +145,45 @@ test("endpoints under a game URL are not treated as a table page", async () => {
   await page.waitForTimeout(1500);
   await expect(page.locator("#vamos-root")).toHaveCount(0);
   expect(harness.hostStarts()).toBe(0);
+});
+
+const badge = (page: Page, id: string) => page.locator(`#vamos-root .badge[data-player="${id}"]`);
+
+test("seat badges show profiles, ask about strangers, and never badge the hero", async () => {
+  const page = await openTable();
+  await expect(badge(page, KNOWN_ID)).toHaveText("alex · Calling station");
+  await expect(badge(page, STRANGER_ID).locator("select")).toBeVisible();
+  await expect(badge(page, HERO_ID)).toHaveCount(0);
+});
+
+test("answering who-is-this updates the badge and is remembered", async () => {
+  const page = await openTable();
+  await badge(page, STRANGER_ID).locator("select").selectOption({ label: "No profile" });
+  await expect(badge(page, STRANGER_ID)).toHaveText("new guy · no profile");
+  const answers = JSON.parse(readFileSync(join(harness.dataDir, "identity.json"), "utf8"));
+  expect(answers).toEqual({ [STRANGER_ID]: null });
+});
+
+test("tonight's VPIP appears once hands are played", async () => {
+  const page = await openTable();
+  await expect(badge(page, KNOWN_ID)).toHaveText("alex · Calling station");
+  const [hero, alex, guy] = [
+    `"TestHero @ ${HERO_ID}"`,
+    `"alex @ ${KNOWN_ID}"`,
+    `"new guy @ ${STRANGER_ID}"`,
+  ];
+  harness.addLogLines([
+    `-- starting hand #1 (id: e2eh1)  No Limit Texas Hold'em (dealer: ${hero}) --`,
+    `Player stacks: #1 ${hero} (1000) | #2 ${alex} (1000) | #3 ${guy} (1000)`,
+    `${alex} posts a small blind of 10`,
+    `${guy} posts a big blind of 20`,
+    `${hero} folds`,
+    `${alex} raises to 60`,
+    `${guy} folds`,
+    `Uncalled bet of 40 returned to ${alex}`,
+    `${alex} collected 40 from pot`,
+    "-- ending hand #1 --",
+  ]);
+  await expect(badge(page, KNOWN_ID)).toHaveText("alex · Calling station · VPIP 1/1 tonight");
+  await expect(badge(page, STRANGER_ID)).toContainText("new guy");
 });

@@ -1,7 +1,7 @@
 import { render } from "preact";
 import { useEffect, useState } from "preact/hooks";
 
-import type { BackendStatus, HostAck, PanelToWorker, WorkerToPanel } from "../shared/protocol";
+import type { BackendStatus, HostAck, PanelToWorker, Players, WorkerToPanel } from "../shared/protocol";
 import "./panel.css";
 
 const RECONNECT_MIN_MS = 1000;
@@ -10,6 +10,7 @@ const RECONNECT_MAX_MS = 10000;
 let port: chrome.runtime.Port | null = null;
 let status: BackendStatus = { type: "backend", state: "connecting" };
 let acks: HostAck[] = [];
+let players: Players | null = null;
 let retryDelay = RECONNECT_MIN_MS;
 const subscribers = new Set<() => void>();
 
@@ -27,6 +28,7 @@ function connect() {
   next.onMessage.addListener((message: WorkerToPanel) => {
     retryDelay = RECONNECT_MIN_MS;
     if (message.type === "backend") status = message;
+    else if (message.type === "players") players = message;
     else acks = [message, ...acks].slice(0, 20);
     notifyAll();
   });
@@ -52,11 +54,11 @@ function useWorkerState() {
       subscribers.delete(notify);
     };
   }, []);
-  return { status, acks };
+  return { status, acks, players };
 }
 
 function Panel() {
-  const { status, acks } = useWorkerState();
+  const { status, acks, players } = useWorkerState();
   const requestSnapshot = () =>
     port?.postMessage({ type: "snapshot_request" } satisfies PanelToWorker);
 
@@ -71,6 +73,27 @@ function Panel() {
           {status.detail ? ` · ${status.detail}` : ""}
         </p>
       </section>
+      {players && (
+        <section>
+          <h2>Profiles</h2>
+          <p>{players.profiles.length} loaded from profiles/</p>
+          {players.problems.length > 0 && (
+            <ul class="problems">
+              {players.problems.map((problem) => (
+                <li key={problem}>{problem}</li>
+              ))}
+            </ul>
+          )}
+          <h2>Table</h2>
+          <ul>
+            {players.players.map((p) => (
+              <li key={p.id}>
+                {p.name}: {p.profile ? `${p.profile.name} (${p.profile.tag ?? "no tag"})` : p.status === "none" ? "no profile" : "unknown, answer on the table"}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <section>
         <h2>Recording</h2>
         <button type="button" onClick={requestSnapshot}>

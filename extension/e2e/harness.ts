@@ -17,8 +17,18 @@ const REPO = resolve(import.meta.dirname, "../..");
 const DIST = join(REPO, "extension/dist");
 const PYTHON = join(REPO, ".venv/bin/python");
 
-const TABLE_HTML = `<div class="table"><div class="table-player table-player-1 you-player">
-  <div class="table-player-name"><a>TestHero</a></div></div></div>`;
+export const HERO_ID = "heroid0001";
+export const KNOWN_ID = "known00001";
+export const STRANGER_ID = "strange001";
+
+function seat(position: number, name: string, id: string, extra = "") {
+  return `<div class="table-player table-player-${position} ${extra}" style="position:absolute;left:${position * 160}px;top:300px;width:150px;height:60px">
+    <div class="table-player-infos-ctn"><div class="table-player-name"><span><a href="/players/${id}">${name}</a></span></div></div></div>`;
+}
+
+const TABLE_HTML = `<div class="table">${seat(1, "TestHero", HERO_ID, "you-player")}${seat(2, "alex", KNOWN_ID)}${seat(3, "new guy", STRANGER_ID)}</div>`;
+
+const PROFILE = `---\nname: alex\ntag: Calling station\nplayer_id: ${KNOWN_ID}\n---\n# alex\n`;
 
 // PokerNow's start-game page swaps to the table with replaceState, not a page load.
 const START_HTML = `<button id="create">Create game</button>
@@ -48,6 +58,9 @@ export interface Harness {
   context: BrowserContext;
   /** Append rows to the fake game log, as players act. */
   addLogRows: (count: number) => void;
+  /** Append real log lines (oldest first) to the fake game log. */
+  addLogLines: (lines: string[]) => void;
+  dataDir: string;
   logRows: () => LogRow[];
   /** Query strings of every /log request the extension made, in order. */
   logRequests: () => string[];
@@ -61,9 +74,15 @@ export async function launch(): Promise<Harness> {
   const root = mkdtempSync(join(tmpdir(), "vamos-e2e-"));
   const userDataDir = join(root, "profile");
   const dataDir = join(root, "data");
+  const profilesDir = join(root, "profiles");
+  mkdirSync(profilesDir);
+  writeFileSync(join(profilesDir, "alex.md"), PROFILE);
 
   const launcher = join(root, "vamos-host");
-  writeFileSync(launcher, `#!/bin/sh\nVAMOS_DATA_DIR="${dataDir}" exec "${PYTHON}" -m vamos host "$@"\n`);
+  writeFileSync(
+    launcher,
+    `#!/bin/sh\nVAMOS_DATA_DIR="${dataDir}" VAMOS_PROFILES_DIR="${profilesDir}" VAMOS_RECORD=1 exec "${PYTHON}" -m vamos host "$@"\n`,
+  );
   chmodSync(launcher, 0o755);
   const hostsDir = join(userDataDir, "NativeMessagingHosts");
   mkdirSync(hostsDir, { recursive: true });
@@ -81,12 +100,14 @@ export async function launch(): Promise<Harness> {
   // Newest first, like PokerNow; created_at is epoch ms x 100 plus a sequence number.
   const rows: LogRow[] = [];
   let nextId = 179093160000000n;
-  const addLogRows = (count: number) => {
-    for (let i = 0; i < count; i++) {
+  const addLogLines = (lines: string[]) => {
+    for (const msg of lines) {
       nextId += 100n;
-      rows.unshift({ at: new Date().toISOString(), created_at: nextId.toString(), msg: `row ${nextId}` });
+      rows.unshift({ at: new Date().toISOString(), created_at: nextId.toString(), msg });
     }
   };
+  const addLogRows = (count: number) =>
+    addLogLines(Array.from({ length: count }, (_, i) => `The game's ante was changed from 0 to ${i}.`));
   addLogRows(2);
   const requests: string[] = [];
 
@@ -128,6 +149,8 @@ export async function launch(): Promise<Harness> {
   return {
     context,
     addLogRows,
+    addLogLines,
+    dataDir,
     logRows: () => [...rows],
     logRequests: () => [...requests],
     hostLog,

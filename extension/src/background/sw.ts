@@ -43,6 +43,10 @@ function connectHost() {
       setStatus({ type: "backend", state: "ready", version: message.version });
     } else if (message.type === "error") {
       setStatus({ type: "backend", state: "down", detail: message.message });
+    } else if (message.type === "players") {
+      // Each content script keeps only its own game's players.
+      for (const content of contentPorts) content.postMessage(message satisfies WorkerToContent);
+      for (const panel of panelPorts) panel.postMessage(message satisfies WorkerToPanel);
     } else {
       for (const panel of panelPorts) panel.postMessage(message satisfies WorkerToPanel);
     }

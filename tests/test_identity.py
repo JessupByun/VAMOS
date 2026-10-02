@@ -45,13 +45,9 @@ def test_an_answer_pointing_at_a_deleted_profile_asks_again(tmp_path):
     assert identity.resolve("newDevice1", PROFILES) == Resolution("unknown")
 
 
-def test_observed_names_are_kept_without_answering(tmp_path):
+def test_only_answers_are_stored(tmp_path):
     path = tmp_path / "identity.json"
     identity = IdentityMap(path)
-    identity.observe("newDevice1", "rj")
-    identity.observe("newDevice1", "zzz")
-    identity.observe("newDevice1", "rj")
-
-    assert IdentityMap(path).names_seen("newDevice1") == ["rj", "zzz"]
-    assert identity.resolve("newDevice1", PROFILES) == Resolution("unknown")
-    assert json.loads(path.read_text()) == {"newDevice1": {"names": ["rj", "zzz"]}}
+    identity.assign("newDevice1", "rj")
+    identity.assign("stranger99", None)
+    assert json.loads(path.read_text()) == {"newDevice1": "rj", "stranger99": None}

@@ -7,7 +7,7 @@ import pytest
 from vamos.config import VERSION
 from vamos.host.framing import MAX_OUTGOING_BYTES, read_message, write_message
 from vamos.host.install import EXTENSION_ID, HOST_NAME, install
-from vamos.host.server import serve
+from vamos.host.server import Backend, serve
 
 
 def frame(message) -> bytes:
@@ -40,28 +40,92 @@ def test_write_message_refuses_oversized_messages():
         write_message(io.BytesIO(), {"blob": "x" * MAX_OUTGOING_BYTES})
 
 
-def test_serve_answers_hello_and_records_pages(tmp_path):
-    page = {"type": "log_page", "gameId": "g1", "fetchedAt": 1, "body": {"logs": [{}, {}]}}
-    snapshot = {"type": "dom_snapshot", "gameId": "g1", "capturedAt": 7, "html": "<html/>"}
-    stdin = io.BytesIO(frame({"type": "hello"}) + frame(page) + frame(snapshot))
+ALEX = "---\nname: alex\ntag: Calling station\nplayer_id: Qw3rTy7UiO\n---\nLoose-passive.\n"
+GAME = "pgl123"
+SEATS = {
+    "type": "seats",
+    "gameId": GAME,
+    "players": [{"id": "Qw3rTy7UiO", "name": "alex"}, {"id": "zzzzzzzzzz", "name": "new guy"}],
+}
+
+
+def page(*rows: tuple[int, str]) -> dict:
+    logs = [{"created_at": str(order), "msg": msg} for order, msg in reversed(rows)]
+    return {"type": "log_page", "gameId": GAME, "fetchedAt": 1, "body": {"logs": logs}}
+
+
+HAND = [
+    (100, '-- starting hand #1 (id: h1)  No Limit Texas Hold\'em (dealer: "alex @ Qw3rTy7UiO") --'),
+    (101, 'Player stacks: #1 "alex @ Qw3rTy7UiO" (1000) | #2 "new guy @ zzzzzzzzzz" (1000)'),
+    (102, '"alex @ Qw3rTy7UiO" posts a small blind of 10'),
+    (103, '"new guy @ zzzzzzzzzz" posts a big blind of 20'),
+    (104, '"alex @ Qw3rTy7UiO" calls 20'),
+    (105, '"new guy @ zzzzzzzzzz" checks'),
+]
+
+
+@pytest.fixture
+def backend(tmp_path):
+    profiles = tmp_path / "profiles"
+    profiles.mkdir()
+    (profiles / "alex.md").write_text(ALEX)
+    return Backend(tmp_path / "data", profiles)
+
+
+def test_hello_reports_ready(backend):
+    assert backend.handle({"type": "hello"}) == [{"type": "ready", "version": VERSION}]
+
+
+def test_seated_players_resolve_to_profiles_or_ask(backend):
+    [players] = backend.handle(SEATS)
+    alex, stranger = players["players"]
+    assert alex["status"] == "profile"
+    assert alex["profile"] == {"key": "alex", "name": "alex", "tag": "Calling station"}
+    assert (stranger["status"], stranger["profile"]) == ("unknown", None)
+    assert players["profiles"] == [{"key": "alex", "name": "alex"}]
+
+
+def test_answering_who_is_this_updates_badges_and_persists(backend, tmp_path):
+    backend.handle(SEATS)
+    [players] = backend.handle(
+        {"type": "assign_identity", "playerId": "zzzzzzzzzz", "profile": "alex"}
+    )
+    assert players["players"][1]["profile"]["key"] == "alex"
+    assert json.loads((tmp_path / "data/identity.json").read_text()) == {"zzzzzzzzzz": "alex"}
+
+
+def test_log_pages_update_tonight_counts_without_saving_anything(backend, tmp_path):
+    backend.handle(SEATS)
+    [players] = backend.handle(page(*HAND))
+    tonight = {p["id"]: p["tonight"] for p in players["players"]}
+    assert tonight == {"Qw3rTy7UiO": {"hands": 1, "vpip": 1}, "zzzzzzzzzz": {"hands": 1, "vpip": 0}}
+    # The same page again brings nothing new, so no badge update is sent.
+    assert backend.handle(page(*HAND)) == []
+    assert not (tmp_path / "data/recordings").exists()
+
+
+def test_recording_is_opt_in(tmp_path):
+    backend = Backend(tmp_path / "data", tmp_path, record=True)
+    backend.handle(page(*HAND))
+    [ack] = backend.handle(
+        {"type": "dom_snapshot", "gameId": GAME, "capturedAt": 7, "html": "<html/>"}
+    )
+    assert ack == {"type": "ack", "what": "dom_snapshot", "detail": "dom_7.html"}
+    assert (tmp_path / f"data/recordings/{GAME}/log_pages.jsonl").exists()
+
+
+def test_profiles_reload_when_files_change(backend, tmp_path):
+    backend.handle(SEATS)
+    (tmp_path / "profiles/newguy.md").write_text("---\ntag: Nit\nplayer_id: zzzzzzzzzz\n---\n")
+    [players] = backend.handle(SEATS)
+    assert players["players"][1]["profile"]["tag"] == "Nit"
+
+
+def test_serve_survives_a_bad_message(backend):
+    stdin = io.BytesIO(frame({"type": "seats"}) + frame({"type": "hello"}))
     stdout = io.BytesIO()
-
-    serve(stdin, stdout, tmp_path)
-
-    assert read_all(stdout) == [
-        {"type": "ready", "version": VERSION},
-        {"type": "ack", "what": "log_page", "detail": "2 rows"},
-        {"type": "ack", "what": "dom_snapshot", "detail": "dom_7.html"},
-    ]
-    recorded = (tmp_path / "recordings/g1/log_pages.jsonl").read_text().splitlines()
-    assert json.loads(recorded[0]) == page
-    assert (tmp_path / "recordings/g1/dom_7.html").read_text() == "<html/>"
-
-
-def test_serve_ignores_unknown_messages(tmp_path):
-    stdout = io.BytesIO()
-    serve(io.BytesIO(frame({"type": "nope"}) + frame("not a dict")), stdout, tmp_path)
-    assert read_all(stdout) == []
+    serve(stdin, stdout, backend)
+    assert read_all(stdout) == [{"type": "ready", "version": VERSION}]
 
 
 def test_install_writes_launcher_and_manifest(tmp_path):

@@ -26,6 +26,41 @@ export interface DomSnapshot {
   html: string;
 }
 
+export interface SeatedPlayer {
+  id: string;
+  name: string;
+}
+
+/** The opponents currently seated at the table (the hero is never reported). */
+export interface SeatsReport {
+  type: "seats";
+  gameId: string;
+  players: SeatedPlayer[];
+}
+
+/** The user's answer to "who is this?": a profile key, or null for "no profile". */
+export interface AssignIdentity {
+  type: "assign_identity";
+  playerId: string;
+  profile: string | null;
+}
+
+export interface PlayerInfo {
+  id: string;
+  name: string;
+  status: "profile" | "none" | "unknown";
+  profile: { key: string; name: string; tag: string | null } | null;
+  tonight: { hands: number; vpip: number } | null;
+}
+
+export interface Players {
+  type: "players";
+  gameId: string;
+  players: PlayerInfo[];
+  profiles: { key: string; name: string }[];
+  problems: string[];
+}
+
 export interface SnapshotRequest {
   type: "snapshot_request";
 }
@@ -36,8 +71,12 @@ export interface HostAck {
   detail: string;
 }
 
-export type ContentToWorker = LogPage | DomSnapshot;
-export type WorkerToContent = BackendStatus | SnapshotRequest;
+export type ContentToWorker = LogPage | DomSnapshot | SeatsReport | AssignIdentity;
+export type WorkerToContent = BackendStatus | SnapshotRequest | Players;
 export type PanelToWorker = SnapshotRequest;
-export type WorkerToPanel = BackendStatus | HostAck;
-export type HostToWorker = { type: "ready"; version: string } | HostAck | { type: "error"; message: string };
+export type WorkerToPanel = BackendStatus | HostAck | Players;
+export type HostToWorker =
+  | { type: "ready"; version: string }
+  | HostAck
+  | Players
+  | { type: "error"; message: string };
