@@ -26,6 +26,7 @@ to check it against: approximate.
 """
 
 from dataclasses import dataclass, field
+from functools import cache
 
 import numpy as np
 
@@ -125,33 +126,30 @@ class Realization:
             self._cache[key] = heads_up_share(self.equity, self.w * key[1], self.w * key[2], key[3])
         return self._cache[key]
 
-    def multiway(self, terminal: Terminal, player: int, opponents: list[int]) -> np.ndarray:
-        factors = tuple(self._factor(terminal, s) for s in (player, *opponents))
-        key = ("mw", factors, self.spr(terminal))
-        if key not in self._cache:
-            self._cache[key] = self._multiway(len(opponents) + 1, factors, key[2])
-        return self._cache[key]
+    @property
+    def weights(self) -> np.ndarray:
+        return self.w
 
-    def _multiway(self, players: int, factors: tuple[float, ...], spr: float) -> np.ndarray:
-        tables = multiway.load()
-        labels = tables.labels[players]
-        share = tables.share[players]  # (169, b, ..., seat) mean all-in shares
-        counts = matchups.COMBO_COUNTS
-        # An opponent bucket's weight is the combo-weighted mean of its classes' weights.
-        bucket_w = np.array(
-            [
-                (counts[labels == b] * self.w[labels == b]).sum() / counts[labels == b].sum()
-                for b in range(labels.max() + 1)
-            ]
-        )
-        seat_w = [self.w * factors[0]]
-        for seat in range(1, players):
-            seat_w.append(bucket_w * factors[seat])
-        weighted = share.copy()
-        for seat, w in enumerate(seat_w):
-            shape = [1] * (players + 1)
-            shape[seat] = -1
-            weighted[..., seat] *= w.reshape(shape[:-1])
-        realized = weighted[..., 0] / weighted.sum(axis=-1)
-        raw = share[..., 0]
-        return raw + blend(spr) * (realized - raw)
+    def multiway(
+        self, terminal: Terminal, player: int, opponents: list[int], bucket_weights: list
+    ) -> np.ndarray:
+        # share = e0 w0 / (e0 w0 + sum e_k w_k) = 1 / (1 + sum (e_k / e0) (w_k / w0)), with
+        # the equity ratios computed once per player count.
+        players = len(opponents) + 1
+        factors = [self._factor(terminal, s) for s in (player, *opponents)]
+        mine = self.w * factors[0]
+        others = 1.0
+        for k, (ratio, w) in enumerate(zip(_equity_ratios(players), bucket_weights, strict=True)):
+            shape = [len(mine)] + [1] * (players - 1)
+            shape[1 + k] = -1
+            others = others + ratio * (w * factors[1 + k] / mine[:, None]).reshape(shape)
+        raw = multiway.load().share[players][..., 0]
+        return raw + blend(self.spr(terminal)) * (1 / others - raw)
+
+
+@cache
+def _equity_ratios(players: int) -> list[np.ndarray]:
+    """Each opponent seat's all-in share over ours, per cell (infinite where ours is 0)."""
+    share = multiway.load().share[players]
+    with np.errstate(divide="ignore"):
+        return [share[..., k] / share[..., 0] for k in range(1, players)]

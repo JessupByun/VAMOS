@@ -59,7 +59,8 @@ def test_last_to_act_after_the_flop_is_in_position():
 def test_multiway_without_hand_features_or_position_is_raw_equity():
     model = Realization(50, theta=np.zeros(5), out_of_position=1.0)
     terminal = Terminal((3.0, 3.0, 3.0), (0, 1, 2), "flop")
-    assert np.allclose(model.multiway(terminal, 0, [1, 2]), multiway.load().share[3][..., 0])
+    flat = [np.ones((169, 40))] * 2
+    assert np.allclose(model.multiway(terminal, 0, [1, 2], flat), multiway.load().share[3][..., 0])
 
 
 def test_the_big_blind_defends_less_than_at_raw_equity():

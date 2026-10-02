@@ -105,3 +105,15 @@
 .action-card .syncing {
   color: #e8c46a;
 }
+
+.action-card .action {
+  margin: 2px 0 4px;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.action-card .mix,
+.action-card .note {
+  color: #9aa1ab;
+}

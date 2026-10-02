@@ -29,8 +29,15 @@ class FlopModel(Protocol):
         """(169, 169) share of the pot for `player`'s class against `rival`'s class."""
         ...
 
-    def multiway(self, terminal: Terminal, player: int, opponents: list[int]) -> np.ndarray:
-        """(169, b, ...) share of the pot for `player` against opponents' buckets."""
+    weights: np.ndarray  # (169,) each class's weight in the flop model
+
+    def multiway(
+        self, terminal: Terminal, player: int, opponents: list[int], bucket_weights: list
+    ) -> np.ndarray:
+        """
+        (169, b, ...) share of the pot for `player` against opponents' buckets, given each
+        opponent's average weight in each bucket for each class of ours: (169, b) apiece.
+        """
         ...
 
 
@@ -47,10 +54,8 @@ class ChipPayoffs:
         self.showdown = m.given * m.equity  # P(j | i) times i's equity against j
         self.joint = joint
         self.flop = flop
-        # Share table times link, stacked with the link: (2, 169, b, ...). Showdown tables
-        # are keyed by player count, flop tables by identity (flop models cache them, so
-        # the same spot returns the same array).
-        self._stacked: dict[tuple, tuple[np.ndarray, np.ndarray]] = {}
+        # Showdown share table times link, stacked with the link: (2, 169, b, ...).
+        self._stacked: dict[int, np.ndarray] = {}
 
     def reach(self, reach: np.ndarray) -> np.ndarray:
         """How likely an opponent with this reach is still in, for each class of ours."""
@@ -113,17 +118,24 @@ class ChipPayoffs:
         onehot = np.eye(labels.max() + 1)[labels]  # (169, buckets)
         # For each class of ours, how likely each opponent holds a hand from each bucket.
         weights = [self.given @ (reach[q][:, None] * onehot) for q in opponents]
+        link = joint.link[players]
         if terminal is None or terminal.kind == "showdown" or self.flop is None:
-            key, share = ("showdown", players), None
+            if players not in self._stacked:
+                self._stacked[players] = np.stack([link * joint.share[players][..., 0], link])
+            table = self._stacked[players]  # (2, 169, b, ...)
         else:
-            share = self.flop.multiway(terminal, player, opponents)
-            key = ("flop", id(share))
-        if key not in self._stacked:
-            link = joint.link[players]
-            values = joint.share[players][..., 0] if share is None else share
-            # The share array is kept alongside so its identity cannot be reused.
-            self._stacked[key] = (share, np.stack([link * values, link]))
-        table = self._stacked[key][1]  # (2, 169, b, ...)
+            # Each opponent's bucket counts with the average weight of the hands that
+            # opponent actually holds there: the hands that reach multiway flops (pairs,
+            # suited hands) outweigh the bucket as dealt, and averaging over the bucket as
+            # dealt made every seat overrate its share (+0.11bb a hand four-handed).
+            heavy = [
+                self.given @ ((reach[q] * self.flop.weights)[:, None] * onehot) for q in opponents
+            ]
+            bucket_weights = [
+                h / np.maximum(w, 1e-300) for h, w in zip(heavy, weights, strict=True)
+            ]
+            share = self.flop.multiway(terminal, player, opponents, bucket_weights)
+            table = np.stack([link * share, link])
         # Contract one opponent axis at a time, last first, as batched matrix products.
         for w in reversed(weights):
             rest = table.shape[2:-1]

@@ -18,6 +18,26 @@ function Pill({ store }: { store: Store }) {
   );
 }
 
+function AdviceLines({ facts }: { facts: SpotFacts }) {
+  const advice = facts.advice;
+  if (advice === null) return <div class="source instant">INSTANT · math only</div>;
+  if (advice.action === null) {
+    return (
+      <>
+        <div class="source instant">INSTANT · math only</div>
+        <div class="line note">no preflop baseline for this spot</div>
+      </>
+    );
+  }
+  return (
+    <>
+      <div class="source instant">{advice.source} · approximate</div>
+      <div class="action">{advice.action}</div>
+      {advice.mix && <div class="line mix">{advice.mix.join(" · ")}</div>}
+    </>
+  );
+}
+
 function FactLines({ facts }: { facts: SpotFacts }) {
   const where = [facts.position, facts.pot && `pot ${facts.pot}`].filter(Boolean).join(" · ");
   const need = facts.need === null ? "" : ` · need ${facts.need}%`;
@@ -42,8 +62,17 @@ function ActionCard({ store }: { store: Store }) {
   const current = facts?.key === turn ? facts.facts : null;
   return (
     <div class="action-card">
-      <div class="source instant">INSTANT · math only</div>
-      {current ? <FactLines facts={current} /> : <div class="line syncing">syncing with the log...</div>}
+      {current ? (
+        <>
+          <AdviceLines facts={current} />
+          <FactLines facts={current} />
+        </>
+      ) : (
+        <>
+          <div class="source instant">INSTANT · math only</div>
+          <div class="line syncing">syncing with the log...</div>
+        </>
+      )}
     </div>
   );
 }

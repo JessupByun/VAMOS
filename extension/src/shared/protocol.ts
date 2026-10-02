@@ -106,6 +106,16 @@ export interface SpotFacts {
   /** Who the equity is against, e.g. "a random hand". */
   equityVs: string;
   madeHand: string;
+  /** Preflop only: the baseline's action, or action null where no table covers the spot. */
+  advice: PreflopAdvice | null;
+}
+
+export interface PreflopAdvice {
+  source: string;
+  /** e.g. "RAISE TO 0.60 (3bb)", sampled from the mix. */
+  action: string | null;
+  /** e.g. ["raise 3bb 60%", "call 40%"]; null when one action is 90% or more. */
+  mix: string[] | null;
 }
 
 /** Facts for the hero's turn, or null while the log has not caught up with the table. */

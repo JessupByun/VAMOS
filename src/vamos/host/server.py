@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, BinaryIO
 
 from vamos.config import DATA_DIR, PROFILES_DIR, VERSION
+from vamos.engine.advice import preflop_advice
 from vamos.engine.facts import TableView, current_spot, facts
 from vamos.host.framing import read_message, write_message
 from vamos.identity import IdentityMap, Resolution
@@ -101,12 +102,16 @@ class Backend:
     def _spot_facts(self, game_id: str) -> Message:
         turn = self.turns[game_id]
         view = _table_view(turn["table"])
-        spot = current_spot(self._session(game_id).log, view) if view else None
+        log = self._session(game_id).log
+        spot = current_spot(log, view) if view else None
         payload = None
-        if spot is not None:
+        if spot is not None and view is not None:
             cached = self._facts.get(game_id)
             if cached is None or cached[0] != spot.node:
-                cached = (spot.node, facts(spot))
+                hero = log.current_id(view.hero_id)
+                found = facts(spot)
+                found["advice"] = preflop_advice(log.hands[-1], spot, hero)
+                cached = (spot.node, found)
                 self._facts[game_id] = cached
             payload = cached[1]
         return {"type": "facts", "gameId": game_id, "key": turn["key"], "facts": payload}
