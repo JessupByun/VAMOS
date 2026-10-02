@@ -16,7 +16,8 @@
     "skipLibCheck": true,
     "types": [
       "chrome",
-      "vite/client"
+      "vite/client",
+      "node"
     ],
     "allowImportingTsExtensions": true,
     "noEmit": true
@@ -24,7 +25,10 @@
   "include": [
     "src",
     "test",
+    "e2e",
     "vite.config.ts",
+    "vitest.config.ts",
+    "playwright.config.ts",
     "manifest.config.ts"
   ]
 }

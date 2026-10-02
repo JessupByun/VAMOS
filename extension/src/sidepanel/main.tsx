@@ -4,18 +4,42 @@ import { useEffect, useState } from "preact/hooks";
 import type { BackendStatus, HostAck, PanelToWorker, WorkerToPanel } from "../shared/protocol";
 import "./panel.css";
 
-// The worker replies the moment the port connects, so the listener must be attached here,
-// synchronously, not later in a component effect, or the first status is dropped.
-const port = chrome.runtime.connect({ name: "panel" });
+const RECONNECT_MIN_MS = 1000;
+const RECONNECT_MAX_MS = 10000;
+
+let port: chrome.runtime.Port | null = null;
 let status: BackendStatus = { type: "backend", state: "connecting" };
 let acks: HostAck[] = [];
+let retryDelay = RECONNECT_MIN_MS;
 const subscribers = new Set<() => void>();
 
-port.onMessage.addListener((message: WorkerToPanel) => {
-  if (message.type === "backend") status = message;
-  else acks = [message, ...acks].slice(0, 20);
+const notifyAll = () => {
   for (const notify of subscribers) notify();
-});
+};
+
+// The worker replies the moment the port connects, so the listener is attached here,
+// synchronously, not later in a component effect, or the first status is dropped. The
+// worker is stopped after 30s idle when no backend runs, which closes this port; the
+// panel reconnects so it never freezes on a stale state.
+function connect() {
+  const next = chrome.runtime.connect({ name: "panel" });
+  port = next;
+  next.onMessage.addListener((message: WorkerToPanel) => {
+    retryDelay = RECONNECT_MIN_MS;
+    if (message.type === "backend") status = message;
+    else acks = [message, ...acks].slice(0, 20);
+    notifyAll();
+  });
+  next.onDisconnect.addListener(() => {
+    if (port === next) port = null;
+    status = { type: "backend", state: "connecting" };
+    notifyAll();
+    setTimeout(connect, retryDelay);
+    retryDelay = Math.min(retryDelay * 2, RECONNECT_MAX_MS);
+  });
+}
+
+connect();
 
 function useWorkerState() {
   const [, setVersion] = useState(0);
@@ -33,7 +57,8 @@ function useWorkerState() {
 
 function Panel() {
   const { status, acks } = useWorkerState();
-  const requestSnapshot = () => port.postMessage({ type: "snapshot_request" } satisfies PanelToWorker);
+  const requestSnapshot = () =>
+    port?.postMessage({ type: "snapshot_request" } satisfies PanelToWorker);
 
   return (
     <main>
