@@ -95,3 +95,6 @@ def test_the_spot_message_describes_the_hand_without_names():
         "hands": 30,
         "vpip": 21,
     }
+    by_name = {p["name"]: p for p in spot["players"]}
+    assert (by_name["Hero"]["behind_bb"], by_name["Player A"]["behind_bb"]) == (47.0, 53.0)
+    assert [name for name, p in by_name.items() if p.get("folded")] == ["Player B"]

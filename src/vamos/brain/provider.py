@@ -1,8 +1,9 @@
 """
 Claude calls for postflop advice.
 
-A call streams, so a decision that has already passed stops reading its answer at the next
-event (exiting the stream closes the connection; only tokens produced are billed). Failures
+A call streams, so a decision that has already passed can stop it: the stream is closed
+from a watcher thread, since thinking streams no events while it runs (its text is omitted
+by default), and only tokens produced up to then are billed. Failures
 come back as `CallFailed` with a short reason for the card. The SDK's own retries are off:
 the advisor owns the deadline and decides whether there is time to try again.
 
@@ -10,6 +11,7 @@ The API key comes from ANTHROPIC_API_KEY in the environment or in the repo's .en
 (gitignored); it is never logged.
 """
 
+import contextlib
 import os
 import threading
 from dataclasses import dataclass, field
@@ -134,34 +136,35 @@ class AnthropicProvider:
         return self._client
 
     def run(self, request: Request, cancelled: threading.Event) -> Reply:
-        import anthropic
-
         client = self._client_or_fail()
         usage: dict[str, Any] = {}
         try:
             with client.messages.stream(**params(request)) as stream:
-                for event in stream:
-                    if event.type == "message_start":
-                        usage = _usage_dict(event.message.usage)
-                    elif event.type == "message_delta" and event.usage is not None:
-                        usage["output_tokens"] = event.usage.output_tokens or 0
+                finished = threading.Event()
+                watcher = threading.Thread(
+                    target=_close_when, args=(cancelled, finished, stream), daemon=True
+                )
+                watcher.start()
+                try:
+                    for event in stream:
+                        if event.type == "message_start":
+                            usage = _usage_dict(event.message.usage)
+                        elif event.type == "message_delta" and event.usage is not None:
+                            usage["output_tokens"] = event.usage.output_tokens or 0
+                        if cancelled.is_set():
+                            break
                     if cancelled.is_set():
-                        raise CallFailed("stopped: the decision passed", usage)
-                final = stream.get_final_message()
-        except anthropic.AuthenticationError as error:
-            raise CallFailed("API key rejected") from error
-        except anthropic.PermissionDeniedError as error:
-            raise CallFailed("API key not allowed to use this model") from error
-        except anthropic.RateLimitError as error:
-            raise CallFailed("rate limited") from error
-        except anthropic.BadRequestError as error:
-            raise CallFailed("request rejected") from error
-        except anthropic.APITimeoutError as error:
-            raise CallFailed("timed out", usage) from error
-        except anthropic.APIConnectionError as error:
-            raise CallFailed("no connection to Claude") from error
-        except anthropic.APIStatusError as error:
-            raise CallFailed(f"Claude unavailable ({error.status_code})") from error
+                        raise CallFailed(STOPPED, usage)
+                    final = stream.get_final_message()
+                finally:
+                    finished.set()
+        except CallFailed:
+            raise
+        except Exception as error:
+            if cancelled.is_set():
+                # Closing the stream mid-read surfaces as whatever the transport raises.
+                raise CallFailed(STOPPED, usage) from error
+            raise _failure(error, usage) from error
         usage = _usage_dict(final.usage)
         if final.stop_reason == "refusal":
             raise CallFailed("Claude declined", usage)
@@ -169,6 +172,37 @@ class AnthropicProvider:
             raise CallFailed("answer cut off", usage)
         text = "".join(block.text for block in final.content if block.type == "text")
         return Reply(text, final.stop_reason, usage)
+
+
+STOPPED = "stopped: the decision passed"
+
+
+def _close_when(cancelled: threading.Event, finished: threading.Event, stream: Any) -> None:
+    while not finished.is_set():
+        if cancelled.wait(0.1):
+            with contextlib.suppress(Exception):  # already closing or closed
+                stream.close()
+            return
+
+
+def _failure(error: Exception, usage: dict[str, Any]) -> CallFailed:
+    import anthropic
+
+    if isinstance(error, anthropic.AuthenticationError):
+        return CallFailed("API key rejected")
+    if isinstance(error, anthropic.PermissionDeniedError):
+        return CallFailed("API key not allowed to use this model")
+    if isinstance(error, anthropic.RateLimitError):
+        return CallFailed("rate limited")
+    if isinstance(error, anthropic.BadRequestError):
+        return CallFailed("request rejected")
+    if isinstance(error, anthropic.APITimeoutError):
+        return CallFailed("timed out", usage)
+    if isinstance(error, anthropic.APIConnectionError):
+        return CallFailed("no connection to Claude")
+    if isinstance(error, anthropic.APIStatusError):
+        return CallFailed(f"Claude unavailable ({error.status_code})")
+    return CallFailed(f"unexpected error ({type(error).__name__})", usage)
 
 
 class FakeProvider:

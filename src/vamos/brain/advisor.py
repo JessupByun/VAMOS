@@ -1,0 +1,244 @@
+"""
+Claude's postflop advice: at most one call per decision and preset, run in the background.
+
+Every call is stamped with the decision node it answers, and what it returns is shown only
+while that node is current. When the hero acts or the hand moves on, the call is cancelled
+(its stream is closed, so only tokens produced are billed) and its answer is dropped. A call
+has a deadline from the table's clock, about five seconds before the hero's time runs out,
+or 25 seconds after the turn began when the table has no clock. A call that misses it,
+fails or answers nonsense leaves the math on the card with the reason. A failure that may
+pass on its own (Claude overloaded, a dropped connection, an unreadable answer) is tried
+once more if enough time is left.
+"""
+
+import logging
+import threading
+import time
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any
+
+from vamos.brain.answer import Answer, BadAnswer, Choice, Spot, settle
+from vamos.brain.costs import Ledger, price
+from vamos.brain.provider import CallFailed, Provider, Request
+from vamos.engine.advice import MIX_SHOWN_BELOW
+from vamos.engine.facts import format_bb, format_chips
+
+log = logging.getLogger("vamos.brain")
+
+DEFAULT_SECONDS = 25.0  # the deadline when the table has no clock
+SPARE_SECONDS = 5.0  # left on the clock for the hero to act after the deadline
+MIN_SECONDS = 3.0  # with less time than this, no call is started
+RETRY_SECONDS = 6.0  # the least time left for a second try
+RETRYABLE = ("Claude unavailable", "no connection to Claude", "unreadable answer")
+MODEL_NAMES = {
+    "claude-haiku-4-5": "Haiku",
+    "claude-sonnet-5-5": "Sonnet",
+    "claude-opus-5-5": "Opus",
+}
+
+
+@dataclass(frozen=True)
+class Job:
+    node: str
+    request: Request
+    spot: Spot
+    reveal: Callable[[str], str] = field(default=lambda text: text)
+    kind: str = "advice"  # the cost ledger's label: advice, deep, ...
+
+
+class Call:
+    def __init__(self, job: Job, deadline: float):
+        self.job = job
+        self.deadline = deadline
+        self.cancelled = threading.Event()
+        self.state = "thinking"  # thinking, done, failed or cancelled
+        self.answer: Answer | None = None
+        self.reason: str | None = None
+
+    @property
+    def model(self) -> str:
+        return self.job.request.preset.model
+
+
+def describe(choice: Choice, spot: Spot) -> str:
+    """The action as the card shows it, e.g. "BET 1.20 (6bb)"."""
+    bb = spot.big_blind
+    if choice.action in ("fold", "check"):
+        return choice.action.upper()
+    if choice.action == "call":
+        amount = min(spot.to_call, spot.behind)
+        return f"CALL {format_chips(amount, bb)} ({format_bb(amount, bb)})"
+    verb = {"bet": "BET", "raise": "RAISE TO", "allin": "ALL IN"}[choice.action]
+    return f"{verb} {format_chips(choice.to, bb)} ({format_bb(choice.to, bb)})"
+
+
+def _short(choice: Choice, spot: Spot) -> str:
+    if choice.action in ("bet", "raise"):
+        return f"{choice.action} {format_bb(choice.to, spot.big_blind)}"
+    return "all in" if choice.action == "allin" else choice.action
+
+
+class Advisor:
+    def __init__(
+        self,
+        provider: Provider,
+        ledger: Ledger,
+        on_update: Callable[[str], None],  # a game's advice changed
+        on_cost: Callable[[], None] = lambda: None,  # a call was billed
+        clock: Callable[[], float] = time.monotonic,
+        now: Callable[[], datetime] = datetime.now,
+    ):
+        self._provider = provider
+        self._ledger = ledger
+        self._on_update = on_update
+        self._on_cost = on_cost
+        self._clock = clock
+        self._now = now
+        self._lock = threading.Lock()
+        self._ledger_lock = threading.Lock()
+        self._calls: dict[str, Call] = {}  # per game, the latest call
+        # Per game, the latest call that answered: an earlier answer for the same node stays
+        # on the card while a deeper model is asked.
+        self._answered: dict[str, Call] = {}
+
+    def start(self, game_id: str, job: Job, deadline: float) -> bool:
+        """Ask about `job` unless this node was already asked with this preset."""
+        with self._lock:
+            current = self._calls.get(game_id)
+            if current is not None and current.job.node == job.node:
+                if current.job.request.preset == job.request.preset:
+                    return False
+            else:
+                self._answered.pop(game_id, None)
+            if current is not None:
+                self._cancel(current)
+            call = Call(job, deadline)
+            self._calls[game_id] = call
+            if deadline - self._clock() < MIN_SECONDS:
+                call.state, call.reason = "failed", "not enough time on the clock"
+                return True
+        threading.Thread(target=self._run, args=(game_id, call), daemon=True).start()
+        threading.Thread(target=self._watch, args=(game_id, call), daemon=True).start()
+        return True
+
+    def set_deadline(self, game_id: str, node: str, deadline: float) -> None:
+        """The table's clock was read after the call started."""
+        with self._lock:
+            call = self._calls.get(game_id)
+            if call is not None and call.job.node == node:
+                call.deadline = deadline
+
+    def stop(self, game_id: str) -> None:
+        """The decision passed: drop whatever is running or shown for this game."""
+        with self._lock:
+            call = self._calls.pop(game_id, None)
+            self._answered.pop(game_id, None)
+            if call is not None:
+                self._cancel(call)
+
+    def view(self, game_id: str, node: str) -> dict[str, Any] | None:
+        """The card's advice for `node`, or None when Claude was not asked about it."""
+        with self._lock:
+            call = self._calls.get(game_id)
+            if call is None or call.job.node != node:
+                return None
+            shown = self._answered.get(game_id)
+            state, reason, asked = call.state, call.reason, call.model
+        out: dict[str, Any] = {
+            "source": "Claude",
+            "action": None,
+            "mix": None,
+            "note": None,
+            "model": MODEL_NAMES.get(asked, asked),  # who answered, once someone has
+            "asked": MODEL_NAMES.get(asked, asked),  # the latest call's model
+            "state": state,
+            "reason": reason,
+        }
+        if shown is not None and shown.answer is not None:
+            spot, answer = shown.job.spot, shown.answer
+            out["model"] = MODEL_NAMES.get(shown.model, shown.model)
+            out["action"] = describe(answer.chosen, spot)
+            if answer.mix[0].freq < MIX_SHOWN_BELOW:
+                out["mix"] = [f"{_short(c, spot)} {round(100 * c.freq)}%" for c in answer.mix]
+            out["note"] = answer.note
+        elif state == "failed":
+            out["source"] = "Math"
+        return out
+
+    def _cancel(self, call: Call) -> None:
+        if call.state == "thinking":
+            call.state = "cancelled"
+        call.cancelled.set()
+
+    def _watch(self, game_id: str, call: Call) -> None:
+        while True:
+            with self._lock:
+                if call.state != "thinking":
+                    return
+                left = call.deadline - self._clock()
+            if left <= 0:
+                self._finish(game_id, call, reason="timed out")
+                call.cancelled.set()
+                return
+            call.cancelled.wait(min(left, 0.25))
+
+    def _again(self, call: Call, attempt: int, reason: str) -> bool:
+        return (
+            attempt == 1
+            and not call.cancelled.is_set()
+            and reason.startswith(RETRYABLE)
+            and call.deadline - self._clock() >= RETRY_SECONDS
+        )
+
+    def _run(self, game_id: str, call: Call) -> None:
+        for attempt in (1, 2):
+            try:
+                reply = self._provider.run(call.job.request, call.cancelled)
+            except CallFailed as failure:
+                self._record(call, failure.usage)
+                if self._again(call, attempt, failure.reason):
+                    continue
+                self._finish(game_id, call, reason=failure.reason)
+                return
+            except Exception:
+                log.exception("[VAMOS] Claude call crashed")
+                self._finish(game_id, call, reason="internal error")
+                return
+            self._record(call, reply.usage)
+            try:
+                answer = settle(reply.text, call.job.spot, call.job.node, call.job.reveal)
+            except BadAnswer as error:
+                log.warning("[VAMOS] unusable answer: %s", error)
+                if self._again(call, attempt, "unreadable answer"):
+                    continue
+                self._finish(game_id, call, reason="unreadable answer")
+                return
+            self._finish(game_id, call, answer=answer)
+            return
+
+    def _finish(
+        self, game_id: str, call: Call, answer: Answer | None = None, reason: str | None = None
+    ) -> None:
+        with self._lock:
+            if call.state != "thinking":
+                return  # timed out, cancelled or replaced meanwhile
+            call.state = "done" if answer is not None else "failed"
+            call.answer, call.reason = answer, reason
+            if answer is not None:
+                self._answered[game_id] = call
+            current = self._calls.get(game_id) is call
+        if current:
+            self._on_update(game_id)
+
+    def _record(self, call: Call, usage: dict[str, Any]) -> None:
+        if not any(isinstance(v, int) and v for v in usage.values()):
+            return
+        try:
+            with self._ledger_lock:
+                self._ledger.record(price(call.model, usage, call.job.kind, self._now()))
+        except Exception:
+            log.exception("[VAMOS] could not record a call's cost")
+            return
+        self._on_cost()

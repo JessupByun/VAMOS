@@ -83,7 +83,7 @@ def _bb(cents: int, big_blind: int) -> float:
 def spot_message(
     hand: Hand,
     hero: str,
-    names: dict[str, str],  # PokerNow ID -> pseudonym, every player dealt in
+    names: dict[str, str],  # PokerNow ID -> pseudonym ("Hero" for the hero)
     positions: dict[str, str],
     facts: dict,
     legal: list[str],
@@ -93,11 +93,18 @@ def spot_message(
     """The hand so far from Hero's seat, as JSON inside a short user message."""
     bb = hand.big_blind or 1
     stacks = {s.player.id: s.stack for s in hand.seats}
+    folded = hand.folded()
+
+    def name(pid: str) -> str:
+        return names.get(pid, "another player")
+
     players = [
         {
-            "name": names[pid],
+            "name": name(pid),
             "position": positions.get(pid),
             "stack_bb": _bb(stacks[pid], bb),
+            "behind_bb": _bb(stacks[pid] - hand.put_in.get(pid, 0), bb),
+            **({"folded": True} if pid in folded else {}),
             **({"tonight": tonight[pid]} if tonight and pid in tonight else {}),
         }
         for pid in sorted(stacks, key=lambda p: list(positions).index(p) if p in positions else 99)
@@ -105,7 +112,7 @@ def spot_message(
     actions = [
         {
             "street": Street(a.street).name.lower(),
-            "player": names[a.player],
+            "player": name(a.player),
             "action": a.kind,
             **(
                 {"to_bb": _bb(a.to, bb)}

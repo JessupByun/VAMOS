@@ -56,6 +56,9 @@ class FakeStream:
     def __exit__(self, *exc):
         self.closed = True
 
+    def close(self):
+        self.closed = True
+
     def __iter__(self):
         return iter(self.events)
 
@@ -124,3 +127,32 @@ def test_sdk_errors_become_plain_reasons():
 
     with pytest.raises(CallFailed, match="rate limited"):
         AnthropicProvider(NS(messages=NS(stream=stream))).run(request(), threading.Event())
+
+
+class QuietStream(FakeStream):
+    """A stream that sends nothing while the model thinks, until it is closed."""
+
+    def __init__(self):
+        super().__init__([], message())
+        self.opened = threading.Event()
+        self.close_called = threading.Event()
+
+    def __iter__(self):
+        yield NS(type="message_start", message=NS(usage=USAGE))
+        self.opened.set()
+        if not self.close_called.wait(5):
+            raise AssertionError("never closed")
+        raise httpx2.ReadError("connection closed")
+
+    def close(self):
+        self.close_called.set()
+
+
+def test_a_passed_decision_closes_a_quiet_stream():
+    stream = QuietStream()
+    cancelled = threading.Event()
+    threading.Thread(target=lambda: (stream.opened.wait(5), cancelled.set())).start()
+    with pytest.raises(CallFailed, match="decision passed") as error:
+        AnthropicProvider(client_with(stream)).run(request(), cancelled)
+    assert stream.close_called.is_set()
+    assert error.value.usage["cache_read_input_tokens"] == 9000
