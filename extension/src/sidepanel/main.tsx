@@ -102,7 +102,7 @@ function TableRow({ player, profiles }: { player: PlayerInfo; profiles: Players[
           </option>
         ))}
         <option value={NO_PROFILE}>No profile</option>
-        <option value={ASK_AGAIN}>Ask again on the table</option>
+        <option value={ASK_AGAIN}>Forget answer</option>
       </select>
     </li>
   );
@@ -144,19 +144,21 @@ function Panel() {
           </ul>
         </section>
       )}
-      <section>
-        <h2>Recording</h2>
-        <button type="button" onClick={requestSnapshot}>
-          Save DOM snapshot
-        </button>
-        <ul>
-          {acks.map((ack, index) => (
-            <li key={index}>
-              {ack.what}: {ack.detail}
-            </li>
-          ))}
-        </ul>
-      </section>
+      {status.recording && (
+        <section>
+          <h2>Recording</h2>
+          <button type="button" onClick={requestSnapshot}>
+            Save DOM snapshot
+          </button>
+          <ul>
+            {acks.map((ack, index) => (
+              <li key={index}>
+                {ack.what}: {ack.detail}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </main>
   );
 }

@@ -199,7 +199,7 @@ test("an answer can be changed or cleared from the side panel", async () => {
   await change.selectOption({ label: "alex" });
   await expect(badge(page, STRANGER_ID)).toHaveText("alex · Calling station");
 
-  await change.selectOption({ label: "Ask again on the table" });
+  await change.selectOption({ label: "Forget answer" });
   await expect(badge(page, STRANGER_ID).locator("select")).toBeVisible();
   // Recognized through a profile's player_id, so not changeable in VAMOS.
   await expect(panel.getByRole("combobox", { name: "Change who alex is" })).toHaveCount(0);

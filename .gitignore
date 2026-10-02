@@ -30,3 +30,6 @@ data/
 
 # Third-party PokerNow logs used as a local parser corpus (scripts/fetch_corpus.py)
 tests/corpus/
+
+# Test-table seat browser profiles and screenshots (extension/tools/test-seats.mjs)
+extension/.test-seats/

@@ -1,5 +1,6 @@
 import csv
 import json
+from pathlib import Path
 
 from vamos.verify import verify
 
@@ -81,3 +82,12 @@ def test_a_difference_is_named(tmp_path):
     report = verify(recording, export)
     assert not report.ok
     assert report.differences == ["hand #2: actions, returned differ"]
+
+
+def test_recorded_guest_table_session_matches_pokernows_export():
+    # A real 2026-10-02 guest-table session (anonymized): VAMOS's live recording against the
+    # CSV PokerNow exported, including a 3-way all-in with a side pot.
+    fixture = Path(__file__).parent / "fixtures" / "guest_table"
+    report = verify(fixture / "log_pages.jsonl", fixture / "export.csv")
+    assert report.ok
+    assert (report.compared, report.matched, report.unknown_live) == (6, 6, 0)

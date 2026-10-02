@@ -1,0 +1,140 @@
+entry,at,order
+"The player ""Seat1 @ seat1id000"" quits the game with a stack of 0.00.",2026-10-02T09:01:18.098Z,179093167809800
+-- ending hand #6 --,2026-10-02T09:01:10.094Z,179093167009402
+"""Hero @ heroid0001"" collected 13.52 from pot with Flush, K High on the second run  (combination: 5♠, 9♠, 10♠, Q♠, K♠)",2026-10-02T09:01:10.094Z,179093167009401
+"""Hero @ heroid0001"" collected 13.52 from pot with Two Pair, 5's & 2's (combination: K♣, 2♦, 2♣, 5♠, 5♦)",2026-10-02T09:01:10.094Z,179093167009400
+"River (second run): Q♠, 8♥, 10♠, K♠ [9♠]",2026-10-02T09:01:06.087Z,179093166608700
+"Turn (second run): Q♠, 8♥, 10♠ [K♠]",2026-10-02T09:01:02.084Z,179093166208400
+"Flop (second run):  [Q♠, 8♥, 10♠]",2026-10-02T09:00:57.936Z,179093165793600
+"River: 5♦, 4♦, K♣, 2♣ [8♣]",2026-10-02T09:00:53.909Z,179093165390900
+"Turn: 5♦, 4♦, K♣ [2♣]",2026-10-02T09:00:49.860Z,179093164986000
+"Flop:  [5♦, 4♦, K♣]",2026-10-02T09:00:45.735Z,179093164573500
+"""Seat1 @ seat1id000"" shows a 5♥, Q♣.",2026-10-02T09:00:41.722Z,179093164172201
+"""Hero @ heroid0001"" shows a 2♦, 5♠.",2026-10-02T09:00:41.722Z,179093164172200
+All players in hand choose to run it twice.,2026-10-02T09:00:40.913Z,179093164091301
+"""Hero @ heroid0001"" chooses to  run it twice.",2026-10-02T09:00:40.913Z,179093164091300
+"""Seat1 @ seat1id000"" chooses to  run it twice.",2026-10-02T09:00:40.215Z,179093164021500
+Remaining players decide whether to run it twice.,2026-10-02T09:00:39.611Z,179093163961101
+"""Hero @ heroid0001"" calls 13.52",2026-10-02T09:00:39.611Z,179093163961100
+"""Seat1 @ seat1id000"" raises to 13.52 and go all in",2026-10-02T09:00:11.886Z,179093161188600
+"""Hero @ heroid0001"" posts a big blind of 0.20",2026-10-02T09:00:10.900Z,179093161090005
+"""Seat1 @ seat1id000"" posts a small blind of 0.10",2026-10-02T09:00:10.900Z,179093161090004
+"Your hand is 2♦, 5♠",2026-10-02T09:00:10.900Z,179093161090002
+"Player stacks: #1 ""Hero @ heroid0001"" (16.48) | #2 ""Seat1 @ seat1id000"" (13.52)",2026-10-02T09:00:10.900Z,179093161090001
+"-- starting hand #6 (id: bphcm4djuco7)  No Limit Texas Hold'em (dealer: ""Seat1 @ seat1id000"") --",2026-10-02T09:00:10.900Z,179093161090000
+-- ending hand #5 --,2026-10-02T09:00:04.855Z,179093160485502
+"""Seat1 @ seat1id000"" collected 1.60 from pot with Two Pair, J's & 7's (combination: A♦, 7♦, 7♠, J♦, J♠)",2026-10-02T09:00:04.855Z,179093160485501
+"""Seat1 @ seat1id000"" shows a 7♦, Q♦.",2026-10-02T09:00:04.855Z,179093160485500
+"""Hero @ heroid0001"" calls 0.20",2026-10-02T09:00:04.039Z,179093160403900
+"""Seat1 @ seat1id000"" bets 0.20",2026-10-02T09:00:02.974Z,179093160297400
+"River: A♦, J♦, 7♠, J♠ [10♠]",2026-10-02T09:00:02.483Z,179093160248300
+"""Hero @ heroid0001"" checks",2026-10-02T09:00:01.626Z,179093160162600
+"""Seat1 @ seat1id000"" checks",2026-10-02T09:00:00.390Z,179093160039000
+"Turn: A♦, J♦, 7♠ [J♠]",2026-10-02T08:59:59.116Z,179093159911600
+"""Hero @ heroid0001"" checks",2026-10-02T08:59:58.312Z,179093159831200
+"""Seat1 @ seat1id000"" checks",2026-10-02T08:59:56.829Z,179093159682900
+"Flop:  [A♦, J♦, 7♠]",2026-10-02T08:59:56.537Z,179093159653700
+"""Seat1 @ seat1id000"" calls 0.60",2026-10-02T08:59:55.730Z,179093159573000
+"""Hero @ heroid0001"" raises to 0.60",2026-10-02T08:59:54.579Z,179093159457900
+"""Seat1 @ seat1id000"" posts a big blind of 0.20",2026-10-02T08:59:52.703Z,179093159270305
+"""Hero @ heroid0001"" posts a small blind of 0.10",2026-10-02T08:59:52.703Z,179093159270304
+"Your hand is 4♠, 3♥",2026-10-02T08:59:52.703Z,179093159270302
+"Player stacks: #1 ""Hero @ heroid0001"" (17.28) | #2 ""Seat1 @ seat1id000"" (12.72)",2026-10-02T08:59:52.703Z,179093159270301
+"-- starting hand #5 (id: nuqm7atn4bil)  No Limit Texas Hold'em (dealer: ""Hero @ heroid0001"") --",2026-10-02T08:59:52.703Z,179093159270300
+"Undealt cards: 3♣, Q♣, 5♥ [2♦, 8♦]",2026-10-02T08:59:48.077Z,179093158807700
+-- ending hand #4 --,2026-10-02T08:59:46.772Z,179093158677202
+"""Hero @ heroid0001"" collected 0.80 from pot",2026-10-02T08:59:46.772Z,179093158677201
+"Uncalled bet of 0.40 returned to ""Hero @ heroid0001""",2026-10-02T08:59:46.772Z,179093158677200
+"""Seat1 @ seat1id000"" folds",2026-10-02T08:59:45.915Z,179093158591500
+"""Hero @ heroid0001"" bets 0.40",2026-10-02T08:59:44.014Z,179093158401400
+"Flop:  [3♣, Q♣, 5♥]",2026-10-02T08:59:40.487Z,179093158048700
+"""Hero @ heroid0001"" calls 0.40",2026-10-02T08:59:39.682Z,179093157968200
+"""Seat1 @ seat1id000"" raises to 0.40",2026-10-02T08:59:33.548Z,179093157354800
+"""Hero @ heroid0001"" posts a big blind of 0.20",2026-10-02T08:59:31.891Z,179093157189106
+"""Seat1 @ seat1id000"" posts a small blind of 0.10",2026-10-02T08:59:31.891Z,179093157189105
+"Your hand is A♣, Q♥",2026-10-02T08:59:31.891Z,179093157189103
+"Player stacks: #1 ""Hero @ heroid0001"" (16.88) | #2 ""Seat1 @ seat1id000"" (13.12)",2026-10-02T08:59:31.891Z,179093157189102
+"-- starting hand #4 (id: gszubctlibk5)  No Limit Texas Hold'em (dealer: ""Seat1 @ seat1id000"") --",2026-10-02T08:59:31.891Z,179093157189101
+"The player ""Seat2 @ seat2id000"" quits the game with a stack of 0.00.",2026-10-02T08:59:31.891Z,179093157189100
+-- ending hand #3 --,2026-10-02T08:59:23.884Z,179093156388404
+"""Hero @ heroid0001"" collected 1.15 from pot with Pair, 10's on the second run  (combination: 5♣, 9♣, K♦, 10♥, 10♣)",2026-10-02T08:59:23.884Z,179093156388403
+"""Hero @ heroid0001"" collected 1.15 from pot with Pair, 10's (combination: 8♠, J♥, K♥, 10♥, 10♣)",2026-10-02T08:59:23.884Z,179093156388402
+"""Seat1 @ seat1id000"" collected 13.12 from pot with Two Pair, 9's & 4's on the second run  (combination: K♦, 4♠, 4♣, 9♦, 9♣)",2026-10-02T08:59:23.884Z,179093156388401
+"""Hero @ heroid0001"" collected 13.13 from pot with Pair, 10's (combination: 8♠, J♥, K♥, 10♥, 10♣)",2026-10-02T08:59:23.884Z,179093156388400
+"River (second run): 4♣, K♦, 2♦, 5♣ [9♣]",2026-10-02T08:59:19.874Z,179093155987400
+"Turn (second run): 4♣, K♦, 2♦ [5♣]",2026-10-02T08:59:15.860Z,179093155586000
+"Flop (second run):  [4♣, K♦, 2♦]",2026-10-02T08:59:11.845Z,179093155184500
+"River: K♥, 8♠, 3♥, 5♦ [J♥]",2026-10-02T08:59:07.829Z,179093154782900
+"Turn: K♥, 8♠, 3♥ [5♦]",2026-10-02T08:59:03.818Z,179093154381800
+"Flop:  [K♥, 8♠, 3♥]",2026-10-02T08:58:59.778Z,179093153977800
+"""Seat2 @ seat2id000"" shows a Q♣, 9♠.",2026-10-02T08:58:55.769Z,179093153576902
+"""Seat1 @ seat1id000"" shows a 4♠, 9♦.",2026-10-02T08:58:55.769Z,179093153576901
+"""Hero @ heroid0001"" shows a 10♥, 10♣.",2026-10-02T08:58:55.769Z,179093153576900
+All players in hand choose to run it twice.,2026-10-02T08:58:54.932Z,179093153493201
+"""Hero @ heroid0001"" chooses to  run it twice.",2026-10-02T08:58:54.932Z,179093153493200
+"""Seat1 @ seat1id000"" chooses to  run it twice.",2026-10-02T08:58:54.752Z,179093153475200
+"""Seat2 @ seat2id000"" chooses to  run it twice.",2026-10-02T08:58:53.918Z,179093153391800
+Remaining players decide whether to run it twice.,2026-10-02T08:58:53.319Z,179093153331901
+"""Seat1 @ seat1id000"" calls 8.75 and go all in",2026-10-02T08:58:53.319Z,179093153331900
+"""Hero @ heroid0001"" calls 9.90",2026-10-02T08:58:51.796Z,179093153179600
+"""Seat2 @ seat2id000"" raises to 9.90 and go all in",2026-10-02T08:58:46.201Z,179093152620100
+"""Seat1 @ seat1id000"" calls 0.70",2026-10-02T08:58:44.353Z,179093152435300
+"""Hero @ heroid0001"" raises to 0.70",2026-10-02T08:58:43.246Z,179093152324600
+"""Seat2 @ seat2id000"" posts a big blind of 0.20",2026-10-02T08:58:34.264Z,179093151426406
+"""Seat1 @ seat1id000"" posts a small blind of 0.10",2026-10-02T08:58:34.264Z,179093151426405
+"Your hand is 10♥, 10♣",2026-10-02T08:58:34.264Z,179093151426402
+"Player stacks: #1 ""Hero @ heroid0001"" (11.35) | #2 ""Seat1 @ seat1id000"" (8.75) | #3 ""Seat2 @ seat2id000"" (9.90)",2026-10-02T08:58:34.264Z,179093151426401
+"-- starting hand #3 (id: dcbe7qlmjpfy)  No Limit Texas Hold'em (dealer: ""Hero @ heroid0001"") --",2026-10-02T08:58:34.264Z,179093151426400
+-- ending hand #2 --,2026-10-02T08:58:31.349Z,179093151134902
+"""Hero @ heroid0001"" collected 1.60 from pot",2026-10-02T08:58:31.349Z,179093151134901
+"Uncalled bet of 1.60 returned to ""Hero @ heroid0001""",2026-10-02T08:58:31.349Z,179093151134900
+"""Seat1 @ seat1id000"" folds",2026-10-02T08:58:30.469Z,179093151046900
+"""Hero @ heroid0001"" bets 1.60",2026-10-02T08:58:28.831Z,179093150883100
+"River: 5♣, J♠, 3♠, 10♥ [7♦]",2026-10-02T08:58:25.060Z,179093150506000
+"""Seat1 @ seat1id000"" calls 0.20",2026-10-02T08:58:24.254Z,179093150425400
+"""Hero @ heroid0001"" bets 0.20",2026-10-02T08:58:22.744Z,179093150274400
+"Turn: 5♣, J♠, 3♠ [10♥]",2026-10-02T08:58:19.573Z,179093149957300
+"""Seat1 @ seat1id000"" calls 0.40",2026-10-02T08:58:18.770Z,179093149877000
+"""Hero @ heroid0001"" bets 0.40",2026-10-02T08:58:17.016Z,179093149701600
+"Flop:  [5♣, J♠, 3♠]",2026-10-02T08:58:06.612Z,179093148661200
+"""Seat1 @ seat1id000"" checks",2026-10-02T08:58:05.804Z,179093148580400
+"""Hero @ heroid0001"" calls 0.20",2026-10-02T08:58:03.951Z,179093148395100
+"""Seat2 @ seat2id000"" folds",2026-10-02T08:58:01.981Z,179093148198100
+"""Seat1 @ seat1id000"" posts a big blind of 0.20",2026-10-02T08:58:01.701Z,179093148170106
+"""Hero @ heroid0001"" posts a small blind of 0.10",2026-10-02T08:58:01.701Z,179093148170105
+"Your hand is 6♥, 2♦",2026-10-02T08:58:01.701Z,179093148170102
+"Player stacks: #1 ""Hero @ heroid0001"" (10.55) | #2 ""Seat1 @ seat1id000"" (9.55) | #3 ""Seat2 @ seat2id000"" (9.90)",2026-10-02T08:58:01.701Z,179093148170101
+"-- starting hand #2 (id: cqu5c2oerurj)  No Limit Texas Hold'em (dealer: ""Seat2 @ seat2id000"") --",2026-10-02T08:58:01.701Z,179093148170100
+"Undealt cards: 6♠, 6♦, 6♣, 7♦ [4♦]",2026-10-02T08:57:56.111Z,179093147611100
+-- ending hand #1 --,2026-10-02T08:57:55.741Z,179093147574102
+"""Hero @ heroid0001"" collected 1.00 from pot",2026-10-02T08:57:55.741Z,179093147574101
+"Uncalled bet of 1.00 returned to ""Hero @ heroid0001""",2026-10-02T08:57:55.741Z,179093147574100
+"""Seat1 @ seat1id000"" folds",2026-10-02T08:57:54.937Z,179093147493700
+"""Hero @ heroid0001"" bets 1.00",2026-10-02T08:57:53.446Z,179093147344600
+"Turn: 6♠, 6♦, 6♣ [7♦]",2026-10-02T08:57:50.862Z,179093147086200
+"""Seat1 @ seat1id000"" calls 0.25",2026-10-02T08:57:50.026Z,179093147002600
+"""Hero @ heroid0001"" bets 0.25",2026-10-02T08:57:48.814Z,179093146881400
+"Flop:  [6♠, 6♦, 6♣]",2026-10-02T08:57:40.970Z,179093146097000
+"""Hero @ heroid0001"" checks",2026-10-02T08:57:40.128Z,179093146012800
+"""Seat2 @ seat2id000"" folds",2026-10-02T08:57:18.844Z,179093143884400
+"""Seat1 @ seat1id000"" calls 0.20",2026-10-02T08:56:31.052Z,179093139105200
+"""Hero @ heroid0001"" posts a big blind of 0.20",2026-10-02T08:56:30.861Z,179093139086109
+"""Seat2 @ seat2id000"" posts a small blind of 0.10",2026-10-02T08:56:30.861Z,179093139086108
+"Your hand is Q♦, A♦",2026-10-02T08:56:30.861Z,179093139086105
+"Player stacks: #1 ""Hero @ heroid0001"" (10.00) | #2 ""Seat1 @ seat1id000"" (10.00) | #3 ""Seat2 @ seat2id000"" (10.00)",2026-10-02T08:56:30.861Z,179093139086104
+"The player ""Seat2 @ seat2id000"" joined the game with a stack of 10.00.",2026-10-02T08:56:30.861Z,179093139086103
+"The player ""Seat1 @ seat1id000"" joined the game with a stack of 10.00.",2026-10-02T08:56:30.861Z,179093139086102
+"The player ""Hero @ heroid0001"" joined the game with a stack of 10.00.",2026-10-02T08:56:30.861Z,179093139086101
+"-- starting hand #1 (id: xjeqpafed5dj)  No Limit Texas Hold'em (dealer: ""Seat1 @ seat1id000"") --",2026-10-02T08:56:30.861Z,179093139086100
+"The admin approved the player ""Seat2 @ seat2id000"" participation with a stack of 10.00.",2026-10-02T08:56:29.560Z,179093138956000
+"The admin approved the player ""Seat1 @ seat1id000"" participation with a stack of 10.00.",2026-10-02T08:56:28.634Z,179093138863400
+"The player ""Seat2 @ seat2id000"" requested a seat.",2026-10-02T08:56:27.134Z,179093138713400
+"The player ""Seat1 @ seat1id000"" requested a seat.",2026-10-02T08:56:27.082Z,179093138708200
+"The admin approved the player ""Hero @ heroid0001"" participation with a stack of 10.00.",2026-10-02T08:55:53.198Z,179093135319801
+"The player ""Hero @ heroid0001"" requested a seat.",2026-10-02T08:55:53.198Z,179093135319800
+"Game Config Changes
+* Cents Mode: off » on
+* Nit Minimum Players: off » 3
+* Allow Rebuy: off » off
+* Rabbit Hunt: off » on
+* Allow Run it Twice: no » ask players",2026-10-02T08:55:48.770Z,179093134877000
