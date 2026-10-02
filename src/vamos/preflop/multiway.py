@@ -182,7 +182,9 @@ def load() -> MultiwayTables:
     for players in BUCKETS:
         with np.load(DATA / f"multiway{players}.npz") as data:
             labels[players] = data["labels"]
-            share[players] = data["share"].astype(np.float64)
+            stored = data["share"].astype(np.float64)
+            # Stored at half precision; renormalize so every pot is shared out exactly.
+            share[players] = stored / stored.sum(axis=-1, keepdims=True)
             linked[players] = data["link"].astype(np.float64)
             provenance.append(str(data["provenance"]))
     return MultiwayTables(labels, share, linked, "; ".join(provenance))
