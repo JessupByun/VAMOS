@@ -130,3 +130,13 @@ def test_a_solved_table_round_trips_through_lookup():
     advice = advise([table], [Move("SB", "raise", 3.0, False)], "BB", ("As", "Ad"), 50, "s")
     assert advice is not None
     assert advice.mix[0][0] in ("raise 9", "raise 12")  # aces 3-bet
+
+
+def test_no_advice_for_a_hand_the_solve_learned_nothing_for():
+    table = heads_up_table(50)
+    root = table.spots[()]
+    unlearned = np.zeros(169, dtype=bool)
+    unlearned[INDEX["72o"]] = True
+    table.spots[()] = Spot(root.position, root.actions, root.strategy, unlearned)
+    assert advise([table], [], "SB", ("7h", "2c"), depth=50, seed="u") is None
+    assert advise([table], [], "SB", ("As", "Ad"), depth=50, seed="u") is not None

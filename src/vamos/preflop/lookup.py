@@ -10,14 +10,15 @@ Live play is mapped onto the solved trees:
   off the tree;
 - the effective stack picks the two nearest solved depths and the mix is blended between
   them by distance (in log of the stack).
-Anything the trees do not cover (five or more players, a straddle, a cold call of a 3-bet)
-gets no advice rather than a guess.
+Anything the trees do not cover (five or more players, a straddle, a cold call of a 3-bet),
+and hands the solve learned nothing for at a spot (nobody else ever reaches it), get no
+advice rather than a guess.
 """
 
 import math
 import random
 from bisect import bisect_left
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -36,6 +37,8 @@ class Spot:
     position: str
     actions: tuple[str, ...]
     strategy: np.ndarray  # (actions, 169)
+    # (169,) True for hands the solve learned nothing for here (see solver.settle).
+    unlearned: np.ndarray = field(default_factory=lambda: np.zeros(169, dtype=bool))
 
 
 @dataclass(frozen=True)
@@ -54,7 +57,9 @@ def table_from(solution: Solution, provenance: str = "") -> Table:
         if not isinstance(node, Decision):
             return
         position = tree.positions[node.player]
-        spots[path] = Spot(position, node.actions, solution.strategy[node.id])
+        spots[path] = Spot(
+            position, node.actions, solution.strategy[node.id], solution.unlearned[node.id]
+        )
         for action, child in zip(node.actions, node.children, strict=True):
             walk(child, (*path, f"{position}:{action}"))
 
@@ -173,9 +178,10 @@ def advise(
         table = by_stack[stack]
         path = translate(table, moves)
         spot = None if path is None else table.spots.get(path)
-        if spot is None or spot.position != hero_position:
+        hand = INDEX[hand_class(*cards)]
+        if spot is None or spot.position != hero_position or spot.unlearned[hand]:
             continue
-        column = spot.strategy[:, INDEX[hand_class(*cards)]]
+        column = spot.strategy[:, hand]
         for action, freq in zip(spot.actions, column, strict=True):
             mix[action] = mix.get(action, 0.0) + weight * float(freq)
         if not used:

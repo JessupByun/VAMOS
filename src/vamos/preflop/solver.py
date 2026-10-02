@@ -20,8 +20,8 @@ from vamos.preflop.matchups import COMBO_COUNTS
 from vamos.preflop.tree import Decision, Node, Terminal, Tree
 
 ALPHA, BETA, GAMMA = 1.5, 0.0, 2.0
-# A hand reaching a decision less often than this (weighted over iterations) is answered
-# from the current strategy rather than the average.
+# A hand that reaches a decision less often than this, by its own choices along the way,
+# gets its best answer there rather than its average strategy (see `settle`).
 RARE = 1e-3
 PRIOR = COMBO_COUNTS / COMBO_COUNTS.sum()  # how often each class is dealt
 
@@ -39,6 +39,9 @@ class Solution:
     ev: np.ndarray  # per player, big blinds per hand
     nash_conv: float  # sum over players of best-response gain, big blinds per hand
     iterations: int
+    # decision id -> (169,) True for hands nothing was learned for: neither they nor the
+    # other players reach that decision, so every action is worth the same there.
+    unlearned: dict[int, np.ndarray]
 
     def at(self, path: tuple[str, ...]) -> tuple[Decision, np.ndarray]:
         node = _walk(self.tree, path)
@@ -130,26 +133,19 @@ class Solver:
                 report(t)
 
     def average(self) -> dict[int, np.ndarray]:
-        """
-        The average strategy, except for hands that almost never reach a decision: their
-        average is mostly early, near-uniform iterates (72o facing a 3-bet after opening
-        came out a third each fold / call / all-in), so they get the current regret-matched
-        strategy, which keeps learning there because regrets do not depend on own reach.
-        A loose player reaches such spots, so they need a sensible answer.
-        """
-        most = sum(float(t) ** GAMMA for t in range(1, self.iterations + 1))
+        """The average strategy, uniform where a hand never reached the decision."""
         out = {}
         for i, total in self.total.items():
             s = total.sum(axis=0)
-            reached = s > RARE * most
-            average = total / np.where(reached, s, 1)
-            out[i] = np.where(reached, average, _matching(self.regret[i]))
+            out[i] = np.where(s > 0, total / np.where(s > 0, s, 1), 1 / len(total))
         return out
 
     def solution(self) -> Solution:
-        strategy = self.average()
+        strategy, unlearned = settle(self.tree, self.payoffs, self.average())
         ev, best = evaluate(self.tree, self.payoffs, strategy)
-        return Solution(self.tree, strategy, ev, float((best - ev).sum()), self.iterations)
+        return Solution(
+            self.tree, strategy, ev, float((best - ev).sum()), self.iterations, unlearned
+        )
 
 
 def _value(
@@ -176,6 +172,49 @@ def _value(
         nxt[node.player] = reach[node.player] * sigma[a]
         value += _value(child, player, nxt, payoffs, strategy, best)
     return value
+
+
+def settle(
+    tree: Tree, payoffs: Payoffs, strategy: dict[int, np.ndarray]
+) -> tuple[dict[int, np.ndarray], dict[int, np.ndarray]]:
+    """
+    Answer for hands that rarely reach a decision. Their average strategy is mostly the
+    solver's early, near-uniform iterates (72o facing a 3-bet after opening came out a third
+    each fold / call / all-in), and a loose player does reach such spots. Each such hand gets
+    its best action against how the others actually play from there. Where the others never
+    get there either, every action is worth the same: those hands are reported unlearned.
+    """
+    settled = {i: s.copy() for i, s in strategy.items()}
+    unlearned = {i: np.zeros(s.shape[1], dtype=bool) for i, s in strategy.items()}
+
+    def walk(node: Node, player: int, reach: list[np.ndarray], own: np.ndarray) -> np.ndarray:
+        if isinstance(node, Terminal):
+            return payoffs(node, player, reach)
+        sigma = settled[node.id]
+        if node.player != player:
+            value = np.zeros(len(PRIOR))
+            for a, child in enumerate(node.children):
+                if sigma[a].any():
+                    value += walk(
+                        child, player, _with(reach, node.player, reach[node.player] * sigma[a]), own
+                    )
+            return value
+        values = np.stack(
+            [walk(c, player, reach, own * sigma[a]) for a, c in enumerate(node.children)]
+        )
+        rare = own < RARE
+        best = values.argmax(axis=0)
+        # Equal values for every action: nobody else reaches here, so nothing was learned.
+        unlearned[node.id] = values.max(axis=0) - values.min(axis=0) <= 1e-12
+        choose = rare & ~unlearned[node.id]
+        sigma[:, choose] = 0
+        sigma[best[choose], np.flatnonzero(choose)] = 1
+        return (sigma * values).sum(axis=0)
+
+    ones = [np.ones(len(PRIOR)) for _ in range(tree.players)]
+    for player in range(tree.players):
+        walk(tree.root, player, ones, np.ones(len(PRIOR)))
+    return settled, unlearned
 
 
 def evaluate(

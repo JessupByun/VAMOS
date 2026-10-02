@@ -7,7 +7,8 @@ replace them without changing the runtime.
      "provenance": "...", "hands": [169 class labels],
      "spots": [{"path": ["CO:raise 2.5", "BTN:fold"], "position": "SB",
                 "actions": ["fold", "call", "raise 10", "raise 12.5"],
-                "strategy": [[169 frequencies] per action]}]}
+                "strategy": [[169 frequencies] per action],
+                "unlearned": [hands the solve learned nothing for here]}]}
 
 Frequencies are rounded to 0.001. `manifest.json` lists every file with its SHA-256, and a
 test checks that the committed files still match it.
@@ -36,6 +37,7 @@ def encode(table: Table, menu: str) -> bytes:
             "position": spot.position,
             "actions": list(spot.actions),
             "strategy": np.round(spot.strategy, 3).tolist(),
+            "unlearned": [CLASSES[k] for k in np.flatnonzero(spot.unlearned)],
         }
         for path, spot in table.spots.items()
     ]
@@ -62,7 +64,11 @@ def decode(data: bytes) -> tuple[Table, str]:
     for spot in body["spots"]:
         strategy = np.zeros((len(spot["actions"]), len(CLASSES)))
         strategy[:, order] = np.array(spot["strategy"])
-        spots[tuple(spot["path"])] = Spot(spot["position"], tuple(spot["actions"]), strategy)
+        unlearned = np.zeros(len(CLASSES), dtype=bool)
+        unlearned[[CLASSES.index(h) for h in spot.get("unlearned", [])]] = True
+        spots[tuple(spot["path"])] = Spot(
+            spot["position"], tuple(spot["actions"]), strategy, unlearned
+        )
     table = Table(body["players"], float(body["stack"]), spots, body["provenance"])
     return table, body["menu"]
 

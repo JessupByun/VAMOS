@@ -43,9 +43,9 @@ def test_aces_never_fold():
     for tables in load_all().values():
         for table in tables:
             for path, spot in table.spots.items():
-                if "fold" in spot.actions:
+                if "fold" in spot.actions and not spot.unlearned[INDEX["AA"]]:
                     fold = spot.strategy[spot.actions.index("fold"), INDEX["AA"]]
-                    assert fold < 0.01, (table.players, table.stack, path)
+                    assert fold < 0.01, (table.players, table.stack, path, fold)
 
 
 def played(strategy: np.ndarray, actions: tuple[str, ...], reach: np.ndarray) -> float:
@@ -87,3 +87,19 @@ def test_a_bigger_open_is_defended_less():
         assert played(big.strategy, big.actions, PRIOR) <= played(
             small.strategy, small.actions, PRIOR
         ), table.stack
+
+
+def test_the_main_lines_are_learned():
+    # Every hand at the first decision and at the answer to each first action was learned;
+    # deeper spots nobody reaches give no advice.
+    for tables in load_all().values():
+        for table in tables:
+            first = table.spots[()]
+            assert not first.unlearned.any()
+            for action in first.actions:
+                spot = table.spots.get((f"{first.position}:{action}",))
+                assert spot is None or not spot.unlearned.any(), (
+                    table.players,
+                    table.stack,
+                    action,
+                )
