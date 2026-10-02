@@ -57,9 +57,10 @@ function connectHost() {
     }
   });
   port.onDisconnect.addListener(() => {
+    // Read first: an unread reason is reported by Chrome even when this port is stale.
+    const reason = chrome.runtime.lastError?.message ?? "backend exited";
     if (host !== port) return;
     host = null;
-    const reason = chrome.runtime.lastError?.message ?? "backend exited";
     if (contentPorts.size === 0) {
       setStatus({ type: "backend", state: "down", detail: "no PokerNow table open" });
       return;
@@ -80,6 +81,9 @@ chrome.runtime.onConnect.addListener((port) => {
     port.postMessage(status satisfies WorkerToContent);
     port.onMessage.addListener((message: ContentToWorker) => host?.postMessage(message));
     port.onDisconnect.addListener(() => {
+      // Reading the reason marks it handled; Chrome reports it otherwise (e.g. "moved into
+      // back/forward cache" when the user navigates away from the table).
+      void chrome.runtime.lastError;
       contentPorts.delete(port);
       if (contentPorts.size > 0) return;
       clearTimeout(retryTimer);
@@ -102,6 +106,9 @@ chrome.runtime.onConnect.addListener((port) => {
         host?.postMessage(message);
       }
     });
-    port.onDisconnect.addListener(() => panelPorts.delete(port));
+    port.onDisconnect.addListener(() => {
+      void chrome.runtime.lastError;
+      panelPorts.delete(port);
+    });
   }
 });

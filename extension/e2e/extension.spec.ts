@@ -204,3 +204,15 @@ test("an answer can be changed or cleared from the side panel", async () => {
   // Recognized through a profile's player_id, so not changeable in VAMOS.
   await expect(panel.getByRole("combobox", { name: "Change who alex is" })).toHaveCount(0);
 });
+
+test("leaving the table and coming back with the back button restores VAMOS", async () => {
+  const page = await openTable();
+  await page.goto(`${ORIGIN}/start-game`);
+  await page.goBack();
+  const restored = await page.evaluate(
+    () => (performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming).type,
+  );
+  expect(restored).toBe("back_forward");
+  await expect(pillStatus(page)).toHaveText(/backend ready/);
+  await expect(badge(page, KNOWN_ID)).toHaveText(/alex · Calling station/);
+});

@@ -40,6 +40,8 @@ function connect() {
     notifyAll();
   });
   next.onDisconnect.addListener(() => {
+    // Reading the reason marks it handled; Chrome reports an unread one as an error.
+    void chrome.runtime.lastError;
     if (port === next) port = null;
     status = { type: "backend", state: "connecting" };
     notifyAll();

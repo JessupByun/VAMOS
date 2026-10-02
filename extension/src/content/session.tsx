@@ -94,6 +94,9 @@ export function startSession(gameId: string): () => void {
       }
     });
     next.onDisconnect.addListener(() => {
+      // Reading the reason marks it handled (it is set when the worker restarts or the page
+      // enters the back/forward cache); Chrome reports an unread one as an error.
+      void chrome.runtime.lastError;
       if (port === next) port = null;
       if (stopped) return;
       if (!chrome.runtime?.id) return retire();
