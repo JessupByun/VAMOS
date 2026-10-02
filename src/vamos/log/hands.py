@@ -100,6 +100,11 @@ class Hand:
     run_it_twice: bool = False
     ended: bool = False
     last_order: int = 0
+    # Betting on the current street: each player's total so far, the amount to match, and
+    # the last full raise size (the minimum raise increment).
+    street_bets: dict[str, Cents] = field(default_factory=lambda: defaultdict(int))
+    price: Cents = 0
+    min_raise: Cents = 0
 
     @property
     def street(self) -> Street:
@@ -145,6 +150,14 @@ class _Builder:
         self.committed: dict[str, Cents] = defaultdict(int)
         self.current_bet: Cents = 0
         self.last_raise: Cents = self.big_blind or 0
+        self._publish()
+
+    def _publish(self) -> None:
+        """Mirror the betting state onto the open hand, for live decisions."""
+        if self.hand is not None and not self.skipping:
+            self.hand.street_bets = self.committed
+            self.hand.price = self.current_bet
+            self.hand.min_raise = self.last_raise
 
     def gap(self) -> None:
         """Rows may be missing from here on: stop adding to the open hand."""
@@ -273,6 +286,7 @@ class _Builder:
         if event.kind == "post_bb":
             # A short all-in big blind does not lower the price to call.
             self.current_bet = max(self.current_bet, self.big_blind or 0)
+        self._publish()
         hand.put_in[player] += added
         kind = event.kind
         hand.actions.append(Action(order, street, player, kind, to, added, event.all_in, reopens))

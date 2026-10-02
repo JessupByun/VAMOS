@@ -60,3 +60,18 @@ def test_incomplete_all_in_raises_match_the_documented_count():
         if action.kind == "raise" and action.reopens is False
     )
     assert total == 32
+
+
+@pytest.mark.parametrize("path", FILES, ids=[p.name for p in FILES])
+def test_positions_put_the_blinds_where_they_were_posted(path):
+    from vamos.engine.state import positions
+
+    for hand in load(path).hands:
+        if hand.dealer is None or len(hand.seats) < 3 or hand.dead_small_blind:
+            continue
+        labels = positions(hand)
+        for action in hand.actions:
+            if action.kind == "post_sb":
+                assert labels[action.player] == "SB", hand.number
+            if action.kind == "post_bb":
+                assert labels[action.player] == "BB", hand.number

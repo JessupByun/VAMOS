@@ -53,7 +53,7 @@ After a rebuild, reload VAMOS in `chrome://extensions` and then reload the Poker
 - Every piece of advice shows its source (`VAMOS · Sonnet`, `VAMOS · Opus`, `INSTANT · math only`); fallbacks are never silent.
 - Prompts use pseudonyms; no real name, alias or PokerNow nickname may reach the API.
 - Label approximations honestly ("approximate", "vs standard range"), and back claims with tests or sources.
-- eval7's `py_hand_vs_range_exact` evaluates only the cards already on the board; it does not deal turn and river. Use Monte Carlo (200k+ samples) on flop and turn, exact only on the river.
+- Never call eval7's range helpers directly: `py_hand_vs_range_exact` does not deal the turn and river, and both it and `py_hand_vs_range_monte_carlo` silently ignore combo weights. Use `vamos.engine.equity.equity`, which is tested against brute force.
 
 ### Style
 - Match the surrounding code; comments only for non-obvious why.

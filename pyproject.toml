@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "eval7>=0.1.11",
+    "numpy>=2.5.3",
     "pyyaml>=6.0.3",
 ]
 
@@ -40,6 +41,11 @@ select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-m 'not slow and not integration and not corpus'"
+filterwarnings = [
+    # eval7 parses range strings with a pyparsing call that pyparsing has deprecated; it is
+    # third-party code, emitted once at import.
+    "ignore::DeprecationWarning:eval7.rangestring",
+]
 markers = [
     "slow: long-running reference checks (run with -m slow)",
     "integration: hits a live external service",
