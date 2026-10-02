@@ -6,6 +6,9 @@ and a fixed menu of raise sizes. Players are numbered in preflop order (the firs
 With equal stacks an all-in can only be called all in, so there are no side pots: a hand
 ends preflop when one player is left, when everyone left is all in, or when betting closes
 and the rest is played after the flop.
+
+The home game has no antes; `ante` exists only to reproduce published solutions that use
+one, for testing the solver against them.
 """
 
 from dataclasses import dataclass, replace
@@ -39,13 +42,17 @@ PUSH_FOLD = Menu(opens=(), three_bets=(), limps=False, open_jam=True)
 
 @dataclass
 class Terminal:
-    committed: tuple[float, ...]
+    committed: tuple[float, ...]  # bets, not counting the ante
     active: tuple[int, ...]  # players still in the hand
     kind: Literal["fold", "showdown", "flop"]
+    ante: float = 0.0  # dead money from every player
 
     @property
     def pot(self) -> float:
-        return sum(self.committed)
+        return sum(self.committed) + self.ante * len(self.committed)
+
+    def spent(self, player: int) -> float:
+        return self.committed[player] + self.ante
 
 
 @dataclass
@@ -77,9 +84,10 @@ def _amount(x: float) -> str:
 
 
 class _Builder:
-    def __init__(self, players: int, stack: float, menu: Menu):
+    def __init__(self, players: int, stack: float, menu: Menu, ante: float):
         self.n = players
-        self.stack = stack
+        self.stack = stack - ante  # what is left to bet once the ante is in
+        self.ante = ante
         self.menu = menu
         self.positions = POSITIONS[players]
         self.decisions: list[Decision] = []
@@ -152,11 +160,11 @@ class _Builder:
     def build(self, s: _State, path: tuple[str, ...]) -> Node:
         active = tuple(p for p in range(self.n) if p not in s.folded)
         if len(active) == 1:
-            return Terminal(s.committed, active, "fold")
+            return Terminal(s.committed, active, "fold", self.ante)
         p = self.next_player(s)
         if p is None:
             all_in = any(s.committed[q] >= self.stack for q in active)
-            return Terminal(s.committed, active, "showdown" if all_in else "flop")
+            return Terminal(s.committed, active, "showdown" if all_in else "flop", self.ante)
         node = Decision(len(self.decisions), p, path, s.committed, (), [])
         self.decisions.append(node)
         choices = self.actions(s, p)
@@ -181,8 +189,8 @@ class Tree:
         return POSITIONS[self.players]
 
 
-def build(players: int, stack: float, menu: Menu = STANDARD) -> Tree:
-    builder = _Builder(players, stack, menu)
+def build(players: int, stack: float, menu: Menu = STANDARD, ante: float = 0.0) -> Tree:
+    builder = _Builder(players, stack, menu, ante)
     committed = tuple(BLINDS.get(position, 0.0) for position in POSITIONS[players])
     root = builder.build(_State(committed), ())
     return Tree(players, stack, menu, root, builder.decisions)

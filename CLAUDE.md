@@ -15,6 +15,7 @@ uv run ruff check . && uv run ruff format --check .
 uv run vamos install         # register the native host with Chrome (re-run if the repo moves)
 uv run vamos install --record   # test tables only: save raw log pages to data/recordings/
 uv run vamos verify <game_id> <export.csv>   # live-built hands vs PokerNow's exported log
+uv run python scripts/fetch_hrc_pushfold.py && uv run pytest -m corpus   # also checks push/fold vs HRC
 
 cd extension
 npm run typecheck && npm run build
@@ -28,6 +29,8 @@ After a rebuild, reload VAMOS in `chrome://extensions` and then reload the Poker
 - `src/vamos/` backend package (`cards.py` card + hand-class helpers, `money.py` chip parsing, `host/` native messaging host and installer).
 - `extension/` the MV3 extension (`src/background` worker, `src/content` pill + log poller, `src/sidepanel`) and its Playwright e2e suite in `e2e/`.
 - `src/vamos/log/` the log parser: `grammar.py` (line -> event) and `hands.py` (events -> hands with chip accounting).
+- `src/vamos/engine/` live decision facts: equity, decision state and turn order, made-hand text, the action card's facts.
+- `src/vamos/preflop/` the home-built preflop solver and its generated tables in `data/` (committed); `docs/preflop.md` lists every approximation with its measured size. Read it before changing the solver.
 - `docs/pokernow.md` verified facts about PokerNow's log endpoint, log lines and DOM; `docs/log-grammar.md` the full line grammar with evidence. Read both before touching parsing or DOM code.
 - `tests/` pytest suite, one test file per module.
 - `profiles/` the user's opponent profiles, gitignored except `_TEMPLATE.md` and `_PROMPT.md`.

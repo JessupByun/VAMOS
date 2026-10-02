@@ -53,7 +53,7 @@ class ChipPayoffs:
         return self.given @ reach
 
     def __call__(self, terminal: Terminal, player: int, reach: list[np.ndarray]) -> np.ndarray:
-        spent = terminal.committed[player]
+        spent = terminal.spent(player)
         players = len(reach)
         if players == 2:
             # Heads-up everything is exact, including how often the other player folds.
@@ -93,8 +93,7 @@ class ChipPayoffs:
             weighted = self.showdown
         else:
             weighted = self.given * self.flop.heads_up(terminal, player, rival)
-        spent = terminal.committed[player]
-        return terminal.pot * (weighted @ reach) - spent * self.reach(reach)
+        return terminal.pot * (weighted @ reach) - terminal.spent(player) * self.reach(reach)
 
     def _multiway(
         self,
