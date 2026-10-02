@@ -4,10 +4,11 @@ Solve the preflop baseline and write src/vamos/preflop/tables/ (see vamos.preflo
 Full trees at 20-150bb and push/fold at 2-15bb, for 4, 3 and 2 players. Each solve runs
 until its NashConv (exploitability, heads-up) is under the target or the iteration cap is
 reached; both are recorded in the file's provenance and in the manifest.
-Run: uv run python scripts/gen_preflop_tables.py [players ...]
+Run: uv run python scripts/gen_preflop_tables.py [players ...] [standard|pushfold]
 """
 
 import json
+import os
 import subprocess
 import sys
 import time
@@ -69,9 +70,17 @@ def solve(job: tuple[str, int, float]) -> tuple[str, str, dict]:
 
 
 def main() -> None:
-    players = [int(p) for p in sys.argv[1:]] or [4, 3, 2]
-    jobs = [("standard", p, float(d)) for p in players for d in DEPTHS]
-    jobs += [("pushfold", p, float(d)) for p in players for d in PUSH_FOLD_DEPTHS]
+    # Workers inherit this environment; without it each starts its own pool of math-library
+    # threads and the machine ends up oversubscribed many times over.
+    for var in ("VECLIB_MAXIMUM_THREADS", "OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS"):
+        os.environ.setdefault(var, "2")
+    players = [int(a) for a in sys.argv[1:] if a.isdigit()] or [4, 3, 2]
+    menus = [a for a in sys.argv[1:] if not a.isdigit()] or ["standard", "pushfold"]
+    jobs = []
+    if "standard" in menus:
+        jobs += [("standard", p, float(d)) for p in players for d in DEPTHS]
+    if "pushfold" in menus:
+        jobs += [("pushfold", p, float(d)) for p in players for d in PUSH_FOLD_DEPTHS]
     DIR.mkdir(exist_ok=True)
     manifest = json.loads(MANIFEST.read_text()) if MANIFEST.exists() else {"files": {}}
     with Pool(WORKERS) as pool:

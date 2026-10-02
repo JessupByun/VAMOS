@@ -10,7 +10,8 @@ equity times weight,
 
     share = e * w_mine / (e * w_mine + sum over opponents of e_opp * w_opp),
 
-so the shares of a pot always sum to one. As the stack-to-pot ratio falls the split
+so heads-up the shares of a pot always sum to one (in 3-4 way pots, where opponents are
+bucketed, to within a few percent; see docs/preflop.md). As the stack-to-pot ratio falls the split
 blends back to raw equity, reaching it at an all-in: blend = 1 - exp(-spr / SPR_SCALE).
 
 The weights are tuned on GTO Wizard's heads-up 50bb solution with a 2.1bb small-blind

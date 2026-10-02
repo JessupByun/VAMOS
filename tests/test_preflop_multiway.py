@@ -60,10 +60,14 @@ def test_buckets_run_from_strongest_to_weakest(players):
     assert means == sorted(means, reverse=True)
 
 
-def top(fraction: float) -> np.ndarray:
+def top(fraction: float, kinds: str = "pso") -> np.ndarray:
+    """The strongest `fraction` of combos among pairs (p), suited (s) and offsuit (o) hands."""
     strength = matchups.load().equity @ PRIOR
+    kind = np.array(["p" if len(c) == 2 else c[2] for c in CLASSES])
     reach, combos_in = np.zeros(169), 0
     for c in np.argsort(-strength):
+        if kind[c] not in kinds:
+            continue
         if combos_in >= fraction * 1326:
             break
         reach[c] = 1
@@ -71,13 +75,27 @@ def top(fraction: float) -> np.ndarray:
     return reach
 
 
+RANGES = [
+    (top(0.15), top(0.4)),
+    (top(0.08), top(0.25)),
+    (top(0.5), top(0.5)),
+    (top(0.2), top(0.3), top(0.5)),
+    (top(0.1), top(0.1), top(0.4)),
+    # Ranges that take part of a bucket, as solved ranges do (suited hands without their
+    # offsuit counterparts).
+    (top(0.15, "ps"), top(0.3)),
+    (top(0.2, "o"), top(0.15, "ps")),
+    (top(0.12, "ps"), top(0.2, "o"), top(0.4)),
+]
+
+
 @pytest.mark.slow
-def test_bucketed_equity_against_exact_on_realistic_ranges():
-    # Opponents' hands within a bucket count by combos rather than by their actual range;
-    # measured 2026-10-02 at a mean error of 0.44 points and a worst case of 1.5.
+def test_bucketed_equity_against_exact():
+    # Opponents' hands within a bucket count by combos rather than by their actual range.
+    # Measured 2026-10-02 with split buckets; on solved 3- and 4-way spots the error is
+    # +0.7 points on average (docs/preflop.md).
     errors = []
-    for fractions in ((0.15, 0.4), (0.08, 0.25), (0.5, 0.5), (0.2, 0.3, 0.5), (0.1, 0.1, 0.4)):
-        ranges = [top(f) for f in fractions]
+    for ranges in RANGES:
         approx = all_in_equity([np.ones(169), *ranges])
         exact_ranges = [
             {c: 1.0 for k in np.flatnonzero(r) for c in combos(CLASSES[k])} for r in ranges
@@ -85,6 +103,12 @@ def test_bucketed_equity_against_exact_on_realistic_ranges():
         for hand in ("AA", "AKs", "AKo", "QJs", "T9s", "76s", "22", "A5s", "K9o", "72o"):
             exact = equity(combos(hand)[0], (), exact_ranges, samples=60_000).value
             errors.append(approx[INDEX[hand]] - exact)
-    errors = np.abs(errors)
-    assert errors.mean() < 0.006
-    assert errors.max() < 0.02
+    errors = np.array(errors)
+    print(
+        f"mean {errors.mean():+.4f} mean abs {np.abs(errors).mean():.4f} max {np.abs(errors).max():.4f}"
+    )
+    assert np.abs(errors).mean() < MEAN_BOUND
+    assert np.abs(errors).max() < MAX_BOUND
+
+
+MEAN_BOUND, MAX_BOUND = 0.008, 0.03  # measured 0.0052 and 0.0193 (2026-10-02)

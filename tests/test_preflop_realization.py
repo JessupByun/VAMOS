@@ -100,3 +100,45 @@ def test_held_back_gto_wizard_spot():
         assert abs(100 * prior @ (ours[0] - theirs[0])) < fold_gap, name
         same = prior @ (ours.argmax(axis=0) == theirs.argmax(axis=0))
         assert same >= agreement, name
+
+
+@pytest.mark.slow
+def test_chips_nearly_balance_three_handed_at_a_solved_strategy():
+    # Every seat values each multiway flop by its own exact hand and the others' buckets,
+    # weighted by the hands they actually hold there. Weighting buckets as dealt instead
+    # created +0.04bb a hand three-handed (+0.11 four-handed); measured +0.0055 now.
+    solver = Solver(build(3, 50), ChipPayoffs(flop=Realization(50)))
+    solver.run(200)
+    assert abs(solver.solution().ev.sum()) < 0.015
+
+
+@pytest.mark.parametrize(("players", "sb", "bb"), [(3, 1, 2), (4, 2, 3)])
+def test_the_small_blind_is_out_of_position_against_the_big_blind(players, sb, bb):
+    model = Realization(50, theta=THETA, out_of_position=0.8)
+    terminal = Terminal(
+        tuple(1.0 if p in (sb, bb) else 0.0 for p in range(players)), (sb, bb), "flop"
+    )
+    assert (model._factor(terminal, sb), model._factor(terminal, bb)) == (0.8, 1.0)
+
+
+def test_heads_up_position_goes_to_the_right_player():
+    # The small blind acts last after the flop heads-up, so it keeps more than its raw equity.
+    payoffs, raw = ChipPayoffs(flop=Realization(50)), ChipPayoffs()
+    terminal = Terminal((3.0, 3.0), (0, 1), "flop")
+    reach = [np.ones(169), np.ones(169)]
+    prior = matchups.COMBO_COUNTS / 1326
+    assert prior @ payoffs(terminal, 0, reach) > prior @ raw(terminal, 0, reach)
+    assert prior @ payoffs(terminal, 1, reach) < prior @ raw(terminal, 1, reach)
+
+
+def test_three_way_flops_favor_the_last_to_act_and_vanish_when_stacks_are_short():
+    model = Realization(50)
+    flat = [np.ones((169, 40))] * 2
+    deep = Terminal((1.0, 1.0, 1.0), (0, 1, 2), "flop")  # BTN acts last
+    btn = model.multiway(deep, 0, [1, 2], flat)
+    sb = model.multiway(deep, 1, [0, 2], flat)
+    assert btn.mean() > sb.mean()
+    raw = multiway.load().share[3][..., 0]
+    assert btn.mean() > raw.mean()
+    shallow = Terminal((49.9, 49.9, 49.9), (0, 1, 2), "flop")  # 0.1bb behind: nearly all in
+    assert np.allclose(model.multiway(shallow, 0, [1, 2], flat), raw, atol=0.01)

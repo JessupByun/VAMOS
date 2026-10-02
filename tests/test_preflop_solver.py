@@ -61,11 +61,13 @@ def test_push_fold_matches_holdem_resources(stack):
 
 
 @pytest.mark.parametrize(
-    ("players", "bound"), [(3, 0.01), pytest.param(4, 0.02, marks=pytest.mark.slow)]
+    ("players", "bound"), [(3, 0.015), pytest.param(4, 0.04, marks=pytest.mark.slow)]
 )
 def test_chips_nearly_balance_with_more_players(players, bound):
     # Exact zero-sum only heads-up; with more players the bucketed multiway odds differ
-    # slightly between seats (+0.009bb a hand three-handed after solving, 2026-10-02).
+    # slightly between seats. A uniform strategy sends whole buckets into multiway pots,
+    # the worst case for buckets split by hand type: +0.010bb a hand three-handed and
+    # +0.032 four-handed (2026-10-02); solved strategies balance better (+0.004 three-handed).
     tree = build(players, 50)
     uniform = {d.id: np.full((len(d.actions), 169), 1 / len(d.actions)) for d in tree.decisions}
     ev, _ = evaluate(tree, PAYOFFS, uniform)
@@ -89,3 +91,43 @@ def test_the_average_strategy_is_weighted_by_own_reach():
     solver = Solver(build(2, 50), ChipPayoffs(flop=Realization(50)))
     solver.run(300)
     assert solver.solution().nash_conv * 1000 < 0.85
+
+
+def test_best_response_matches_a_closed_form():
+    # Heads-up push/fold at 10bb with the small blind jamming a fixed range: the big blind's
+    # best response can be computed hand by hand straight from the matchup tables.
+    from vamos.preflop.matchups import load
+    from vamos.preflop.solver import PRIOR
+
+    m = load()
+    tree = build(2, 10, PUSH_FOLD)
+    jam = (m.equity @ PRIOR > 0.55).astype(float)  # a fixed jamming range
+    calls = np.full(169, 0.5)
+    strategy = {
+        tree.root.id: np.stack([1 - jam, jam]),
+        tree.decisions[1].id: np.stack([1 - calls, calls]),
+    }
+    _, best = evaluate(tree, PAYOFFS, strategy)
+    jams = m.given @ jam  # for each class of the big blind, how often the small blind jams
+    folds = m.given @ (1 - jam)
+    call = np.array([(m.given[j] * jam) @ (20 * (1 - m.equity[:, j]) - 10) for j in range(169)])
+    big_blind = folds * 0.5 + np.maximum(-jams, call)
+    assert best[1] == pytest.approx(PRIOR @ big_blind, abs=1e-9)
+    # And the small blind's best response against the big blind's fixed calling range.
+    calling = calls
+    jam_value = (m.given * (1 - calling)) @ np.ones(169) * 1.0 + np.array(
+        [(m.given[i] * calling) @ (20 * m.equity[i] - 10) for i in range(169)]
+    )
+    small_blind = np.maximum(-0.5, jam_value)
+    assert best[0] == pytest.approx(PRIOR @ small_blind, abs=1e-9)
+
+
+def test_action_values_agree_with_the_evs():
+    solution = solve(10)
+    values = action_values(solution.tree, PAYOFFS, solution.strategy, ())
+    _, strategy = solution.at(())
+    from vamos.preflop.solver import PRIOR
+
+    assert PRIOR @ (strategy * values).sum(axis=0) == pytest.approx(solution.ev[0], abs=1e-9)
+    # Aces gain far more by jamming than by folding (about 3.5bb at 10bb).
+    assert values[1, 0] - values[0, 0] > 3

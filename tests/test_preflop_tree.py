@@ -82,3 +82,18 @@ def test_every_terminal_balances(players):
             assert all(terminal.committed[p] == 50 for p in terminal.active)
         if terminal.kind == "flop":
             assert len({terminal.committed[p] for p in terminal.active}) == 1
+
+
+def test_a_limper_or_completed_small_blind_may_call_a_three_bet():
+    # Only a player who has posted nothing but a blind is barred from calling a 3-bet.
+    assert "call" in at(build(4, 50), "call", "raise 4", "raise 12", "fold").actions
+    assert "call" in at(build(3, 50), "call", "call", "raise 5", "raise 15").actions
+
+
+def test_squeeze_size_grows_with_each_caller():
+    assert at(build(4, 50), "raise 2.5", "call", "call").actions == (
+        "fold",
+        "call",
+        "raise 12.5",
+        "raise 15",
+    )

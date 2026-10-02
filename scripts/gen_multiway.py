@@ -4,6 +4,7 @@ and four-way pots (see vamos.preflop.multiway).
 Run: uv run python scripts/gen_multiway.py
 """
 
+import os
 import tempfile
 import time
 from datetime import UTC, datetime
@@ -34,6 +35,10 @@ def _deals(hero: int, labels: np.ndarray, players: int) -> tuple[np.ndarray, np.
 
 
 def main() -> None:
+    # Workers inherit this environment; without it each starts its own pool of math-library
+    # threads and the machine ends up oversubscribed many times over.
+    for var in ("VECLIB_MAXIMUM_THREADS", "OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS"):
+        os.environ.setdefault(var, "1")
     started = time.monotonic()
     gen = np.random.default_rng(SEED)
     boards = np.array([gen.choice(52, size=5, replace=False) for _ in range(BOARDS)])
@@ -45,8 +50,9 @@ def main() -> None:
         path = str(Path(tmp) / "ranks.npy")
         np.save(path, ranks)
         del ranks
-        for players, k in BUCKETS.items():
-            labels = buckets(equity, k)
+        for players, split in BUCKETS.items():
+            labels = buckets(equity, split)
+            k = sum(split)
             with Pool(initializer=_load, initargs=(path,)) as workers:
                 rows = workers.map(
                     partial(_deals, labels=labels, players=players), range(len(matchups.CLASSES))
@@ -55,7 +61,8 @@ def main() -> None:
             shares = np.stack([r[0] for r in rows]).reshape(*shape, players)
             counts = np.stack([r[1] for r in rows]).reshape(shape)
             provenance = (
-                f"{players}-way: {k} opponent buckets (k-means on heads-up equity rows), "
+                f"{players}-way: {k} opponent buckets ({split[0]} pair, {split[1]} suited, "
+                f"{split[2]} offsuit; k-means on heads-up equity rows), "
                 f"{DEALS[players]} deals per class over {BOARDS} boards, seed {SEED}, "
                 f"fewest deals in a cell {int(counts.min())}; "
                 f"generated {datetime.now(UTC):%Y-%m-%d}"

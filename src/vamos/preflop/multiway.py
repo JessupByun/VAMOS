@@ -27,27 +27,37 @@ import eval7
 import numpy as np
 
 from vamos.cards import RANKS, SUITS, hand_class
-from vamos.preflop.matchups import INDEX
+from vamos.preflop.matchups import CLASSES, INDEX
 
 DATA = Path(__file__).parent / "data"
-# Opponent buckets per player count. Keeping pairs, suited and offsuit hands in separate
-# buckets measured worse (mean error 0.59 vs 0.44 points), so buckets mix them.
-BUCKETS = {3: 40, 4: 16}
+# Opponent buckets per player count, split between pairs, suited and offsuit hands. Ranges
+# that reach multiway pots keep the suited members of a mixed bucket and drop the offsuit
+# ones, which mixed buckets cannot see: on solved 3- and 4-way spots they overrated every
+# hand by 2.0 points on average, split buckets by 0.7 (measured 2026-10-02; a comparison on
+# top-X% ranges, which take whole buckets, had wrongly favored mixed buckets).
+BUCKETS = {3: (6, 17, 17), 4: (3, 6, 7)}
 
 DECK = tuple(r + s for r in RANKS for s in SUITS)
 COMBOS = np.array(list(combinations(range(52), 2)))  # (1326, 2) card indices
 COMBO_CLASS = np.array([INDEX[hand_class(DECK[a], DECK[b])] for a, b in COMBOS])
 
 
-def buckets(equity: np.ndarray, k: int, seed: int = 0) -> np.ndarray:
+def buckets(equity: np.ndarray, split: tuple[int, int, int], seed: int = 0) -> np.ndarray:
     """
-    Group the 169 classes into k buckets by their rows of heads-up equity (k-means),
+    Group the 169 classes into buckets: `split` gives how many for pairs, suited and offsuit
+    hands, each group clustered by its rows of heads-up equity (k-means). Buckets are
     numbered from strongest to weakest.
     """
-    labels = _kmeans(equity, k, seed)
-    strength = np.array([equity[labels == b].mean() for b in range(k)])
-    rank = np.empty(k, dtype=np.int64)
-    rank[np.argsort(-strength)] = np.arange(k)
+    kinds = np.array([0 if len(c) == 2 else 1 if c[2] == "s" else 2 for c in CLASSES])
+    labels = np.zeros(len(CLASSES), dtype=np.int64)
+    offset = 0
+    for kind, k in enumerate(split):
+        members = np.flatnonzero(kinds == kind)
+        labels[members] = offset + _kmeans(equity[members], k, seed)
+        offset += k
+    strength = np.array([equity[labels == b].mean() for b in range(offset)])
+    rank = np.empty(offset, dtype=np.int64)
+    rank[np.argsort(-strength)] = np.arange(offset)
     return rank[labels]
 
 

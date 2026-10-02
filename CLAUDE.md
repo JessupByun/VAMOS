@@ -2,7 +2,7 @@
 
 VAMOS (PAIv2) is a real-time poker assistant for PokerNow NLH cash games: a Chrome MV3 extension reads the table, a local Python backend (launched by Chrome native messaging) does the math, and Claude gives postflop advice with the user's opponent profiles in context.
 The approved plan, with every design decision and the phase list, is in `~/.claude/plans/im-starting-a-new-ticklish-yao.md`.
-Current phase: P0 (bootstrap + spikes).
+Current phase: P2 (engine and the preflop baseline; P0 and P1 are done).
 
 ## Commands
 

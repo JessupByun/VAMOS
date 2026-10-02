@@ -4,9 +4,10 @@ Terminal values for the preflop solver, as each player's counterfactual value pe
 Card removal is exact between two players: for our class i, an opponent's class j comes
 with probability counts[i, j] / sum(counts[i]) (`Matchups.given`). With three or four
 players dealt, players who folded carry no card removal (named approximation: our blockers
-do not change how often the others fold), because weighting every player by each seat's
-own cards gives each seat different odds for the same deal and the chips stop summing to
-zero (+0.023bb a hand three-handed, against +0.0075bb this way, measured 2026-10-02).
+do not change how often the others fold; docs/preflop.md gives its measured size), because
+weighting every player by each seat's own cards gives each seat different odds for the same
+deal and the chips stop summing to zero. With the rule, fold-outs and two-way pots balance
+exactly; what imbalance is left comes from the bucketed three- and four-way tables.
 Pots with three or four players still in use the bucketed tables in `multiway`.
 
 Pots that see a flop are valued by a flop model; without one they are valued at raw

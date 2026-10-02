@@ -1,7 +1,10 @@
 """
 Fit the realization weights in vamos.preflop.realization to GTO Wizard's heads-up 50bb
-solution with a 2.1bb small-blind open, then check them once on the held-back 3.5bb open.
-Raw equity is reported alongside as the baseline to beat.
+solution with a 2.1bb small-blind open, then check them on its 3.5bb open. Raw equity is
+reported alongside as the baseline to beat. Four model variants are fitted from four fixed
+starting points each, and the lowest loss on the 2.1bb spot is chosen; the 3.5bb spot is
+not used for fitting or choosing, but it was looked at while this procedure was developed,
+so it is a check rather than an untouched holdout.
 
 Data: tests/corpus/gtowizard/hu50.json (gitignored; private, non-commercial use only).
 Run: uv run python scripts/fit_realization.py
@@ -97,9 +100,27 @@ class Variant:
         cap = float(np.exp(x[k + 1])) if self.capped else None
         return theta, float(np.exp(x[k])), cap
 
-    def start(self) -> np.ndarray:
-        x = [*realization.THETA[np.array(self.features)], np.log(realization.OUT_OF_POSITION)]
-        return np.array(x + ([np.log(2.0)] if self.capped else []))
+    def starts(self) -> list[np.ndarray]:
+        """
+        Fixed starting points, independent of the values currently in realization.py (an
+        earlier version started from those, so reruns drifted): no hand effects, a plausible
+        prior, and two seeded random points.
+        """
+        mask = np.array(self.features)
+        prior = np.array([1.0, 0.5, 0.5, 1.0, 0.0])[mask]
+        oop = np.log(0.92 / 1.08)
+        tail = [np.log(2.0)] if self.capped else []
+        points = [
+            np.array([*np.zeros(mask.sum()), oop, *tail]),
+            np.array([*prior, oop, *tail]),
+        ]
+        for seed in (1, 2):
+            gen = np.random.default_rng(seed)
+            random = [*gen.normal(0, 1, mask.sum()), oop + gen.normal(0, 0.2)]
+            points.append(
+                np.array(random + ([np.log(2.0) + gen.normal(0, 0.3)] if self.capped else []))
+            )
+        return points
 
 
 FOUR = (True, True, True, True, False)
@@ -239,21 +260,19 @@ def describe(
 def main() -> None:
     raw = json.loads(DATA.read_text())["spots"]
     train, test = load_spot(TRAIN, raw[TRAIN]), load_spot(TEST, raw[TEST])
-    # Variants are compared on the tuning spot only; the held-back spot is looked at once,
-    # for the chosen one.
+    # Variants and starting points are compared on the tuning spot only.
     fitted = []
     for variant in VARIANTS:
-        best = nelder_mead(lambda x, v=variant: loss(train, v, x), variant.start())
-        value = loss(train, variant, best)
-        fitted.append((value, variant, best))
-        theta, oop, cap = variant.unpack(best)
-        print(f"{variant.name}: tuning loss {value:.5f}")
-        describe(train, "  model", theta, oop, cap)
+        for n, start in enumerate(variant.starts()):
+            best = nelder_mead(lambda x, v=variant: loss(train, v, x), start)
+            value = loss(train, variant, best)
+            fitted.append((value, variant, best))
+            print(f"{variant.name}, start {n}: tuning loss {value:.5f}", flush=True)
     value, variant, best = min(fitted, key=lambda f: f[0])
     theta, oop, cap = variant.unpack(best)
     print(f"\nchosen: {variant.name}")
     print(f"THETA = {np.round(theta, 4).tolist()}  OUT_OF_POSITION = {oop:.4f}  CAP = {cap}")
-    for spot, role in ((train, "tuning"), (test, "held-back test")):
+    for spot, role in ((train, "tuning"), (test, "check")):
         print(f"{spot.name}bb open ({role}), actions fold / call / raise:")
         describe(spot, "raw equity", None, 1.0)
         describe(spot, "model", theta, oop, cap)
