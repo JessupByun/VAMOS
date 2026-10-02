@@ -14,7 +14,7 @@ PROFILES = ProfileSet(
 
 def test_profile_player_id_wins(tmp_path):
     identity = IdentityMap(tmp_path / "identity.json")
-    assert identity.resolve("Qw3rTy7UiO", PROFILES) == Resolution("profile", "alex")
+    assert identity.resolve("Qw3rTy7UiO", PROFILES) == Resolution("profile", "alex", "player_id")
 
 
 def test_unknown_ids_need_asking(tmp_path):
@@ -29,14 +29,14 @@ def test_answers_are_remembered_across_restarts(tmp_path):
     identity.assign("stranger99", None)
 
     reloaded = IdentityMap(path)
-    assert reloaded.resolve("newDevice1", PROFILES) == Resolution("profile", "rj")
-    assert reloaded.resolve("stranger99", PROFILES) == Resolution("none")
+    assert reloaded.resolve("newDevice1", PROFILES) == Resolution("profile", "rj", "answer")
+    assert reloaded.resolve("stranger99", PROFILES) == Resolution("none", source="answer")
 
 
 def test_profile_player_id_overrides_an_earlier_answer(tmp_path):
     identity = IdentityMap(tmp_path / "identity.json")
     identity.assign("Qw3rTy7UiO", "rj")
-    assert identity.resolve("Qw3rTy7UiO", PROFILES) == Resolution("profile", "alex")
+    assert identity.resolve("Qw3rTy7UiO", PROFILES) == Resolution("profile", "alex", "player_id")
 
 
 def test_an_answer_pointing_at_a_deleted_profile_asks_again(tmp_path):
@@ -51,3 +51,12 @@ def test_only_answers_are_stored(tmp_path):
     identity.assign("newDevice1", "rj")
     identity.assign("stranger99", None)
     assert json.loads(path.read_text()) == {"newDevice1": "rj", "stranger99": None}
+
+
+def test_forgetting_an_answer_asks_again(tmp_path):
+    path = tmp_path / "identity.json"
+    identity = IdentityMap(path)
+    identity.assign("stranger99", None)
+    identity.forget("stranger99")
+    identity.forget("never-answered")
+    assert IdentityMap(path).resolve("stranger99", PROFILES) == Resolution("unknown")

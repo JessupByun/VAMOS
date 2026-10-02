@@ -1,7 +1,14 @@
 import { render } from "preact";
 import { useEffect, useState } from "preact/hooks";
 
-import type { BackendStatus, HostAck, PanelToWorker, Players, WorkerToPanel } from "../shared/protocol";
+import type {
+  BackendStatus,
+  HostAck,
+  PanelToWorker,
+  PlayerInfo,
+  Players,
+  WorkerToPanel,
+} from "../shared/protocol";
 import "./panel.css";
 
 const RECONNECT_MIN_MS = 1000;
@@ -57,6 +64,48 @@ function useWorkerState() {
   return { status, acks, players };
 }
 
+const NO_PROFILE = "__none__";
+const ASK_AGAIN = "__ask__";
+
+function TableRow({ player, profiles }: { player: PlayerInfo; profiles: Players["profiles"] }) {
+  const label = player.profile
+    ? `${player.profile.name} (${player.profile.tag ?? "no tag"})`
+    : player.status === "none"
+      ? "no profile"
+      : "unknown, answer on the table";
+  // Answers recognized through a profile's player_id are changed in that file, not here.
+  if (player.source !== "answer") {
+    return (
+      <li>
+        {player.name}: {label}
+      </li>
+    );
+  }
+  const change = (event: Event) => {
+    const value = (event.currentTarget as HTMLSelectElement).value;
+    if (value === ASK_AGAIN) {
+      port?.postMessage({ type: "forget_identity", playerId: player.id } satisfies PanelToWorker);
+    } else {
+      const profile = value === NO_PROFILE ? null : value;
+      port?.postMessage({ type: "assign_identity", playerId: player.id, profile } satisfies PanelToWorker);
+    }
+  };
+  return (
+    <li>
+      {player.name}:{" "}
+      <select aria-label={`Change who ${player.name} is`} value={player.profile?.key ?? NO_PROFILE} onChange={change}>
+        {profiles.map((p) => (
+          <option key={p.key} value={p.key}>
+            {p.name}
+          </option>
+        ))}
+        <option value={NO_PROFILE}>No profile</option>
+        <option value={ASK_AGAIN}>Ask again on the table</option>
+      </select>
+    </li>
+  );
+}
+
 function Panel() {
   const { status, acks, players } = useWorkerState();
   const requestSnapshot = () =>
@@ -87,9 +136,7 @@ function Panel() {
           <h2>Table</h2>
           <ul>
             {players.players.map((p) => (
-              <li key={p.id}>
-                {p.name}: {p.profile ? `${p.profile.name} (${p.profile.tag ?? "no tag"})` : p.status === "none" ? "no profile" : "unknown, answer on the table"}
-              </li>
+              <TableRow key={p.id} player={p} profiles={players.profiles} />
             ))}
           </ul>
         </section>

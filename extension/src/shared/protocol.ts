@@ -45,10 +45,18 @@ export interface AssignIdentity {
   profile: string | null;
 }
 
+/** Drop an answer so the table asks "who is this?" again. */
+export interface ForgetIdentity {
+  type: "forget_identity";
+  playerId: string;
+}
+
 export interface PlayerInfo {
   id: string;
   name: string;
   status: "profile" | "none" | "unknown";
+  /** A profile's player_id (fixed) or the user's own answer (changeable). */
+  source: "player_id" | "answer" | null;
   profile: { key: string; name: string; tag: string | null } | null;
   tonight: { hands: number; vpip: number } | null;
 }
@@ -73,7 +81,7 @@ export interface HostAck {
 
 export type ContentToWorker = LogPage | DomSnapshot | SeatsReport | AssignIdentity;
 export type WorkerToContent = BackendStatus | SnapshotRequest | Players;
-export type PanelToWorker = SnapshotRequest;
+export type PanelToWorker = SnapshotRequest | AssignIdentity | ForgetIdentity;
 export type WorkerToPanel = BackendStatus | HostAck | Players;
 export type HostToWorker =
   | { type: "ready"; version: string }

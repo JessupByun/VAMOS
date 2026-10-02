@@ -187,3 +187,20 @@ test("tonight's VPIP appears once hands are played", async () => {
   await expect(badge(page, KNOWN_ID)).toHaveText("alex · Calling station · VPIP 1/1 tonight");
   await expect(badge(page, STRANGER_ID)).toContainText("new guy");
 });
+
+test("an answer can be changed or cleared from the side panel", async () => {
+  const page = await openTable();
+  await badge(page, STRANGER_ID).locator("select").selectOption({ label: "No profile" });
+  await expect(badge(page, STRANGER_ID)).toHaveText("new guy · no profile");
+
+  const panel = await harness.context.newPage();
+  await panel.goto(PANEL_URL);
+  const change = panel.getByRole("combobox", { name: "Change who new guy is" });
+  await change.selectOption({ label: "alex" });
+  await expect(badge(page, STRANGER_ID)).toHaveText("alex · Calling station");
+
+  await change.selectOption({ label: "Ask again on the table" });
+  await expect(badge(page, STRANGER_ID).locator("select")).toBeVisible();
+  // Recognized through a profile's player_id, so not changeable in VAMOS.
+  await expect(panel.getByRole("combobox", { name: "Change who alex is" })).toHaveCount(0);
+});

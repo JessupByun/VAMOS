@@ -63,6 +63,9 @@ class Backend:
         if kind == "assign_identity":
             self.identity.assign(message["playerId"], message.get("profile"))
             return [self._players(game_id) for game_id in self.seated]
+        if kind == "forget_identity":
+            self.identity.forget(message["playerId"])
+            return [self._players(game_id) for game_id in self.seated]
         log.warning("unknown message type %r", kind)
         return []
 
@@ -91,6 +94,7 @@ class Backend:
                     "id": pid,
                     "name": seated.get("name", ""),
                     "status": resolution.kind,
+                    "source": resolution.source,
                     "profile": (
                         {"key": profile.key, "name": profile.name, "tag": profile.tag}
                         if profile

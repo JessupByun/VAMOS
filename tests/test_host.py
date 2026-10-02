@@ -91,7 +91,11 @@ def test_answering_who_is_this_updates_badges_and_persists(backend, tmp_path):
         {"type": "assign_identity", "playerId": "zzzzzzzzzz", "profile": "alex"}
     )
     assert players["players"][1]["profile"]["key"] == "alex"
+    assert players["players"][1]["source"] == "answer"
+    assert players["players"][0]["source"] == "player_id"
     assert json.loads((tmp_path / "data/identity.json").read_text()) == {"zzzzzzzzzz": "alex"}
+    [players] = backend.handle({"type": "forget_identity", "playerId": "zzzzzzzzzz"})
+    assert players["players"][1]["status"] == "unknown"
 
 
 def test_log_pages_update_tonight_counts_without_saving_anything(backend, tmp_path):

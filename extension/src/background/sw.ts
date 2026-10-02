@@ -91,7 +91,11 @@ chrome.runtime.onConnect.addListener((port) => {
     panelPorts.add(port);
     port.postMessage(status satisfies WorkerToPanel);
     port.onMessage.addListener((message: PanelToWorker) => {
-      for (const content of contentPorts) content.postMessage(message satisfies WorkerToContent);
+      if (message.type === "snapshot_request") {
+        for (const content of contentPorts) content.postMessage(message satisfies WorkerToContent);
+      } else {
+        host?.postMessage(message);
+      }
     });
     port.onDisconnect.addListener(() => panelPorts.delete(port));
   }
