@@ -24,6 +24,12 @@ class Profile:
     player_ids: tuple[str, ...]
     text: str
 
+    @property
+    def body(self) -> str:
+        """The free-form Markdown after the frontmatter."""
+        match = _FRONTMATTER.match(self.text)
+        return match.group(2).strip() if match else self.text.strip()
+
 
 def _strings(value: object, field: str) -> tuple[str, ...]:
     if value is None:
