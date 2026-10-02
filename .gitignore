@@ -1,0 +1,27 @@
+# Python
+.venv/
+/venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.hypothesis/
+
+# Extension build
+node_modules/
+extension/dist/
+
+# Secrets
+.env
+cookie_file.pkl
+
+# Private data: profiles are Jessup's, data/ is VAMOS's local state
+profiles/*
+!profiles/_TEMPLATE.md
+!profiles/_PROMPT.md
+data/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
