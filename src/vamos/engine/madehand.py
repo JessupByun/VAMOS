@@ -113,3 +113,45 @@ def describe(hero: Sequence[str], board: Sequence[str]) -> str:
     made = _made(hero, board)
     draws = _draws(hero, board, made) if len(board) < 5 else []
     return " + ".join([made, *draws])
+
+
+_KINDS = (
+    "High Card",
+    "Pair",
+    "Two Pair",
+    "Trips",
+    "Straight",
+    "Flush",
+    "Full House",
+    "Quads",
+    "Straight Flush",
+)
+_LABELS = {"Straight": "straight", "Flush": "flush"}
+
+
+def improving_cards(hero: Sequence[str], board: Sequence[str]) -> dict[str, list[str]]:
+    """
+    Before the river: every unseen card that gives Hero a straight, a flush, or a full house
+    or better (grouped as "full house or better") that Hero does not already have, unless the
+    board alone would then show the same hand. Claude is given these exact lists so it never
+    counts outs, or invents draws, by itself.
+    """
+    if len(board) not in (3, 4):
+        return {}
+    dead = {*hero, *board}
+    before = _KINDS.index(eval7.handtype(_evaluate([*hero, *board])))
+    out: dict[str, list[str]] = {}
+    for rank in reversed(RANKS):
+        for suit in "shdc":
+            card = rank + suit
+            if card in dead:
+                continue
+            value = _evaluate([*hero, *board, card])
+            kind = eval7.handtype(value)
+            if _KINDS.index(kind) <= before or _KINDS.index(kind) < _KINDS.index("Straight"):
+                continue
+            new_board = [*board, card]
+            if len(new_board) == 5 and _evaluate(new_board) == value:
+                continue  # the board plays: everyone has it
+            out.setdefault(_LABELS.get(kind, "full house or better"), []).append(card)
+    return out

@@ -4,6 +4,7 @@ against: the betting state, the actions the rules allow, and the facts sent with
 """
 
 from vamos.brain.answer import Spot
+from vamos.engine.madehand import improving_cards
 from vamos.engine.state import VOLUNTARY, Decision
 from vamos.log.hands import Hand
 
@@ -62,6 +63,11 @@ def claude_facts(hand: Hand, spot: Decision, card: dict) -> dict:
         "effective_stack_bb": round(effective / bb, 2),
         "stack_to_pot_ratio": round(effective / spot.pot, 2) if spot.pot else None,
         "hero_hand": card.get("madeHand"),
+        # Exact, so Claude never counts outs itself; empty means no such draw.
+        "next_card_improves_hero_to": {
+            made: {"count": len(cards), "cards": cards}
+            for made, cards in improving_cards(spot.hero_cards, spot.board).items()
+        },
         "hero_equity_vs_random_hands_pct": card.get("equity"),
         "opponents_in_hand": len(spot.opponents),
     }

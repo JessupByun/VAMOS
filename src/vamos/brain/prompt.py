@@ -32,6 +32,9 @@ How to decide:
 - The engine's facts in the message (pot, price, stack depths, Hero's made hand) are exact.
   Equities there are against random hands, not the opponents' ranges; adjust for the
   ranges their actions and profiles imply.
+- next_card_improves_hero_to lists every card that would give Hero a straight, a flush, or a
+  full house or better. Hero has no other such draws: never claim one it does not list, and
+  take outs from its counts rather than counting them yourself.
 - Give a mixed strategy only where mixing is genuinely right; a clear spot gets one action
   at 100%.
 

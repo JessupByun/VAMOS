@@ -1,6 +1,6 @@
 import pytest
 
-from vamos.engine.madehand import describe
+from vamos.engine.madehand import describe, improving_cards
 
 
 @pytest.mark.parametrize(
@@ -63,3 +63,25 @@ def test_a_draw_made_only_by_the_board_is_not_the_heros():
 )
 def test_big_hands(hero, board, expected):
     assert describe(hero, board) == expected
+
+
+def test_improving_cards_are_exact():
+    # A gutshot: only a 3 makes the straight (a 7 does not).
+    assert improving_cards(["2d", "6c"], ["4c", "5h", "Jc"]) == {
+        "straight": ["3s", "3h", "3d", "3c"]
+    }
+    # Bottom pair with no straight or flush draw at all.
+    assert improving_cards(["Td", "4d"], ["5h", "4s", "6s"]) == {}
+    # A nut flush draw: the nine other hearts.
+    hearts = improving_cards(["Ah", "Kh"], ["2h", "7h", "9c"])
+    assert len(hearts["flush"]) == 9 and all(c[1] == "h" for c in hearts["flush"])
+    # A set improves to a full house or better on any card pairing the board or making quads.
+    assert len(improving_cards(["9s", "9d"], ["9c", "5h", "2d"])["full house or better"]) == 7
+    # A card that puts a straight on the board for everyone is no out.
+    assert "straight" not in improving_cards(["As", "Ad"], ["5c", "6d", "7h", "8s"]) or all(
+        c[0] != "4" and c[0] != "9"
+        for c in improving_cards(["As", "Ad"], ["5c", "6d", "7h", "8s"])["straight"]
+    )
+    assert (
+        improving_cards(["As", "Kd"], ["Qs", "8h", "4c", "2d", "7s"]) == {}
+    )  # the river: nothing to come
