@@ -73,9 +73,9 @@ def _bet_faced(hand: Hand, hero: str, labels: dict[str, str]) -> dict | None:
 
 
 def _acts_last(hand: Hand, hero: str) -> bool:
-    """Whether Hero acts last on this street among the players who can still bet."""
+    """Whether Hero is in position: last to act among the players still in the hand."""
     folded = hand.folded()
-    live = [pid for pid in seat_order(hand) if pid not in folded and _behind(hand, pid) > 0]
+    live = [pid for pid in seat_order(hand) if pid not in folded]
     return bool(live) and live[-1] == hero
 
 

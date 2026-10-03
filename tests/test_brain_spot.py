@@ -118,3 +118,23 @@ def test_checked_to_the_hero_with_a_minimum_bet():
     h, spot = hand(DEEP, *FLOP, f"{P[V1]} checks", f"{P[V2]} checks")
     facts = claude_facts(h, HERO, spot, {}, {})
     assert facts["min_bet_bb"] == 1.0 and "bet_faced" not in facts
+
+
+def test_position_ignores_who_is_all_in():
+    # Heads-up, the hero in the big blind is first to act after the flop, also when the
+    # button has just gone all in.
+    rows = [
+        f"-- starting hand #9 (id: h9)  No Limit Texas Hold'em (dealer: {P[V1]}) --",
+        f"Player stacks: #1 {P[HERO]} (10.00) | #2 {P[V1]} (20.00)",
+        "Your hand is 2♦, 6♣",
+        f"{P[V1]} posts a small blind of 0.10",
+        f"{P[HERO]} posts a big blind of 0.20",
+        f"{P[V1]} calls 0.20",
+        f"{P[HERO]} checks",
+        "Flop:  [J♣, 5♥, 4♣]",
+        f"{P[HERO]} bets 0.20",
+        f"{P[V1]} raises to 19.80 and go all in",
+    ]
+    built = build_hands((100 + i, line) for i, line in enumerate(rows)).hands[-1]
+    spot = decision(built, HERO)
+    assert claude_facts(built, HERO, spot, {}, {})["hero_acts_last"] is False
