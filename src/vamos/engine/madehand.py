@@ -61,7 +61,9 @@ def _pair(hero: Sequence[str], board: Sequence[str]) -> str:
         else:
             quality = "weak kicker"
         return f"top pair, {quality}"
-    return "second pair" if position == 1 else "bottom pair"
+    if position == len(board_ranks) - 1:
+        return "bottom pair"
+    return ("second pair", "third pair", "fourth pair")[position - 1]
 
 
 def _two_pair(hero: Sequence[str], board: Sequence[str]) -> str:
@@ -124,17 +126,28 @@ def _draws(hero: Sequence[str], board: Sequence[str], made: str) -> list[str]:
     if "straight" not in made and _straights({c[0] for c in cards}) == _straights(
         {c[0] for c in board}
     ):
-        outs = 0
+        outs = []
         for rank in RANKS:
             with_hole = _straights({c[0] for c in cards} | {rank})
             board_only = _straights({c[0] for c in board} | {rank})
             if with_hole - board_only:
-                outs += 1
-        if outs >= 2:
-            draws.append("open-ended straight draw")
-        elif outs == 1:
+                outs.append(rank)
+        if len(outs) >= 2:
+            draws.append("open-ended straight draw" if _open_ended(cards) else "double gutshot")
+        elif len(outs) == 1:
             draws.append("gutshot")
     return draws
+
+
+def _open_ended(cards: Sequence[str]) -> bool:
+    """Four ranks in a row that a card at either end completes."""
+    values = {_value(c[0]) for c in cards}
+    if 12 in values:
+        values.add(-1)  # the ace also plays low
+    return any(
+        all(v + i in values for i in range(4)) and v - 1 >= -1 and v + 4 <= 12
+        for v in range(-1, 10)
+    )
 
 
 def describe(hero: Sequence[str], board: Sequence[str]) -> str:

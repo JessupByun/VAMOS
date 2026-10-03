@@ -1,15 +1,17 @@
 """
 How fast each preset answers a real-sized postflop request, and whether the cache works.
 
-Each preset is called twice with the same prefix (about 15k tokens: the contract, the
-strategy guide and four made-up profiles, so no real profile is sent): the first call
-writes the cache, the second should read it. Reports the time to the first event, to the
+Each preset is called three times with the same prefix (the role and four made-up profiles,
+about the size of the real one, so no real profile is sent): the first call writes the
+cache, the others should read it. A preset can be given an effort to try, e.g.
+"balanced:medium". Reports the time to the first event, to the
 first answer text and to the end, the cache counts and the cost, and saves the results to
 data/latency/. Spends real money (a few cents per run).
 
-Run: uv run python scripts/latency_spike.py [preset ...]
+Run: uv run python scripts/latency_spike.py [preset[:effort] ...]
 """
 
+import dataclasses
 import json
 import sys
 import time
@@ -25,7 +27,7 @@ from vamos.brain.pseudonyms import Pseudonyms
 from vamos.config import DATA_DIR
 from vamos.profiles import ProfileSet, parse_profile
 
-TARGET_TOKENS = 15_000
+TARGET_TOKENS = 3_000  # about what the user's three profiles come to
 
 PARAGRAPH = (
     "Opens wide from the button and calls 3-bets out of position with suited hands. "
@@ -100,6 +102,7 @@ def main() -> None:
     if not key:
         sys.exit("[VAMOS] no ANTHROPIC_API_KEY in the environment or .env")
     chosen = sys.argv[1:] or list(PRESETS)
+    runs_each = 3
     client = anthropic.Anthropic(api_key=key, max_retries=0, timeout=120)
     names = Pseudonyms()
     profiles = made_up_profiles(TARGET_TOKENS)
@@ -109,12 +112,16 @@ def main() -> None:
     print(f"[VAMOS] prefix: about {len(system.text) // 4} tokens")
     results = {}
     for name in chosen:
-        request = Request(PRESETS[name], system.blocks, [{"role": "user", "content": SPOT}])
-        runs = [one_call(client, request) for _ in range(2)]
+        preset_name, _, effort = name.partition(":")
+        preset = PRESETS[preset_name]
+        if effort:
+            preset = dataclasses.replace(preset, effort=effort)
+        request = Request(preset, system.blocks, [{"role": "user", "content": SPOT}])
+        runs = [one_call(client, request) for _ in range(runs_each)]
         results[name] = runs
         for i, run in enumerate(runs, 1):
             print(
-                f"{name:9} call {i}: first event {run['first_event_s']}s, answer text "
+                f"{name:16} call {i}: first event {run['first_event_s']}s, answer text "
                 f"{run['first_text_s']}s, done {run['total_s']}s, cache read {run['cache_read']}, "
                 f"write {run['cache_write']}, ${run['dollars']:.4f}"
             )

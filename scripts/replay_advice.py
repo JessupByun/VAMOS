@@ -12,6 +12,7 @@ Run: uv run python scripts/replay_advice.py [--preset balanced] [--lines 5,6,7] 
 """
 
 import argparse
+import dataclasses
 import json
 import re
 import threading
@@ -105,6 +106,7 @@ def street_line(street: str, board: list[str]) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--preset", default="balanced", choices=list(PRESETS))
+    parser.add_argument("--effort", help="override the preset's effort (low, medium, high, ...)")
     parser.add_argument("--lines", help="1-based lines of data/advice.jsonl (default: all)")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
@@ -156,9 +158,10 @@ def main() -> None:
         if args.dry_run:
             print(f"--- line {number}\n{message}\n")
             continue
-        request = Request(
-            PRESETS[args.preset], system.blocks, [{"role": "user", "content": message}]
-        )
+        preset = PRESETS[args.preset]
+        if args.effort:
+            preset = dataclasses.replace(preset, effort=args.effort)
+        request = Request(preset, system.blocks, [{"role": "user", "content": message}])
         started = time.monotonic()
         try:
             reply = provider.run(request, threading.Event())
@@ -185,16 +188,19 @@ def main() -> None:
             "old": {"chosen": entry.get("chosen"), "strategy": old_answer.get("strategy")},
             "new": new,
             "seconds": seconds,
+            "output_tokens": reply.usage.get("output_tokens"),
             "words": len(f"{new.get('why', '')} {new.get('plan', '')}".split()),
         }
         results.append(result)
         print(
             f"line {number:>2} {' '.join(spot['hero']['cards'])} on {' '.join(spot['board'])}: "
-            f"was {entry.get('chosen')}, now {new.get('mix')} ({seconds}s, {result['words']} words)"
+            f"was {entry.get('chosen')}, now {new.get('mix')} ({seconds}s, "
+            f"{result['output_tokens']} tokens out, {result['words']} words)"
         )
         print(f"   why: {new.get('why')}\n   plan: {new.get('plan')}")
     if results:
-        out = DATA_DIR / "replays" / f"{datetime.now():%Y-%m-%dT%H%M%S}-{args.preset}.json"
+        label = f"{args.preset}-{args.effort}" if args.effort else args.preset
+        out = DATA_DIR / "replays" / f"{datetime.now():%Y-%m-%dT%H%M%S}-{label}.json"
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(json.dumps(results, indent=2) + "\n")
         print(f"[VAMOS] {len(results)} spots, ${spent:.3f}, saved {out}")
