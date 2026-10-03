@@ -135,3 +135,29 @@ def test_the_price_of_calling_an_all_in_counts_only_what_hero_can_win():
     assert spot is not None
     assert (spot.to_call, spot.winnable) == (960, 2000)
     assert facts(spot)["need"] == 48
+
+
+def test_dead_blinds_are_not_capped_like_live_bets():
+    # A returning player posts a missing small blind (dead) and a big blind; nobody bets more
+    # than the hero can match, so everything in the pot is winnable.
+    lines = [
+        '-- starting hand #9 (id: h9)  No Limit Texas Hold\'em (dealer: "Hero @ heroid0001") --',
+        'Player stacks: #1 "Hero @ heroid0001" (10.00) | #2 "A @ aaaaaaaaa1" (10.00) | #3 "B @ bbbbbbbbb1" (10.00) | #4 "C @ ccccccccc1" (10.00)',
+        "Your hand is A♠, K♦",
+        '"A @ aaaaaaaaa1" posts a small blind of 0.10',
+        '"B @ bbbbbbbbb1" posts a big blind of 0.20',
+        '"C @ ccccccccc1" posts a missing small blind of 0.10',
+        '"C @ ccccccccc1" posts a missed big blind of 0.20',
+        '"C @ ccccccccc1" checks',
+        '"Hero @ heroid0001" calls 0.20',
+        '"A @ aaaaaaaaa1" calls 0.20',
+        '"B @ bbbbbbbbb1" checks',
+        "Flop:  [K♠, 7♦, 2♣]",
+        '"A @ aaaaaaaaa1" checks',
+        '"B @ bbbbbbbbb1" checks',
+        '"C @ ccccccccc1" bets 0.40',
+    ]
+    view = TableView("heroid0001", ("As", "Kd"), ("Ks", "7d", "2c"), 130)
+    spot = current_spot(log_of(lines), view)
+    assert spot is not None
+    assert spot.winnable == spot.pot + spot.to_call == 170

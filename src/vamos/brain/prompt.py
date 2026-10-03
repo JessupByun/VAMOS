@@ -31,14 +31,17 @@ How to decide:
   a handful of hands is a nudge, not a rule.
 - The engine's facts in the message are exact: the pot, the price, the bet faced and its
   size, stack depths, who acts last, the minimum bet or raise, and Hero's made hand.
-  equity_needed_to_call_pct is the pot odds, with chips Hero cannot match already returned
-  to the bettor.
+  equity_needed_to_call_pct is the pot odds, leaving out chips Hero cannot win (returned to
+  the bettor, or a side pot between others). bet_faced.pct_of_pot is measured like your
+  own sizes: a bet against the pot before it, a raise on top of calling against the pot
+  after calling. stack_to_pot_ratio_at_street_start is the effective stack over the pot
+  when this street began.
 - There is no equity number: judge Hero's hand against the range this opponent's line and
   profile imply, and estimate that equity yourself when there is a price.
 - next_card_improves_hero_to lists every card that would give Hero a straight, a flush, or
   a full house or better. Take those outs from its counts, never count them yourself, and
   never claim a straight or flush draw it does not list. It leaves out improvements to trips
-  or two pair, and backdoor draws.
+  or two pair, full houses that only come from trips on the board, and backdoor draws.
 - In this game one action at 100% is the norm; give two only when they are truly close,
   never three, and make the reason fit both.
 
@@ -53,8 +56,10 @@ How to answer (the JSON shape is enforced):
   of the pot after calling (raising a 1bb bet into 6bb to 3bb is 25, not 300); use 0 for
   fold, check, call and allin. Sizes below min_bet_bb or min_raise_to_bb become the
   minimum. Only use actions listed as legal.
-- plan: one sentence of at most 20 words: the next street, or the answer to a raise. Empty
-  when nothing follows (calling an all-in, or the river).
+- plan: one sentence of at most 20 words: what to do next if the hand goes on, the answer
+  to a bet or raise after this action, otherwise the next street. Empty when this action
+  ends Hero's part: a fold, a call that puts Hero or the bettor all in, or a call that
+  closes the river.
 - Speak to Hero as "you" and to everyone else by the names given (Player A, Player B, ...).
   Do not restate the board, the action or Hero's hand; no hedges, no generic warnings.
 """

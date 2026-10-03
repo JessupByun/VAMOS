@@ -91,7 +91,14 @@ def test_improving_cards_are_exact():
         (["7c", "7d"], ["Qd", "Qh", "3s"], "pocket pair below the top card + the board's Queens"),
         (["Ac", "Jd"], ["Tc", "Ts", "3d", "7s", "Ah"], "top pair, good kicker + the board's 10s"),
         (["Ks", "Qd"], ["Kd", "Qh", "3s"], "two pair"),
-        (["As", "Kd"], ["Qd", "Qh", "3s", "3c"], "two pair on the board"),
+        (["As", "Kd"], ["Qd", "Qh", "3s", "3c"], "two pair on the board, Ace kicker"),
+        # The board's Kings outrank the hero's 4s, which do not play: one pair of Queens.
+        (["Qs", "4d"], ["Kh", "Kc", "Qd", "4s"], "second pair + the board's Kings"),
+        # Counterfeited: the board's Queens outrank the hero's 5s.
+        (["As", "5s"], ["Qd", "Qc", "5h", "Ah"], "top pair, weak kicker + the board's Queens"),
+        # A pocket pair below two board pairs does not play.
+        (["2s", "2d"], ["Qh", "Qc", "7d", "7s"], "two pair on the board"),
+        (["As", "5d"], ["Kh", "Kc", "Qd", "Qs"], "two pair on the board, Ace kicker"),
     ],
 )
 def test_a_pair_beside_a_board_pair_is_not_called_two_pair(hero, board, label):

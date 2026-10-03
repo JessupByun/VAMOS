@@ -9,7 +9,7 @@ blind anchors them instead.
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from vamos.log.hands import Action, Hand, Street
+from vamos.log.hands import DEAD_POSTS, Action, Hand, Street
 from vamos.money import Cents
 
 VOLUNTARY = {"check", "call", "bet", "raise", "fold"}
@@ -142,9 +142,16 @@ def decision(hand: Hand, hero: str) -> Decision | None:
     opponents = tuple(pid for pid in stacks if pid != hero and pid not in folded)
     behind = stacks[hero] - hand.put_in.get(hero, 0)
     to_call = min(max(0, hand.price - hand.street_bets.get(hero, 0)), behind)
-    hero_total = hand.put_in.get(hero, 0) + to_call
-    winnable = hero_total + sum(
-        min(put - hand.returned.get(pid, 0), hero_total)
+    # Dead posts (a missing small blind, antes) belong to the pot whoever wins it; only live
+    # chips are capped at what the hero can match.
+    dead: dict[str, Cents] = {}
+    for action in hand.actions:
+        if action.kind in DEAD_POSTS:
+            dead[action.player] = dead.get(action.player, 0) + action.added
+    hero_live = hand.put_in.get(hero, 0) - dead.get(hero, 0) + to_call
+    winnable = sum(dead.values()) + hero_live
+    winnable += sum(
+        min(put - hand.returned.get(pid, 0) - dead.get(pid, 0), hero_live)
         for pid, put in hand.put_in.items()
         if pid != hero
     )

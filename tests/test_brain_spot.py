@@ -108,9 +108,9 @@ def test_facing_an_all_in_bigger_than_the_hero():
     h, spot = hand(stacks, *FLOP, f"{P[V1]} bets 15.00 and go all in", f"{P[V2]} folds")
     facts = claude_facts(h, HERO, spot, {"need": 0}, {V1: "Player A"})
     assert facts["call_puts_hero_all_in"] is True
-    assert facts["stack_to_pot_ratio"] is None
+    assert facts["stack_to_pot_ratio_at_street_start"] == 2.44  # 4.40 behind, 1.80 pot
     assert facts["effective_stack_bb"] == 22.0  # the hero's 4.40 behind, not 0
-    assert facts["returned_to_bettor_if_called_bb"] == 53.0  # 15.00 bet, 4.40 matched
+    assert facts["chips_hero_cannot_win_bb"] == 53.0  # 15.00 bet, 4.40 matched
     assert facts["bet_faced"]["all_in"] is True
 
 
@@ -138,3 +138,31 @@ def test_position_ignores_who_is_all_in():
     built = build_hands((100 + i, line) for i, line in enumerate(rows)).hands[-1]
     spot = decision(built, HERO)
     assert claude_facts(built, HERO, spot, {}, {})["hero_acts_last"] is False
+
+
+def test_a_pot_sized_raise_reads_100_and_a_raise_short_of_a_full_one_is_all_in_only():
+    h, spot = hand(
+        DEEP,
+        *FLOP,
+        f"{P[V1]} checks",
+        f"{P[V2]} checks",
+        f"{P[HERO]} bets 1.80",
+        f"{P[V1]} raises to 7.20",
+        f"{P[V2]} folds",
+    )
+    facts = claude_facts(h, HERO, spot, {}, {V1: "Player A"})
+    assert facts["bet_faced"]["pct_of_pot"] == 100  # 5.40 on top of calling into 5.40
+    # 7.60 behind cannot make a full raise to 12.60, so PokerNow offers only all in.
+    assert legal(h, HERO, spot) == ["fold", "call", "allin"]
+    assert "min_raise_to_bb" not in facts
+
+
+def test_a_short_all_in_does_not_hide_the_bet_before_it():
+    stacks = {HERO: "10.00", V1: "10.00", V2: "2.00"}
+    h, spot = hand(stacks, *FLOP, f"{P[V1]} bets 1.00", f"{P[V2]} raises to 1.40 and go all in")
+    faced = claude_facts(h, HERO, spot, {}, {V1: "Player A", V2: "Player B"})["bet_faced"]
+    assert (faced["by"], faced["pct_of_pot"], faced["then_short_all_in_to_bb"]) == (
+        "Player A",
+        56,
+        7.0,
+    )

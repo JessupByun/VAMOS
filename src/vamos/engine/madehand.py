@@ -66,21 +66,30 @@ def _pair(hero: Sequence[str], board: Sequence[str]) -> str:
 
 def _two_pair(hero: Sequence[str], board: Sequence[str]) -> str:
     """
-    Two pair only when both pairs use Hero's cards. A pair of Hero's next to a pair on the
-    board is one pair, beaten by trips and bigger pairs, and is described as such.
+    Two pair only when both pairs that play use Hero's cards. A pair of Hero's beside a pair
+    on the board is one pair (trips and bigger pairs beat it), and a pair of Hero's below two
+    board pairs does not play at all.
     """
-    counts = Counter(c[0] for c in board)
-    board_pairs = sorted((r for r, n in counts.items() if n >= 2), key=_value, reverse=True)
-    h1, h2 = hero[0][0], hero[1][0]
-    own = h1 == h2 or (h1 in counts and counts[h1] == 1) or (h2 in counts and counts[h2] == 1)
-    if not board_pairs:
+    counts = Counter(c[0] for c in [*hero, *board])
+    playing = sorted((r for r, n in counts.items() if n >= 2), key=_value, reverse=True)[:2]
+    hero_ranks = {hero[0][0], hero[1][0]}
+    own = [r for r in playing if r in hero_ranks]
+    if len(own) == 2:
         return "two pair"
     if not own:
+        rest = [c[0] for c in [*hero, *board] if c[0] not in playing]
+        kicker = max(rest, key=_value) if rest else None
+        board_rest = [c[0] for c in board if c[0] not in playing]
+        if kicker in hero_ranks and (
+            not board_rest or _value(kicker) > max(map(_value, board_rest))
+        ):
+            return f"two pair on the board, {_name(kicker)} kicker"
         return "two pair on the board"
-    if h1 != h2 and h1 in counts and h2 in counts and counts[h1] == 1 and counts[h2] == 1:
-        return "two pair"
-    # One pair is Hero's, the other only the board's.
-    return f"{_pair(hero, board)} + the board's {_plural(board_pairs[0])}"
+    # One pair is Hero's, the other only the board's; name Hero's by the card that plays.
+    mine = own[0]
+    ordered = sorted(hero, key=lambda c: c[0] != mine)
+    other = next(r for r in playing if r != mine)
+    return f"{_pair(ordered, board)} + the board's {_plural(other)}"
 
 
 def _made(hero: Sequence[str], board: Sequence[str]) -> str:

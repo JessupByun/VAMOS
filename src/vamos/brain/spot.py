@@ -45,29 +45,46 @@ def legal(hand: Hand, hero: str, spot: Decision) -> list[str]:
     others = any(_behind(hand, pid) > 0 for pid in spot.opponents)
     can_wager = others and spot.behind > spot.to_call
     if spot.to_call > 0:
-        raising = can_wager and _may_raise(hand, hero)
-        return ["fold", "call"] + (["raise", "allin"] if raising else [])
+        if not (can_wager and _may_raise(hand, hero)):
+            return ["fold", "call"]
+        # Short of a full raise, the only raise PokerNow offers is all in.
+        full = hand.street_bets.get(hero, 0) + spot.behind >= hand.price + hand.min_raise
+        return ["fold", "call", "raise", "allin"] if full else ["fold", "call", "allin"]
     return ["check"] + (["bet", "allin"] if can_wager else [])
 
 
 def _bet_faced(hand: Hand, hero: str, labels: dict[str, str]) -> dict | None:
-    """The last bet or raise on this street by someone else, sized against the pot it went into."""
+    """
+    The last full bet or raise on this street by someone else, sized like Claude's own
+    sizes: a bet against the pot before it, a raise on top of calling against the pot after
+    the raiser's call. A short all-in after it (which does not reopen betting) is reported
+    alongside, not in its place.
+    """
     street = [a for a in hand.actions if a.street == hand.street]
     bb = hand.big_blind or 1
     price = 0
+    committed: dict[str, int] = {}
     faced = None
     for i, action in enumerate(street):
         if action.to is None:
             continue
-        if action.kind in ("bet", "raise") and action.to > price and action.player != hero:
-            pot_before = hand.pot - sum(a.added for a in street[i:])
-            faced = {
-                "by": labels.get(action.player, "another player"),
-                "to_bb": round(action.to / bb, 2),
-                "pot_before_it_bb": round(pot_before / bb, 2),
-                "pct_of_pot": round(100 * (action.to - price) / pot_before) if pot_before else None,
-                "all_in": action.all_in,
-            }
+        aggressive = action.kind in ("bet", "raise") and action.to > price
+        if aggressive and action.player != hero:
+            if action.kind == "raise" and action.reopens is False and faced is not None:
+                faced["then_short_all_in_to_bb"] = round(action.to / bb, 2)
+            else:
+                pot_before = hand.pot - sum(a.added for a in street[i:])
+                after_call = pot_before + price - committed.get(action.player, 0)
+                faced = {
+                    "by": labels.get(action.player, "another player"),
+                    "to_bb": round(action.to / bb, 2),
+                    "pot_before_it_bb": round(pot_before / bb, 2),
+                    "pct_of_pot": round(100 * (action.to - price) / after_call)
+                    if after_call
+                    else None,
+                    "all_in": action.all_in,
+                }
+        committed[action.player] = max(committed.get(action.player, 0), action.to)
         price = max(price, action.to)
     return faced
 
@@ -89,6 +106,12 @@ def claude_facts(hand: Hand, hero: str, spot: Decision, card: dict, labels: dict
         default=0,
     )
     effective = min(spot.behind, reachable)
+    # The stack-to-pot ratio from the start of this street, as the guide's bands mean it: a
+    # bigger bet faced must not move Hero into the "committed" band by itself.
+    this_street = [a for a in hand.actions if a.street == hand.street]
+    pot_start = hand.pot - sum(a.added for a in this_street)
+    start_stacks = [_behind(hand, pid) + hand.street_bets.get(pid, 0) for pid in spot.opponents]
+    effective_start = min(spot.behind + street_bet, max(start_stacks, default=0))
     allowed = legal(hand, hero, spot)
     all_in_call = spot.to_call > 0 and spot.to_call >= spot.behind
     facts: dict = {
@@ -97,9 +120,9 @@ def claude_facts(hand: Hand, hero: str, spot: Decision, card: dict, labels: dict
         "to_call_bb": round(spot.to_call / bb, 2),
         "equity_needed_to_call_pct": card.get("need"),
         "effective_stack_bb": round(effective / bb, 2),
-        "stack_to_pot_ratio": None
-        if all_in_call or not spot.pot
-        else round(effective / spot.pot, 2),
+        "stack_to_pot_ratio_at_street_start": round(effective_start / pot_start, 2)
+        if pot_start
+        else None,
         "hero_acts_last": _acts_last(hand, hero),
         "hero_hand": card.get("madeHand"),
         # Exact, so Claude never counts outs itself; empty means no such draw.
@@ -114,9 +137,9 @@ def claude_facts(hand: Hand, hero: str, spot: Decision, card: dict, labels: dict
         facts["bet_faced"] = faced
     if all_in_call:
         facts["call_puts_hero_all_in"] = True
-    returned = spot.pot + spot.to_call - spot.winnable
-    if returned > 0:
-        facts["returned_to_bettor_if_called_bb"] = round(returned / bb, 2)
+    if all_in_call and spot.pot + spot.to_call > spot.winnable:
+        # Back to the bettor, or a side pot between others: either way not Hero's to win.
+        facts["chips_hero_cannot_win_bb"] = round((spot.pot + spot.to_call - spot.winnable) / bb, 2)
     if "bet" in allowed:
         facts["min_bet_bb"] = 1.0
     if "raise" in allowed:

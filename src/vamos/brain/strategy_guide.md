@@ -24,9 +24,9 @@ Exploit only what the profile or tonight's evidence supports.
 
 ## Stack-to-pot ratio
 
-The stack-to-pot ratio (SPR) is the effective stack behind divided by the pot.
+The stack-to-pot ratio (SPR) is the effective stack behind divided by the pot, both as they were when the street began.
 Below about 3, top pair or better is usually committed: getting the money in is fine and folding is usually a mistake.
-That means Hero's own hand: a pair on a paired board is not committed.
+That means Hero's own hand: a pair below the board's pair is not committed.
 Between about 3 and 8, one-pair hands want to control the pot size, and two pair or better wants to build it.
 Above about 8, one pair is a bluff catcher against heavy action, and strong draws and big made hands gain value.
 In 3-bet pots at 50bb the SPR is often 2 to 3, so plan to get it in with strong top pairs and good draws.
@@ -74,14 +74,14 @@ Table talk in Hero's notes is weaker than the player's later actions: judge a be
 ## The numbers in each message
 
 The pot, the price, the bet faced, the stack sizes and Hero's made hand are exact.
-equity_needed_to_call_pct is the pot odds, with chips Hero cannot match already returned to the bettor.
+equity_needed_to_call_pct is the pot odds, leaving out chips Hero cannot win (returned to the bettor, or a side pot between others).
 There is no equity number: estimate Hero's equity against the range that would bet this way, and add implied odds only when stacks behind are deep and the opponent pays off.
 
 ## Draws
 
 Count clean outs: discount outs that make a better hand for an opponent (a flush card that pairs the board when a full house is likely, a straight card that completes a bigger straight or a flush).
 With one card to come, each clean out is worth about 2% (4 outs 9%, 8 outs 17%, 9 outs 19%); price a draw facing a bet with this, plus implied odds when stacks are deep and the opponent pays off.
-Use the two-card numbers only when the money goes in now (a flop all-in): 4 outs 17%, 8 outs 31%, 9 outs 35%, 12 outs 45%, 15 outs 54%.
+Use the two-card numbers only when the money goes in now (a flop all-in): 4 outs 16%, 8 outs 31%, 9 outs 35%, 12 outs 45%, 15 outs 54%.
 A gutshot alone calls only small bets, never a big bet or an all-in.
 A pair improving to trips or two pair has up to five outs, often dead against a strong range.
 Semi-bluff strong draws in position and against players who can fold; against calling stations, prefer to call with draws when the price is right and bet when the draw comes in.
@@ -96,14 +96,16 @@ The preflop aggressor can continuation bet often on boards that favor their rang
 
 A bet bigger than the pot, or an all-in on any street, from a recreational player is strong unless the profile shows this player bluffs that way.
 With no profile, assume sets, two pair, top pair and big draws with few bluffs; even those bluffs usually beat Hero's high-card hands.
-Against that range a lone draw or a pair below top pair rarely has more than 30%, so it folds unless equity_needed_to_call_pct is lower.
+Against that range a lone draw or a pair below top pair has little equity: about 30% at most when the money goes in on the flop (two cards to come) and under 20% with one card to come, so it folds unless equity_needed_to_call_pct is below that.
 No rake and run it twice never turn a losing call into a winning one.
 When Hero is the one considering shoving, prefer it with hands that are ahead of the calling range or have strong equity when called, and when the opponent folds too much.
 
 ## Paired boards
 
-A made hand that says "+ the board's" pair is one pair: trips, bigger pairs and better kickers beat it.
-Play it as a bluff catcher: call or check and keep the pot small; a raise folds the hands it beats and is called by the hands that beat it.
+A made hand that says "+ the board's" pair is Hero's pair plus the board's pair.
+When Hero's pair is above the board's pair (an overpair, or top pair with a good kicker on a low paired board), it is still a value hand and the usual commitment applies.
+When Hero's pair is below the board's pair (second pair or worse, an underpair), trips and bigger pairs beat it: play it as a bluff catcher, call or check and keep the pot small, since a raise folds the hands it beats and is called by the hands that beat it.
+"Two pair on the board" means Hero plays the board, with at most a kicker.
 
 ## The answer's text
 
