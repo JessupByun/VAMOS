@@ -77,11 +77,7 @@ def test_improving_cards_are_exact():
     assert len(hearts["flush"]) == 9 and all(c[1] == "h" for c in hearts["flush"])
     # A set improves to a full house or better on any card pairing the board or making quads.
     assert len(improving_cards(["9s", "9d"], ["9c", "5h", "2d"])["full house or better"]) == 7
-    # A card that puts a straight on the board for everyone is no out.
-    assert "straight" not in improving_cards(["As", "Ad"], ["5c", "6d", "7h", "8s"]) or all(
-        c[0] != "4" and c[0] != "9"
-        for c in improving_cards(["As", "Ad"], ["5c", "6d", "7h", "8s"])["straight"]
-    )
-    assert (
-        improving_cards(["As", "Kd"], ["Qs", "8h", "4c", "2d", "7s"]) == {}
-    )  # the river: nothing to come
+    # A 4 or a 9 puts a straight on the board for everyone, so it is no out for aces.
+    assert improving_cards(["As", "Ad"], ["5c", "6d", "7h", "8s"]) == {}
+    # On the river there is nothing to come.
+    assert improving_cards(["As", "Kd"], ["Qs", "8h", "4c", "2d", "7s"]) == {}
