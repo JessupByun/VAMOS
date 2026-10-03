@@ -3,7 +3,6 @@ import pytest
 from vamos.engine.facts import (
     TableView,
     current_spot,
-    equity_vs,
     facts,
     format_bb,
     format_chips,
@@ -36,8 +35,8 @@ def test_facts_once_the_log_matches_the_table():
     assert result["position"] == "BTN"
     assert (result["pot"], result["toCall"], result["need"]) == ("8bb", "0.40 (2bb)", 20)
     assert result["madeHand"] == "top pair, top kicker"
-    assert result["equityVs"] == "a random hand"
-    assert 80 <= result["equity"] <= 97
+    # Equity against random hands is not shown: it misleads more than it tells.
+    assert "equity" not in result
     assert result["node"] == spot.node
 
 
@@ -81,7 +80,7 @@ def test_a_fold_missing_from_the_log_holds_the_facts_back():
     view = TableView("heroid0001", ("As", "Kd"), ("Ks", "7d", "2c"), 180)
     assert current_spot(log_of(THREE), view) is None
     spot = current_spot(log_of([*THREE, '"W @ villain002" folds']), view)
-    assert facts(spot)["equityVs"] == "a random hand"
+    assert facts(spot)["position"] == "BTN"
 
 
 def test_no_price_when_checked_to():
@@ -109,10 +108,6 @@ def test_chips_are_shown_the_way_the_table_shows_them(cents, big_blind, expected
 )
 def test_big_blinds(cents, big_blind, expected):
     assert format_bb(cents, big_blind) == expected
-
-
-def test_equity_label_counts_opponents():
-    assert (equity_vs(1), equity_vs(2)) == ("a random hand", "2 random hands")
 
 
 def test_the_price_of_calling_an_all_in_counts_only_what_hero_can_win():

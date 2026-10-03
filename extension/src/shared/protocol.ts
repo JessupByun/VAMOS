@@ -102,9 +102,6 @@ export interface SpotFacts {
   toCall: string | null;
   /** Equity needed to call, in percent. */
   need: number | null;
-  equity: number;
-  /** Who the equity is against, e.g. "a random hand". */
-  equityVs: string;
   madeHand: string;
   /** Preflop: the charts' action. Postflop: Claude's answer, or why there is none. */
   advice: PreflopAdvice | ClaudeAdvice | null;

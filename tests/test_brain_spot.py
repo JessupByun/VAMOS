@@ -108,7 +108,7 @@ def test_facing_an_all_in_bigger_than_the_hero():
     h, spot = hand(stacks, *FLOP, f"{P[V1]} bets 15.00 and go all in", f"{P[V2]} folds")
     facts = claude_facts(h, HERO, spot, {"need": 0}, {V1: "Player A"})
     assert facts["call_puts_hero_all_in"] is True
-    assert facts["stack_to_pot_ratio_at_street_start"] == 2.44  # 4.40 behind, 1.80 pot
+    assert "stack_to_pot_ratio_at_street_start" not in facts
     assert facts["effective_stack_bb"] == 22.0  # the hero's 4.40 behind, not 0
     assert facts["chips_hero_cannot_win_bb"] == 53.0  # 15.00 bet, 4.40 matched
     assert facts["bet_faced"]["all_in"] is True

@@ -1,5 +1,5 @@
 """
-The facts on the action card at the hero's turn: position, pot, price, equity, made hand.
+The facts on the action card at the hero's turn: position, pot, price, made hand.
 
 The log arrives every couple of seconds while the table updates instantly, so facts are
 only produced once the log has caught up: by the log it must be the hero's turn, and the
@@ -10,7 +10,6 @@ card says it is syncing rather than showing numbers from an earlier moment.
 
 from dataclasses import dataclass
 
-from vamos.engine.equity import any_two, equity
 from vamos.engine.madehand import describe
 from vamos.engine.state import Decision, decision, to_act
 from vamos.log.hands import HandLog
@@ -54,16 +53,8 @@ def format_bb(cents: Cents, big_blind: Cents) -> str:
     return f"{cents / big_blind:.1f}".removesuffix(".0") + "bb"
 
 
-def equity_vs(opponents: int) -> str:
-    # Opponents hold random hands until baseline ranges exist; the card says so, so the
-    # number is never mistaken for equity against how these players actually play.
-    return "a random hand" if opponents == 1 else f"{opponents} random hands"
-
-
 def facts(spot: Decision) -> dict:
     bb = spot.big_blind
-    dead = (*spot.hero_cards, *spot.board)
-    result = equity(spot.hero_cards, spot.board, [any_two(dead) for _ in spot.opponents])
     to_call = None
     need = None
     if spot.to_call and bb:
@@ -75,7 +66,5 @@ def facts(spot: Decision) -> dict:
         "pot": format_bb(spot.pot, bb) if bb else None,
         "toCall": to_call,
         "need": need,
-        "equity": round(100 * result.value),
-        "equityVs": equity_vs(len(spot.opponents)),
         "madeHand": describe(spot.hero_cards, spot.board),
     }

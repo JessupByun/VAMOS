@@ -36,7 +36,8 @@ def test_no_real_name_reaches_the_prefix():
     profiles, names = setup()
     text = prefix(profiles, names).text
     names.check(text)
-    assert "# Strategy guide for this game" in text
+    assert "Strategy guide" not in text  # the role, the profiles and nothing else
+    assert len(prefix(profiles, names).blocks) == 2
     assert "## Player A (calling-station)" in text and "## Player B\n" in text
     assert "player_id" not in text and "alexid0001" not in text
     assert "Folds to Hero on the river; Player B bluffs him." in text
@@ -81,12 +82,17 @@ def test_the_spot_message_describes_the_hand_without_names():
     assert spot["hero"] == {"name": "Hero", "cards": ["As", "Kd"], "position": "BTN"}
     assert spot["board"] == ["Ks", "7d", "2c"]
     assert spot["legal_actions"] == ["fold", "call", "raise", "allin"]
-    assert spot["actions"][-1] == {
-        "street": "flop",
-        "player": "Player A",
-        "action": "bet",
-        "to_bb": 4.0,
-    }
+    # The whole hand in order, the flop where it was dealt.
+    assert [(e.get("player"), e.get("action"), e.get("to_bb")) for e in spot["history"]] == [
+        ("Player A", "post_sb", 0.5),
+        ("Player B", "post_bb", 1.0),
+        ("Hero", "raise", 3.0),
+        ("Player A", "call", 3.0),
+        ("Player B", "fold", None),
+        (None, None, None),
+        ("Player A", "bet", 4.0),
+    ]
+    assert spot["history"][5] == {"street": "flop", "board": ["Ks", "7d", "2c"]}
     assert {p["name"]: p["stack_bb"] for p in spot["players"]} == {
         "Hero": 50.0,
         "Player A": 60.0,
@@ -110,5 +116,35 @@ def test_a_name_that_is_a_poker_word_is_hidden_only_in_the_users_text():
     names.add("riv", ["river"], shown="river")
     built = prefix(profiles, names)
     assert "folds the Player A" in built.user_text  # privacy first in what the user wrote
-    assert "the river" in built.text.split("# Opponent profiles")[0]  # the guide is untouched
+    assert "Shoves the turn" in built.user_text and "river" not in built.user_text
     names.check(built.user_text)
+
+
+def test_the_history_shows_dead_posts_and_streets_dealt_with_no_action_yet():
+    lines = [
+        '-- starting hand #5 (id: h5)  No Limit Texas Hold\'em (dealer: "jes @ heroid0001") --',
+        'Player stacks: #1 "jes @ heroid0001" (10.00) | #2 "alex @ alexid0001" (10.00) | #3 "rj @ rjid000001" (10.00)',
+        "Your hand is A♠, K♦",
+        '"alex @ alexid0001" posts a small blind of 0.10',
+        '"rj @ rjid000001" posts a big blind of 0.20',
+        '"rj @ rjid000001" posts a missing small blind of 0.10',
+        '"jes @ heroid0001" calls 0.20',
+        '"alex @ alexid0001" calls 0.20',
+        '"rj @ rjid000001" checks',
+        "Flop:  [K♠, 7♦, 2♣]",
+        '"alex @ alexid0001" checks',
+        '"rj @ rjid000001" checks',
+        '"jes @ heroid0001" checks',
+        "Turn: K♠, 7♦, 2♣ [9♥]",
+    ]
+    h = build_hands((100 + i, line) for i, line in enumerate(lines)).hands[-1]
+    ids = {"heroid0001": "Hero", "alexid0001": "Player A", "rjid000001": "Player B"}
+    text = spot_message(h, "heroid0001", ids, positions(h), {}, ["check", "bet", "allin"])
+    history = json.loads(text[text.index("{") : text.rindex("}") + 1])["history"]
+    assert {
+        "street": "preflop",
+        "player": "Player B",
+        "action": "post_missing_sb",
+        "dead_bb": 0.5,
+    } in history
+    assert history[-1] == {"street": "turn", "board": ["Ks", "7d", "2c", "9h"]}

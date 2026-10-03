@@ -274,7 +274,7 @@ test("the action card shows facts on the hero's turn only once the log has caugh
   await expect(card.locator(".action")).toHaveText(
     /^(FOLD|CALL 0\.10 \(0\.5bb\)|RAISE TO \d+\.\d\d \(\d+(\.\d)?bb\)|ALL IN .*)$/,
   );
-  await expect(card.locator(".facts")).toHaveText(/^SB · pot 1\.5bb · \d+% vs random · need 25% · ATo$/);
+  await expect(card.locator(".facts")).toHaveText(/^SB · pot 1\.5bb · need 25% · ATo$/);
   // The card sits at the top of the table, centered just above the pot, clear of every seat.
   const pot = await page.locator(".table-pot-size").boundingBox();
   let box = await card.boundingBox();
@@ -329,7 +329,7 @@ test("after the flop the card shows Claude's answer and the panel its reasoning"
   });
   await expect(card.locator(".source")).toHaveText("VAMOS AI (Claude Sonnet 5.5)");
   await expect(card.locator(".action")).toHaveText("BET 0.20 (1bb)");
-  await expect(card.locator(".facts")).toHaveText(/^SB · pot 2bb · \d+% vs random · Ace high$/);
+  await expect(card.locator(".facts")).toHaveText(/^SB · pot 2bb · Ace high$/);
 
   await expect(panel.locator(".advice .why")).toHaveText("alex folds to small bets.");
   await expect(panel.locator(".advice .plan")).toHaveText("Next: Check behind if alex calls and the turn is a club.");

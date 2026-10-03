@@ -64,17 +64,24 @@ def rebuild(spot: dict) -> tuple[list[str], dict[str, str]]:
     board = spot["board"]
     street = "preflop"
     shown = {"flop": 3, "turn": 4, "river": 5}
-    for action in spot["actions"]:
+    # Spots logged before the history format carry "actions" without board entries.
+    for action in spot.get("history") or spot["actions"]:
+        if "player" not in action:
+            continue
         if action["street"] != street:
             street = action["street"]
             lines.append(street_line(street, board[: shown[street]]))
         name, kind = who[action["player"]], action["action"]
-        amount = chips(action.get("to_bb", 0))
+        amount = chips(action.get("to_bb", action.get("dead_bb", 0)))
         tail = " and go all in" if action.get("all_in") else ""
         lines.append(
             {
                 "post_sb": f"{name} posts a small blind of {amount}{tail}",
                 "post_bb": f"{name} posts a big blind of {amount}{tail}",
+                "post_straddle": f"{name} posts a straddle of {amount}{tail}",
+                "post_missed_bb": f"{name} posts a missed big blind of {amount}{tail}",
+                "post_missing_sb": f"{name} posts a missing small blind of {amount}{tail}",
+                "post_ante": f"{name} posts an ante of {amount}{tail}",
                 "call": f"{name} calls {amount}{tail}",
                 "bet": f"{name} bets {amount}{tail}",
                 "raise": f"{name} raises to {amount}{tail}",

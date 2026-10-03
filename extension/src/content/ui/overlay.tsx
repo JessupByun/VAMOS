@@ -27,13 +27,12 @@ function Pill({ store }: { store: Store }) {
 }
 
 function factsLine(facts: SpotFacts, advised: boolean): string {
-  const need = facts.need === null ? "" : ` · need ${facts.need}%`;
+  const need = facts.need === null ? null : `need ${facts.need}%`;
   const parts = [
     facts.position,
     facts.pot && `pot ${facts.pot}`,
     !advised && facts.toCall && `to call ${facts.toCall}`,
-    // Equity is against random hands until the charts give ranges; said so, briefly.
-    `${facts.equity}% vs random${need}`,
+    need,
     advised && facts.madeHand,
   ];
   return parts.filter(Boolean).join(" · ");

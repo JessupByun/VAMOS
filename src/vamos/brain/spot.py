@@ -106,12 +106,6 @@ def claude_facts(hand: Hand, hero: str, spot: Decision, card: dict, labels: dict
         default=0,
     )
     effective = min(spot.behind, reachable)
-    # The stack-to-pot ratio from the start of this street, as the guide's bands mean it: a
-    # bigger bet faced must not move Hero into the "committed" band by itself.
-    this_street = [a for a in hand.actions if a.street == hand.street]
-    pot_start = hand.pot - sum(a.added for a in this_street)
-    start_stacks = [_behind(hand, pid) + hand.street_bets.get(pid, 0) for pid in spot.opponents]
-    effective_start = min(spot.behind + street_bet, max(start_stacks, default=0))
     allowed = legal(hand, hero, spot)
     all_in_call = spot.to_call > 0 and spot.to_call >= spot.behind
     facts: dict = {
@@ -120,9 +114,6 @@ def claude_facts(hand: Hand, hero: str, spot: Decision, card: dict, labels: dict
         "to_call_bb": round(spot.to_call / bb, 2),
         "equity_needed_to_call_pct": card.get("need"),
         "effective_stack_bb": round(effective / bb, 2),
-        "stack_to_pot_ratio_at_street_start": round(effective_start / pot_start, 2)
-        if pot_start
-        else None,
         "hero_acts_last": _acts_last(hand, hero),
         "hero_hand": card.get("madeHand"),
         # Exact, so Claude never counts outs itself; empty means no such draw.
