@@ -125,7 +125,7 @@ function Advice({ claude }: { claude: LatestClaude }) {
           {advice.asked}: {advice.reason}
         </p>
       )}
-      {live && advice.model !== "Opus" && advice.asked !== "Opus" && (
+      {live && !advice.model.includes("Opus") && !advice.asked.includes("Opus") && (
         <button type="button" onClick={() => send({ type: "ask", gameId, preset: "deep" })}>
           Ask Opus
         </button>

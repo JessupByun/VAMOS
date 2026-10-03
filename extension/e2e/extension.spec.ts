@@ -327,7 +327,7 @@ test("after the flop the card shows Claude's answer and the panel its reasoning"
       .map((cls) => `<div class="card-container ${cls} flipped"></div>`)
       .join("");
   });
-  await expect(card.locator(".source")).toHaveText("Claude");
+  await expect(card.locator(".source")).toHaveText("VAMOS AI (Claude Sonnet 5.5)");
   await expect(card.locator(".action")).toHaveText("BET 0.20 (1bb)");
   await expect(card.locator(".facts")).toHaveText(/^SB · pot 2bb · \d+% vs random · Ace high$/);
 

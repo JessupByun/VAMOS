@@ -81,9 +81,8 @@ function CardBody({ turn, facts }: { turn: string | null; facts: Facts | null })
   );
 }
 
-/** Sonnet is the default; any other model is named on the card. */
 function claudeLabel(model: string): string {
-  return model === "Sonnet" ? "Claude" : `Claude · ${model}`;
+  return `VAMOS AI (${model})`;
 }
 
 function ClaudeCard({ facts, advice }: { facts: SpotFacts; advice: ClaudeAdvice }) {
@@ -96,7 +95,7 @@ function ClaudeCard({ facts, advice }: { facts: SpotFacts; advice: ClaudeAdvice 
           {failed ? "Math" : claudeLabel(advice.asked)}
         </div>
         <div class={`action ${failed ? "" : "thinking"}`}>{failed ? facts.madeHand : "thinking..."}</div>
-        {failed && <div class="line note">Claude: {advice.reason}</div>}
+        {failed && <div class="line note">VAMOS AI: {advice.reason}</div>}
         <div class="line facts">{factsLine(facts, false)}</div>
       </div>
     );

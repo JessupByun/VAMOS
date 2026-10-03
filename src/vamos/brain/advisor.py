@@ -40,9 +40,9 @@ MIN_SECONDS = 3.0  # with less time than this, no call is started
 RETRY_SECONDS = 6.0  # the least time left for a second try
 RETRYABLE = ("Claude unavailable", "no connection to Claude", "unreadable answer")
 MODEL_NAMES = {
-    "claude-haiku-4-5": "Haiku",
-    "claude-sonnet-5-5": "Sonnet",
-    "claude-opus-5-5": "Opus",
+    "claude-haiku-4-5": "Claude Haiku 4.5",
+    "claude-sonnet-5-5": "Claude Sonnet 5.5",
+    "claude-opus-5-5": "Claude Opus 5.5",
 }
 
 

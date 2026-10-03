@@ -118,9 +118,9 @@ export interface ClaudeAdvice {
   mix: string[] | null;
   /** Claude's reasoning, with real names. */
   note: string | null;
-  /** The model whose answer is shown (or, before any answer, the one asked). */
+  /** The model whose answer is shown (or, before any answer, the one asked), e.g. "Claude Sonnet 5.5". */
   model: string;
-  /** The model of the latest call, e.g. "Opus" while Ask Opus runs. */
+  /** The model of the latest call, e.g. "Claude Opus 5.5" while Ask Opus runs. */
   asked: string;
   state: "thinking" | "done" | "failed" | "cancelled";
   /** Why the latest call gave no answer, e.g. "timed out". */

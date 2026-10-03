@@ -67,7 +67,7 @@ def test_an_answer_reaches_the_card_with_real_names(rig):
     assert view["action"] == "BET 0.90 (4.5bb)"
     assert view["mix"] is None
     assert view["note"] == "alex calls too much"
-    assert view["model"] == "Sonnet"
+    assert view["model"] == "Claude Sonnet 5.5"
     assert r.ledger.totals(datetime(2026, 10, 2, 14))["session"] > 0
     assert r.advisor.view("g", "h1:1:9") is None  # never shown for another node
 
@@ -159,14 +159,14 @@ def test_asking_opus_keeps_the_first_answer_up_meanwhile(rig):
     view = r.advisor.view("g", "h1:1:8")
     assert (view["action"], view["model"], view["asked"], view["state"]) == (
         "BET 0.90 (4.5bb)",
-        "Sonnet",
-        "Opus",
+        "Claude Sonnet 5.5",
+        "Claude Opus 5.5",
         "thinking",
     )
     gate.set()
     r.updated()
     view = r.advisor.view("g", "h1:1:8")
-    assert (view["action"], view["model"], view["note"]) == ("CHECK", "Opus", "alex traps")
+    assert (view["action"], view["model"], view["note"]) == ("CHECK", "Claude Opus 5.5", "alex traps")
 
 
 def test_a_refused_call_is_never_sent(rig):
