@@ -34,8 +34,8 @@ def test_sdk_style_usage_objects_work_too():
         cache_creation_input_tokens = 0
         cache_creation = None
 
-    assert price("claude-haiku-4-5", Usage(), "advice", AT).dollars == pytest.approx(
-        (100 + 50) / 1e6
+    assert price("claude-sonnet-5-5", Usage(), "advice", AT).dollars == pytest.approx(
+        (200 + 100) / 1e6
     )
 
 

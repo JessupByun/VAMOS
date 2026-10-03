@@ -334,10 +334,53 @@ test("after the flop the card shows Claude's answer and the panel its reasoning"
   await expect(panel.locator(".advice .why")).toHaveText("alex folds to small bets.");
   await expect(panel.locator(".advice .plan")).toHaveText("Next: Check behind if alex calls and the turn is a club.");
   await expect(panel.getByRole("button", { name: "Ask Opus" })).toBeVisible();
-  await expect(panel.getByText(/tonight \$0\.00/)).toBeVisible();
+  await expect(panel.locator(".stat.tonight .value")).toHaveText("$0.00");
 
   await page.evaluate(() => document.querySelector(".you-player")?.classList.remove("decision-current"));
   await expect(card).toHaveText("waiting for your turn");
   await expect(panel.locator(".advice h2")).toHaveText("Your last decision");
   await expect(panel.getByRole("button", { name: "Ask Opus" })).toHaveCount(0);
+});
+
+// Not a check: screenshots of the card and side panel for reviewing the design by eye.
+// Run with VAMOS_SHOTS=<dir> npx playwright test -g "screenshots".
+test("screenshots of the card and the side panel", async () => {
+  const dir = process.env.VAMOS_SHOTS;
+  test.skip(!dir, "set VAMOS_SHOTS to a folder to take screenshots");
+  const page = await openTable();
+  // PokerNow's table is dark grey around green felt; the card is designed for that.
+  await page.addStyleTag({ content: "body { background: #2b2d31; color: #ddd; }" });
+  const panel = await harness.context.newPage();
+  await panel.setViewportSize({ width: 380, height: 900 });
+  await panel.emulateMedia({ colorScheme: "dark" });
+  await panel.goto(PANEL_URL);
+  const card = page.locator("#vamos-root .action-card");
+  await page.screenshot({ path: `${dir}/1-waiting.png` });
+  harness.addLogLines(HAND_START);
+  await heroTurn(page);
+  harness.addLogLines([`"new guy @ ${STRANGER_ID}" folds`]);
+  await expect(card.locator(".source")).toHaveText("Chart");
+  await card.screenshot({ path: `${dir}/2-chart-card.png` });
+  await page.screenshot({ path: `${dir}/2-chart-table.png` });
+  harness.addLogLines([
+    `"TestHero @ ${HERO_ID}" calls 0.20`,
+    `"alex @ ${KNOWN_ID}" checks`,
+    "Flop:  [K♠, 7♦, 2♣]",
+  ]);
+  await page.evaluate(() => {
+    for (const bet of document.querySelectorAll(".table-player-bet-value")) bet.remove();
+    const pot = document.querySelector(".table-pot-size .normal-value");
+    if (pot) pot.textContent = "0.40";
+    document.querySelector(".table-cards.run-1")!.innerHTML = ["card-s card-s-K", "card-d card-s-7", "card-c card-s-2"]
+      .map((cls) => `<div class="card-container ${cls} flipped"></div>`)
+      .join("");
+  });
+  await expect(card.locator(".action")).toHaveText("BET 0.20 (1bb)");
+  await card.screenshot({ path: `${dir}/3-claude-card.png` });
+  await panel.screenshot({ path: `${dir}/4-panel-dark.png`, fullPage: true });
+  await panel.emulateMedia({ colorScheme: "light" });
+  await panel.screenshot({ path: `${dir}/5-panel-light.png`, fullPage: true });
+  await page.evaluate(() => document.querySelector(".you-player")?.classList.remove("decision-current"));
+  await expect(card).toHaveText("waiting for your turn");
+  await page.screenshot({ path: `${dir}/6-waiting-table.png` });
 });

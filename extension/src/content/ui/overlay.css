@@ -1,3 +1,19 @@
+/* VAMOS's own layer over the table. Dark glass that reads on PokerNow's dark grey and green;
+   each source has its own accent so where a suggestion came from shows at a glance. */
+:host {
+  --vamos-font: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+  --vamos-bg: rgba(18, 20, 24, 0.9);
+  --vamos-border: rgba(255, 255, 255, 0.09);
+  --vamos-text: #f4f5f7;
+  --vamos-muted: #a2a8b3;
+  --vamos-chart: #7cc4e8;
+  --vamos-math: #b9a5e8;
+  --vamos-claude: #f0a46c;
+  --vamos-ok: #7ad38f;
+  --vamos-warn: #e8c46a;
+  --vamos-bad: #f08a7e;
+}
+
 .card {
   position: fixed;
   top: 12px;
@@ -6,54 +22,74 @@
   display: flex;
   gap: 8px;
   align-items: center;
-  padding: 6px 10px;
-  border-radius: 8px;
-  font: 12px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #f2f2f2;
-  background: rgba(20, 22, 26, 0.92);
-  border: 1px solid #3a3f47;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font: 500 11px/1.3 var(--vamos-font);
+  color: var(--vamos-muted);
+  background: var(--vamos-bg);
+  border: 1px solid var(--vamos-border);
+  backdrop-filter: blur(8px);
 }
 
 .brand {
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--vamos-text);
+}
+
+.card .status::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  vertical-align: 1px;
 }
 
 .card.ready .status {
-  color: #7ad38f;
+  color: var(--vamos-ok);
 }
 
 .card.connecting .status {
-  color: #e8c46a;
+  color: var(--vamos-warn);
 }
 
 .card.down .status {
-  color: #f08a7e;
+  color: var(--vamos-bad);
 }
 
 .badge {
   position: fixed;
   z-index: 2147483646;
   box-sizing: border-box;
-  display: flex;
-  justify-content: center;
-  padding: 2px 6px;
-  border-radius: 6px;
-  font: 11px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #f2f2f2;
-  background: rgba(20, 22, 26, 0.88);
-  border: 1px solid #3a3f47;
+  /* A block, not a centered flex row, so a long badge loses its end to "..." and never
+     its start (the name). */
+  display: block;
+  text-align: center;
+  padding: 2px 8px;
+  border-radius: 7px;
+  font: 500 11px/1.4 var(--vamos-font);
+  color: var(--vamos-text);
+  background: var(--vamos-bg);
+  border: 1px solid var(--vamos-border);
+  backdrop-filter: blur(6px);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .badge.unknown {
-  border-color: #e8c46a;
+  border-color: rgba(232, 196, 106, 0.6);
+}
+
+.badge.none {
+  color: var(--vamos-muted);
 }
 
 .badge .who {
-  display: flex;
+  display: inline-flex;
   gap: 6px;
   align-items: center;
 }
@@ -63,7 +99,7 @@
   color: inherit;
   background: #2a2e35;
   border: 1px solid #4a505a;
-  border-radius: 4px;
+  border-radius: 5px;
 }
 
 .card-slot {
@@ -75,71 +111,139 @@
 }
 
 .action-card {
+  --accent: var(--vamos-muted);
   box-sizing: border-box;
-  min-width: 240px;
+  min-width: 250px;
   max-width: 340px;
-  padding: 10px 14px;
-  border-radius: 10px;
-  font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #f2f2f2;
-  background: rgba(20, 22, 26, 0.94);
-  border: 1px solid #4a505a;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  padding: 11px 16px 12px 18px;
+  border-radius: 14px;
+  font: 14px/1.4 var(--vamos-font);
+  color: var(--vamos-text);
+  background:
+    linear-gradient(90deg, var(--accent) 0 3px, transparent 3px),
+    var(--vamos-bg);
+  border: 1px solid var(--vamos-border);
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.45),
+    0 1px 0 rgba(255, 255, 255, 0.04) inset;
+  backdrop-filter: blur(10px);
   text-align: left;
 }
 
+.action-card.chart {
+  --accent: var(--vamos-chart);
+}
+
+.action-card.math {
+  --accent: var(--vamos-math);
+}
+
+.action-card.claude {
+  --accent: var(--vamos-claude);
+}
+
 .action-card.waiting {
+  display: flex;
+  gap: 7px;
+  align-items: center;
   min-width: 0;
-  padding: 4px 10px;
+  padding: 5px 12px;
+  border-radius: 999px;
   font-size: 12px;
-  color: #9aa1ab;
-  background: rgba(20, 22, 26, 0.7);
+  font-weight: 500;
+  color: var(--vamos-muted);
+  background: rgba(18, 20, 24, 0.72);
   box-shadow: none;
 }
 
+.action-card.waiting .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--vamos-muted);
+  opacity: 0.7;
+}
+
 .action-card .source {
+  display: flex;
+  gap: 6px;
+  align-items: center;
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent);
 }
 
-/* Each source has its own color, so where a suggestion came from shows at a glance. */
-.action-card .source.chart {
-  color: #7cc4e8;
-}
-
-.action-card .source.math {
-  color: #b9a5e8;
-}
-
-.action-card .source.claude {
-  color: #e8a87c;
-}
-
-.action-card .action.thinking {
-  color: #9aa1ab;
-  font-weight: 600;
+.action-card .source .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
 }
 
 .action-card .action {
-  margin: 2px 0 4px;
-  font-size: 24px;
+  margin: 3px 0 6px;
+  font-size: 26px;
   font-weight: 800;
-  letter-spacing: 0.01em;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+}
+
+.action-card .action .bb {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--vamos-muted);
+}
+
+.action-card .action.thinking {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--vamos-muted);
+}
+
+.action-card .ellipsis {
+  animation: vamos-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes vamos-pulse {
+  50% {
+    opacity: 0.25;
+  }
 }
 
 .action-card .mix {
-  font-size: 14px;
-  color: #d5d9df;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 7px;
+}
+
+.action-card .chip {
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--vamos-text);
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .action-card .note,
 .action-card .facts {
-  font-size: 13px;
-  color: #9aa1ab;
+  font-size: 12.5px;
+  color: var(--vamos-muted);
+}
+
+.action-card .note {
+  margin-bottom: 3px;
+}
+
+.action-card .warn,
+.action-card .syncing {
+  color: var(--vamos-warn);
 }
 
 .action-card .syncing {
-  color: #e8c46a;
+  margin-top: 4px;
 }

@@ -55,13 +55,20 @@ function ActionCard({ store }: { store: Store }) {
 }
 
 function CardBody({ turn, facts }: { turn: string | null; facts: Facts | null }) {
-  if (turn === null) return <div class="action-card waiting">waiting for your turn</div>;
+  if (turn === null) {
+    return (
+      <div class="action-card waiting">
+        <span class="dot" />
+        waiting for your turn
+      </div>
+    );
+  }
   // Facts computed for an earlier state of the table are never shown.
   const current = facts?.key === turn ? facts.facts : null;
   if (!current) {
     return (
-      <div class="action-card">
-        <div class="source math">Math</div>
+      <div class="action-card math">
+        <Source kind="math" label="Math" />
         <div class="line syncing">syncing with the log...</div>
       </div>
     );
@@ -70,12 +77,51 @@ function CardBody({ turn, facts }: { turn: string | null; facts: Facts | null })
   if (isClaude(advice)) return <ClaudeCard facts={current} advice={advice} />;
   const chart = advice?.action ? advice : null;
   return (
-    <div class="action-card">
-      <div class={`source ${chart ? "chart" : "math"}`}>{chart ? "Chart" : "Math"}</div>
-      <div class="action">{chart ? chart.action : current.madeHand}</div>
-      {chart?.mix && <div class="line mix">{chart.mix.join(" · ")}</div>}
+    <div class={`action-card ${chart ? "chart" : "math"}`}>
+      <Source kind={chart ? "chart" : "math"} label={chart ? "Chart" : "Math"} />
+      <Action text={chart?.action ?? current.madeHand} />
+      {chart?.mix && <Mix parts={chart.mix} />}
       {advice && !advice.action && <div class="line note">no chart for this spot</div>}
       <div class="line facts">{factsLine(current, chart !== null)}</div>
+    </div>
+  );
+}
+
+function Source({ kind, label }: { kind: string; label: string }) {
+  return (
+    <div class={`source ${kind}`}>
+      <span class="dot" />
+      {label}
+    </div>
+  );
+}
+
+/** "BET 0.20 (1bb)": the move large, its size in big blinds a step quieter. */
+function Action({ text, thinking = false }: { text: string; thinking?: boolean }) {
+  if (thinking) {
+    return (
+      <div class="action thinking">
+        thinking<span class="ellipsis">...</span>
+      </div>
+    );
+  }
+  const split = text.match(/^(.*?)( \([^)]*\))$/);
+  return (
+    <div class="action">
+      {split ? split[1] : text}
+      {split && <span class="bb">{split[2]}</span>}
+    </div>
+  );
+}
+
+function Mix({ parts }: { parts: string[] }) {
+  return (
+    <div class="line mix">
+      {parts.map((part) => (
+        <span key={part} class="chip">
+          {part}
+        </span>
+      ))}
     </div>
   );
 }
@@ -89,27 +135,25 @@ function ClaudeCard({ facts, advice }: { facts: SpotFacts; advice: ClaudeAdvice 
     // No answer yet, or none coming: the math stays up, with the reason when there is one.
     const failed = advice.state === "failed";
     return (
-      <div class="action-card">
-        <div class={`source ${failed ? "math" : "claude"}`}>
-          {failed ? "Math" : claudeLabel(advice.asked)}
-        </div>
-        <div class={`action ${failed ? "" : "thinking"}`}>{failed ? facts.madeHand : "thinking..."}</div>
-        {failed && <div class="line note">VAMOS AI: {advice.reason}</div>}
+      <div class={`action-card ${failed ? "math" : "claude"}`}>
+        <Source kind={failed ? "math" : "claude"} label={failed ? "Math" : claudeLabel(advice.asked)} />
+        {failed ? <Action text={facts.madeHand} /> : <Action text="" thinking />}
+        {failed && <div class="line note warn">VAMOS AI: {advice.reason}</div>}
         <div class="line facts">{factsLine(facts, false)}</div>
       </div>
     );
   }
   const upgrading = advice.asked !== advice.model;
   return (
-    <div class="action-card">
-      <div class="source claude">{claudeLabel(advice.model)}</div>
-      <div class="action">{advice.action}</div>
-      {advice.mix && <div class="line mix">{advice.mix.join(" · ")}</div>}
+    <div class="action-card claude">
+      <Source kind="claude" label={claudeLabel(advice.model)} />
+      <Action text={advice.action} />
+      {advice.mix && <Mix parts={advice.mix} />}
       {upgrading && advice.state === "thinking" && (
         <div class="line note">asking {advice.asked}...</div>
       )}
       {upgrading && advice.state === "failed" && (
-        <div class="line note">
+        <div class="line note warn">
           {advice.asked}: {advice.reason}
         </div>
       )}

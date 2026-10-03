@@ -153,7 +153,7 @@ export interface ClockReport {
   secondsLeft: number;
 }
 
-export type Preset = "fast" | "balanced" | "deep";
+export type Preset = "balanced" | "deep";
 
 export interface Settings {
   type: "settings";

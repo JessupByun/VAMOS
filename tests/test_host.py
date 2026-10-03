@@ -82,7 +82,7 @@ def test_hello_reports_ready_with_settings_and_costs(backend):
     assert settings == {
         "type": "settings",
         "preset": "balanced",
-        "presets": ["fast", "balanced", "deep"],
+        "presets": ["balanced", "deep"],
     }
     assert (costs["type"], costs["session"], costs["overCap"]) == ("costs", 0, False)
 
@@ -336,15 +336,15 @@ def test_the_dial_is_locked_for_the_rest_of_the_hand(tmp_path):
 
 def test_the_dial_and_the_heros_names_come_from_settings(tmp_path):
     backend, fake, _ = claude_backend(tmp_path, [Reply(BET_HALF, "end_turn", {})])
-    backend.handle({"type": "settings", "preset": "fast"})
+    backend.handle({"type": "settings", "preset": "deep"})
     saved = json.loads((tmp_path / "data/settings.json").read_text())
-    assert saved == {"preset": "fast"}
+    assert saved == {"preset": "deep"}
     saved["heroNames"] = ["Jessica Q"]
     (tmp_path / "data/settings.json").write_text(json.dumps(saved))
     (tmp_path / "profiles/alex.md").write_text(ALEX + "Hates it when Jessica Q check-raises.\n")
 
     backend = Backend(tmp_path / "data", tmp_path / "profiles", provider=fake)
-    assert backend.preset == "fast"
+    assert backend.preset == "deep"
     backend.handle(page(*FLOP_HAND))
     backend.handle(FLOP_TURN)
     sent_text = json.dumps(fake.requests[-1].system)

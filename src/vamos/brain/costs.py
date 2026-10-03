@@ -15,7 +15,6 @@ from typing import Any
 # Dollars per million tokens (Claude API list prices as of 2026-09-25). Cache writes cost
 # 1.25x input for the 5-minute lifetime and 2x for the 1-hour one.
 PRICES = {
-    "claude-haiku-4-5": {"input": 1.00, "output": 5.00, "cache_read": 0.10},
     "claude-sonnet-5-5": {"input": 2.00, "output": 10.00, "cache_read": 0.20},
     "claude-opus-5-5": {"input": 4.00, "output": 20.00, "cache_read": 0.20},
 }

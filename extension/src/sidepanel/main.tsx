@@ -88,50 +88,66 @@ function useWorkerState() {
 
 const send = (message: PanelToWorker) => port?.postMessage(message);
 
-const PRESET_LABELS: Record<Preset, string> = {
-  fast: "Fast · Haiku",
-  balanced: "Balanced · Sonnet",
-  deep: "Deep · Opus",
+const PRESETS: Record<Preset, { model: string; detail: string }> = {
+  balanced: { model: "Sonnet 5.5", detail: "about 3 seconds" },
+  deep: { model: "Opus 5.5", detail: "about 10 seconds" },
 };
+
+/** "BET 0.20 (1bb)": the move large, its size in big blinds a step quieter. */
+function Pick({ text }: { text: string }) {
+  const split = text.match(/^(.*?)( \([^)]*\))$/);
+  return (
+    <p class="pick">
+      {split ? split[1] : text}
+      {split && <span class="bb">{split[2]}</span>}
+    </p>
+  );
+}
 
 function Advice({ claude }: { claude: LatestClaude }) {
   const { advice, live, gameId } = claude;
   const answered = advice.action !== null;
+  const upgrading = answered && advice.asked !== advice.model;
   return (
-    <section class={live ? "advice" : "advice past"}>
-      <h2>{live ? "Claude on this decision" : "Your last decision"}</h2>
+    <section class={live ? "card advice" : "card advice past"}>
+      <h2>{live ? "This decision" : "Your last decision"}</h2>
+      <p class="source">VAMOS AI ({answered ? advice.model : advice.asked})</p>
       {answered ? (
         <>
-          <p class="pick">
-            {advice.action} <span class="muted">· {advice.model}</span>
-          </p>
-          {advice.mix && <p class="muted">{advice.mix.join(" · ")}</p>}
+          <Pick text={advice.action ?? ""} />
+          {advice.mix && (
+            <div class="chips">
+              {advice.mix.map((part) => (
+                <span key={part} class="chip">
+                  {part}
+                </span>
+              ))}
+            </div>
+          )}
           {advice.why && <p class="why">{advice.why}</p>}
           {advice.plan && (
             <p class="plan">
-              <span class="muted">Next:</span> {advice.plan}
+              <span class="label">Next:</span> {advice.plan}
             </p>
           )}
         </>
       ) : (
-        <p class="muted">
+        <p class="muted waiting">
           {advice.state !== "thinking"
             ? `No answer: ${advice.reason}`
             : live
-              ? `${advice.asked} is thinking...`
+              ? "Thinking..."
               : "No answer before you acted."}
         </p>
       )}
-      {live && answered && advice.asked !== advice.model && advice.state === "thinking" && (
-        <p class="muted">asking {advice.asked}...</p>
-      )}
-      {answered && advice.asked !== advice.model && advice.state === "failed" && (
+      {live && upgrading && advice.state === "thinking" && <p class="muted">Asking {advice.asked}...</p>}
+      {upgrading && advice.state === "failed" && (
         <p class="muted">
           {advice.asked}: {advice.reason}
         </p>
       )}
       {live && !advice.model.includes("Opus") && !advice.asked.includes("Opus") && (
-        <button type="button" onClick={() => send({ type: "ask", gameId, preset: "deep" })}>
+        <button type="button" class="secondary" onClick={() => send({ type: "ask", gameId, preset: "deep" })}>
           Ask Opus
         </button>
       )}
@@ -141,22 +157,23 @@ function Advice({ claude }: { claude: LatestClaude }) {
 
 function Dial({ settings }: { settings: Settings }) {
   return (
-    <section>
-      <h2>Claude after the flop</h2>
-      <div class="dial">
+    <section class="card">
+      <h2>Model after the flop</h2>
+      <div class="segmented" role="radiogroup" aria-label="Model after the flop">
         {settings.presets.map((preset) => (
-          <label key={preset}>
+          <label key={preset} class={settings.preset === preset ? "on" : ""}>
             <input
               type="radio"
               name="preset"
               checked={settings.preset === preset}
               onChange={() => send({ type: "settings", preset })}
             />
-            {PRESET_LABELS[preset]}
+            <span class="model">{PRESETS[preset]?.model ?? preset}</span>
+            <span class="detail">{PRESETS[preset]?.detail}</span>
           </label>
         ))}
       </div>
-      <p class="muted">A change applies from the next hand.</p>
+      <p class="muted small">A change applies from the next hand.</p>
     </section>
   );
 }
@@ -164,15 +181,24 @@ function Dial({ settings }: { settings: Settings }) {
 const dollars = (amount: number) => `$${amount.toFixed(2)}`;
 
 function Spend({ costs }: { costs: Costs }) {
+  const stats: [string, string, number][] = [
+    ["tonight", "Tonight", costs.session],
+    ["month", "This month", costs.month],
+    ["all", "All time", costs.allTime],
+  ];
   return (
-    <section>
+    <section class="card">
       <h2>Claude costs</h2>
-      <p class={costs.overCap ? "over" : ""}>
-        tonight {dollars(costs.session)} · this month {dollars(costs.month)} · all time{" "}
-        {dollars(costs.allTime)}
-      </p>
+      <div class="stats">
+        {stats.map(([key, label, amount]) => (
+          <div key={key} class={`stat ${key}`}>
+            <span class="value">{dollars(amount)}</span>
+            <span class="label">{label}</span>
+          </div>
+        ))}
+      </div>
       {costs.overCap && (
-        <p class="over">Past tonight's {dollars(costs.softCap)} soft cap; advice keeps coming.</p>
+        <p class="over small">Past tonight's {dollars(costs.softCap)} soft cap; advice keeps coming.</p>
       )}
     </section>
   );
@@ -189,15 +215,10 @@ function Notes() {
     notesTimer = setTimeout(() => send({ type: "notes", text: value }), 600);
   };
   return (
-    <section>
+    <section class="card">
       <h2>Notes for tonight</h2>
-      <textarea
-        rows={3}
-        value={text}
-        onInput={change}
-        placeholder="e.g. alex is tilted after losing a big pot"
-      />
-      <p class="muted">Sent with every Claude call tonight; never saved.</p>
+      <textarea rows={3} value={text} onInput={change} placeholder="e.g. alex is tilted after losing a big pot" />
+      <p class="muted small">Sent with every Claude call tonight; never saved.</p>
     </section>
   );
 }
@@ -206,8 +227,8 @@ const NO_PROFILE = "__none__";
 const ASK_AGAIN = "__ask__";
 
 function TableRow({ player, profiles }: { player: PlayerInfo; profiles: Players["profiles"] }) {
-  const label = player.profile
-    ? `${player.profile.name} (${player.profile.tag ?? "no tag"})`
+  const detail = player.profile
+    ? (player.profile.tag ?? "no tag")
     : player.status === "none"
       ? "no profile"
       : "unknown, answer on the table";
@@ -215,22 +236,24 @@ function TableRow({ player, profiles }: { player: PlayerInfo; profiles: Players[
   if (player.source !== "answer") {
     return (
       <li>
-        {player.name}: {label}
+        <span class="who">{player.name}</span>
+        <span class="what">
+          {player.profile ? `${player.profile.name} · ${detail}` : detail}
+        </span>
       </li>
     );
   }
   const change = (event: Event) => {
     const value = (event.currentTarget as HTMLSelectElement).value;
     if (value === ASK_AGAIN) {
-      port?.postMessage({ type: "forget_identity", playerId: player.id } satisfies PanelToWorker);
+      send({ type: "forget_identity", playerId: player.id });
     } else {
-      const profile = value === NO_PROFILE ? null : value;
-      port?.postMessage({ type: "assign_identity", playerId: player.id, profile } satisfies PanelToWorker);
+      send({ type: "assign_identity", playerId: player.id, profile: value === NO_PROFILE ? null : value });
     }
   };
   return (
     <li>
-      {player.name}:{" "}
+      <span class="who">{player.name}</span>
       <select aria-label={`Change who ${player.name} is`} value={player.profile?.key ?? NO_PROFILE} onChange={change}>
         {profiles.map((p) => (
           <option key={p.key} value={p.key}>
@@ -246,29 +269,36 @@ function TableRow({ player, profiles }: { player: PlayerInfo; profiles: Players[
 
 function Panel() {
   const { status, acks, players, settings, costs, claude } = useWorkerState();
-  const requestSnapshot = () =>
-    port?.postMessage({ type: "snapshot_request" } satisfies PanelToWorker);
+  const requestSnapshot = () => send({ type: "snapshot_request" });
 
   return (
     <main>
-      <h1>VAMOS</h1>
-      <section>
-        <h2>Backend</h2>
-        <p class={`state ${status.state}`}>
+      <header class="top">
+        <span class="wordmark">VAMOS</span>
+        <span class={`state ${status.state}`}>
           {status.state}
           {status.version ? ` · v${status.version}` : ""}
           {status.recording ? " · recording log pages" : ""}
           {status.detail ? ` · ${status.detail}` : ""}
-        </p>
-      </section>
+        </span>
+      </header>
       {claude && <Advice claude={claude} />}
       {settings && <Dial settings={settings} />}
       <Notes />
       {costs && <Spend costs={costs} />}
       {players && (
-        <section>
-          <h2>Profiles</h2>
-          <p>{players.profiles.length} loaded from profiles/</p>
+        <section class="card">
+          <h2>Table</h2>
+          {players.players.length > 0 ? (
+            <ul class="table">
+              {players.players.map((p) => (
+                <TableRow key={p.id} player={p} profiles={players.profiles} />
+              ))}
+            </ul>
+          ) : (
+            <p class="muted small">Nobody seated yet.</p>
+          )}
+          <p class="muted small">{players.profiles.length} profiles loaded from profiles/</p>
           {players.problems.length > 0 && (
             <ul class="problems">
               {players.problems.map((problem) => (
@@ -276,21 +306,15 @@ function Panel() {
               ))}
             </ul>
           )}
-          <h2>Table</h2>
-          <ul>
-            {players.players.map((p) => (
-              <TableRow key={p.id} player={p} profiles={players.profiles} />
-            ))}
-          </ul>
         </section>
       )}
       {status.recording && (
-        <section>
+        <section class="card">
           <h2>Recording</h2>
-          <button type="button" onClick={requestSnapshot}>
+          <button type="button" class="secondary" onClick={requestSnapshot}>
             Save DOM snapshot
           </button>
-          <ul>
+          <ul class="acks">
             {acks.map((ack, index) => (
               <li key={index}>
                 {ack.what}: {ack.detail}

@@ -43,7 +43,7 @@ After a rebuild, reload VAMOS in `chrome://extensions` and then reload the Poker
 - VAMOS only reads and displays. It never clicks, types into, or otherwise operates PokerNow.
 - Profiles belong to the user. VAMOS reads `profiles/*.md` (skipping files that start with `_`) and never writes them.
 - No log ingestion, stats engine, or automatic learning in v1. Deferred features (AI preflop, range tables, HRC tables, review mode, training mode) are built only when the user asks.
-- Postflop models are Claude Haiku 4.5, Sonnet 5.5 (default) and Opus 5.5 only. Never Claude Fable 5.1.
+- Postflop models are Claude Sonnet 5.5 (default, effort medium) and Opus 5.5 only. Haiku 4.5 was dropped for misreading hands; never Claude Fable 5.1.
 - Ask the user before any non-trivial design choice the plan does not cover.
 
 ### Correctness

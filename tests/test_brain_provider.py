@@ -18,14 +18,12 @@ def request(name="balanced"):
 def test_request_parameters_per_preset():
     balanced = params(request("balanced"))
     assert balanced["model"] == "claude-sonnet-5-5"
-    assert balanced["output_config"]["effort"] == "low"
+    assert balanced["output_config"]["effort"] == "medium"
     assert balanced["output_config"]["format"]["type"] == "json_schema"
     assert "thinking" not in balanced  # adaptive is the default and the only mode on 5.5
     deep = params(request("deep"))
     assert (deep["model"], deep["output_config"]["effort"]) == ("claude-opus-5-5", "medium")
-    fast = params(request("fast"))
-    assert fast["model"] == "claude-haiku-4-5"
-    assert "effort" not in fast["output_config"]  # Haiku 4.5 rejects effort
+    assert set(PRESETS) == {"balanced", "deep"}  # Haiku was dropped
 
 
 def test_api_key_from_the_environment_or_the_env_file(tmp_path, monkeypatch):

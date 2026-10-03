@@ -25,18 +25,15 @@ from vamos.config import REPO_ROOT
 class Preset:
     name: str
     model: str
-    effort: str | None = (
-        None  # Sonnet 5.5 and Opus 5.5: thinking is always on, effort sets how much
-    )
-    thinking_budget: int | None = (
-        None  # Haiku 4.5 takes a thinking budget instead (None: no thinking)
-    )
+    # Adaptive thinking is on by default on both models; effort sets how much they may use.
+    effort: str | None = None
 
 
-# Starting points, to be tuned by the latency test once an API key exists.
+# Measured on the logged spots (2026-10-03): Sonnet at medium answers in about 3s and never
+# took over 5s; at high, hard spots took 12-20s. Haiku 4.5 was dropped after it misread
+# hands in 3 of 5 live answers.
 PRESETS = {
-    "fast": Preset("fast", "claude-haiku-4-5"),
-    "balanced": Preset("balanced", "claude-sonnet-5-5", effort="low"),
+    "balanced": Preset("balanced", "claude-sonnet-5-5", effort="medium"),
     "deep": Preset("deep", "claude-opus-5-5", effort="medium"),
 }
 MAX_TOKENS = 16_000  # room for thinking as well as the answer
@@ -97,8 +94,6 @@ def params(request: Request) -> dict[str, Any]:
     }
     if preset.effort:
         output_config["effort"] = preset.effort
-    if preset.thinking_budget:
-        out["thinking"] = {"type": "enabled", "budget_tokens": preset.thinking_budget}
     return out
 
 
