@@ -68,7 +68,7 @@ def facts(spot: Decision) -> dict:
     need = None
     if spot.to_call and bb:
         to_call = f"{format_chips(spot.to_call, bb)} ({format_bb(spot.to_call, bb)})"
-        need = round(100 * spot.to_call / (spot.pot + spot.to_call))
+        need = round(100 * spot.to_call / spot.winnable)
     return {
         "node": spot.node,
         "position": spot.position,

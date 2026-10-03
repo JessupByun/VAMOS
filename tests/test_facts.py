@@ -113,3 +113,25 @@ def test_big_blinds(cents, big_blind, expected):
 
 def test_equity_label_counts_opponents():
     assert (equity_vs(1), equity_vs(2)) == ("a random hand", "2 random hands")
+
+
+def test_the_price_of_calling_an_all_in_counts_only_what_hero_can_win():
+    # The villain shoves 99bb into a hero with 48bb left; the 50bb the hero cannot match goes
+    # back to the villain, so calling 48 wins 52 and needs 48%, not 48/150 = 32%.
+    lines = [
+        '-- starting hand #8 (id: h8)  No Limit Texas Hold\'em (dealer: "V @ villain001") --',
+        'Player stacks: #1 "Hero @ heroid0001" (10.00) | #3 "V @ villain001" (25.00)',
+        "Your hand is 2♦, 6♣",
+        '"V @ villain001" posts a small blind of 0.10',
+        '"Hero @ heroid0001" posts a big blind of 0.20',
+        '"V @ villain001" calls 0.20',
+        '"Hero @ heroid0001" checks',
+        "Flop:  [J♣, 5♥, 4♣]",
+        '"Hero @ heroid0001" bets 0.20',
+        '"V @ villain001" raises to 19.80 and go all in',
+    ]
+    view = TableView("heroid0001", ("2d", "6c"), ("Jc", "5h", "4c"), 2040)
+    spot = current_spot(log_of(lines), view)
+    assert spot is not None
+    assert (spot.to_call, spot.winnable) == (960, 2000)
+    assert facts(spot)["need"] == 48

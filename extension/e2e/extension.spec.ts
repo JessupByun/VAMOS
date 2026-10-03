@@ -331,7 +331,8 @@ test("after the flop the card shows Claude's answer and the panel its reasoning"
   await expect(card.locator(".action")).toHaveText("BET 0.20 (1bb)");
   await expect(card.locator(".facts")).toHaveText(/^SB · pot 2bb · \d+% vs random · Ace high$/);
 
-  await expect(panel.locator(".advice .note")).toHaveText("alex folds to small bets.");
+  await expect(panel.locator(".advice .why")).toHaveText("alex folds to small bets.");
+  await expect(panel.locator(".advice .plan")).toHaveText("Next: Check behind if alex calls and the turn is a club.");
   await expect(panel.getByRole("button", { name: "Ask Opus" })).toBeVisible();
   await expect(panel.getByText(/tonight \$0\.00/)).toBeVisible();
 

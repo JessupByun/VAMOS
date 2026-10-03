@@ -10,11 +10,12 @@ FACING = Spot(pot=160, to_call=40, street_bet=0, price=40, min_raise=40, behind=
 CHECKED = Spot(pot=120, to_call=0, street_bet=0, price=0, min_raise=20, behind=940, big_blind=20)
 
 
-def answer(*rows, note="ok"):
+def answer(*rows, note="ok", plan=""):
     return json.dumps(
         {
             "strategy": [{"action": a, "size_pct_pot": s, "freq": f} for a, s, f in rows],
-            "note": note,
+            "reason": note,
+            "plan": plan,
         }
     )
 
@@ -22,7 +23,7 @@ def answer(*rows, note="ok"):
 def test_a_pure_call():
     a = settle(answer(("call", 0, 1)), FACING, seed="n")
     assert a.chosen == Choice("call", 40, 1.0)
-    assert a.note == "ok"
+    assert (a.reason, a.plan) == ("ok", "")
 
 
 def test_illegal_actions_are_dropped_and_frequencies_renormalized():
@@ -69,12 +70,12 @@ def test_unusable_answers():
 
 def test_the_note_is_revealed():
     a = settle(
-        answer(("call", 0, 1), note="Player A overbluffs"),
+        answer(("call", 0, 1), note="Player A overbluffs", plan="Fold if Player A raises."),
         FACING,
         "n",
         reveal=lambda s: s.replace("Player A", "alex"),
     )
-    assert a.note == "alex overbluffs"
+    assert (a.reason, a.plan) == ("alex overbluffs", "Fold if alex raises.")
 
 
 def test_raising_closed_drops_raises_and_turns_all_in_into_a_call():

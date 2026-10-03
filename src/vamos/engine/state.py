@@ -123,6 +123,9 @@ class Decision:
     opponents: tuple[str, ...]  # still contesting the pot, hero excluded
     pot: Cents  # everything in the middle, this street's bets included
     to_call: Cents
+    # What the hero can win by calling, their call included: chips beyond what the hero
+    # can match go back to whoever put them in.
+    winnable: Cents
     behind: Cents  # hero's chips not yet in the pot
     big_blind: Cents | None
     effective_bb: float | None  # effective stack at the start of the hand, in big blinds
@@ -139,6 +142,12 @@ def decision(hand: Hand, hero: str) -> Decision | None:
     opponents = tuple(pid for pid in stacks if pid != hero and pid not in folded)
     behind = stacks[hero] - hand.put_in.get(hero, 0)
     to_call = min(max(0, hand.price - hand.street_bets.get(hero, 0)), behind)
+    hero_total = hand.put_in.get(hero, 0) + to_call
+    winnable = hero_total + sum(
+        min(put - hand.returned.get(pid, 0), hero_total)
+        for pid, put in hand.put_in.items()
+        if pid != hero
+    )
     effective = None
     if hand.big_blind and opponents:
         deepest = max(stacks[pid] for pid in opponents)
@@ -152,6 +161,7 @@ def decision(hand: Hand, hero: str) -> Decision | None:
         opponents=opponents,
         pot=hand.pot,
         to_call=to_call,
+        winnable=winnable,
         behind=behind,
         big_blind=hand.big_blind,
         effective_bb=effective,

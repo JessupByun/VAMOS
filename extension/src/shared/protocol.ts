@@ -116,8 +116,10 @@ export interface ClaudeAdvice {
   /** e.g. "BET 1.20 (6bb)"; null until Claude answers. */
   action: string | null;
   mix: string[] | null;
-  /** Claude's reasoning, with real names. */
-  note: string | null;
+  /** The one fact that decides the spot, with real names. */
+  why: string | null;
+  /** The next street, or the answer to a raise; null when nothing follows. */
+  plan: string | null;
   /** The model whose answer is shown (or, before any answer, the one asked), e.g. "Claude Sonnet 5.5". */
   model: string;
   /** The model of the latest call, e.g. "Claude Opus 5.5" while Ask Opus runs. */

@@ -16,7 +16,11 @@ USAGE = {"input_tokens": 100, "output_tokens": 300, "cache_read_input_tokens": 9
 
 def answer(*rows, note="Player A calls too much"):
     strategy = [{"action": a, "size_pct_pot": size, "freq": f} for a, size, f in rows]
-    return Reply(json.dumps({"strategy": strategy, "note": note}), "end_turn", USAGE)
+    return Reply(
+        json.dumps({"reason": note, "strategy": strategy, "plan": "Bet again on blanks."}),
+        "end_turn",
+        USAGE,
+    )
 
 
 BET = answer(("bet", 50, 1.0))
@@ -66,7 +70,7 @@ def test_an_answer_reaches_the_card_with_real_names(rig):
     assert view["source"] == "Claude" and view["state"] == "done"
     assert view["action"] == "BET 0.90 (4.5bb)"
     assert view["mix"] is None
-    assert view["note"] == "alex calls too much"
+    assert (view["why"], view["plan"]) == ("alex calls too much", "Bet again on blanks.")
     assert view["model"] == "Claude Sonnet 5.5"
     assert r.ledger.totals(datetime(2026, 10, 2, 14))["session"] > 0
     assert r.advisor.view("g", "h1:1:9") is None  # never shown for another node
@@ -166,7 +170,11 @@ def test_asking_opus_keeps_the_first_answer_up_meanwhile(rig):
     gate.set()
     r.updated()
     view = r.advisor.view("g", "h1:1:8")
-    assert (view["action"], view["model"], view["note"]) == ("CHECK", "Claude Opus 5.5", "alex traps")
+    assert (view["action"], view["model"], view["why"]) == (
+        "CHECK",
+        "Claude Opus 5.5",
+        "alex traps",
+    )
 
 
 def test_a_refused_call_is_never_sent(rig):

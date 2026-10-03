@@ -64,6 +64,25 @@ def _pair(hero: Sequence[str], board: Sequence[str]) -> str:
     return "second pair" if position == 1 else "bottom pair"
 
 
+def _two_pair(hero: Sequence[str], board: Sequence[str]) -> str:
+    """
+    Two pair only when both pairs use Hero's cards. A pair of Hero's next to a pair on the
+    board is one pair, beaten by trips and bigger pairs, and is described as such.
+    """
+    counts = Counter(c[0] for c in board)
+    board_pairs = sorted((r for r, n in counts.items() if n >= 2), key=_value, reverse=True)
+    h1, h2 = hero[0][0], hero[1][0]
+    own = h1 == h2 or (h1 in counts and counts[h1] == 1) or (h2 in counts and counts[h2] == 1)
+    if not board_pairs:
+        return "two pair"
+    if not own:
+        return "two pair on the board"
+    if h1 != h2 and h1 in counts and h2 in counts and counts[h1] == 1 and counts[h2] == 1:
+        return "two pair"
+    # One pair is Hero's, the other only the board's.
+    return f"{_pair(hero, board)} + the board's {_plural(board_pairs[0])}"
+
+
 def _made(hero: Sequence[str], board: Sequence[str]) -> str:
     category = eval7.handtype(_evaluate([*hero, *board]))
     plays_board = len(board) == 5 and _evaluate(board) == _evaluate([*hero, *board])
@@ -77,6 +96,8 @@ def _made(hero: Sequence[str], board: Sequence[str]) -> str:
             return f"set of {_plural(h1)}"
         counts = Counter(c[0] for c in board)
         return "trips" if counts.get(h1, 0) == 2 or counts.get(h2, 0) == 2 else "trips on the board"
+    if category == "Two Pair":
+        return _two_pair(hero, board)
     if category == "High Card":
         return f"{_name(max(hero[0][0], hero[1][0], key=_value))} high"
     return {"Two Pair": "two pair", "Quads": "quads", "Full House": "full house"}.get(
@@ -153,5 +174,7 @@ def improving_cards(hero: Sequence[str], board: Sequence[str]) -> dict[str, list
             new_board = [*board, card]
             if len(new_board) == 5 and _evaluate(new_board) == value:
                 continue  # the board plays: everyone has it
+            if kind == "Full House" and sum(c[0] == rank for c in board) >= 2:
+                continue  # trips on the board: anyone holding the fourth card has quads
             out.setdefault(_LABELS.get(kind, "full house or better"), []).append(card)
     return out

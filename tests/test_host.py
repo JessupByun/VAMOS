@@ -246,7 +246,10 @@ FLOP_TURN = {
         "bets": ["", ""],
     },
 }
-BET_HALF = '{"strategy": [{"action": "bet", "size_pct_pot": 50, "freq": 1}], "note": "Player A calls too wide."}'
+BET_HALF = (
+    '{"reason": "Player A calls too wide.", "strategy": [{"action": "bet", "size_pct_pot": 50,'
+    ' "freq": 1}], "plan": ""}'
+)
 
 
 def claude_backend(tmp_path, script):
@@ -284,7 +287,7 @@ def test_claude_answers_postflop_under_pseudonyms(tmp_path):
     while update["type"] != "facts":
         update = sent.get(timeout=3)
     advice = update["facts"]["advice"]
-    assert (advice["source"], advice["action"], advice["note"]) == (
+    assert (advice["source"], advice["action"], advice["why"]) == (
         "Claude",
         "BET 60 (3bb)",
         "alex calls too wide.",
@@ -314,7 +317,7 @@ def test_the_turn_ending_stops_claude(tmp_path):
 
 
 def test_the_dial_is_locked_for_the_rest_of_the_hand(tmp_path):
-    check = '{"strategy": [{"action": "check", "size_pct_pot": 0, "freq": 1}], "note": ""}'
+    check = '{"reason": "", "strategy": [{"action": "check", "size_pct_pot": 0, "freq": 1}], "plan": ""}'
     backend, fake, _ = claude_backend(tmp_path, [Reply(check, "end_turn", {})] * 2)
     backend.handle(page(*FLOP_HAND))
     backend.handle(FLOP_TURN)

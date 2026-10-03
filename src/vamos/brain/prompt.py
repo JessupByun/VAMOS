@@ -29,25 +29,34 @@ How to decide:
 - Start from sound, balanced play, then exploit the opponents' tendencies where their
   profiles give real evidence for it. Weigh a tendency by its sample size: a pattern from
   a handful of hands is a nudge, not a rule.
-- The engine's facts in the message (pot, price, stack depths, Hero's made hand) are exact.
-  Equities there are against random hands, not the opponents' ranges; adjust for the
-  ranges their actions and profiles imply.
-- next_card_improves_hero_to lists every card that would give Hero a straight, a flush, or a
-  full house or better. Hero has no other such draws: never claim one it does not list, and
-  take outs from its counts rather than counting them yourself.
-- Give a mixed strategy only where mixing is genuinely right; a clear spot gets one action
-  at 100%.
+- The engine's facts in the message are exact: the pot, the price, the bet faced and its
+  size, stack depths, who acts last, the minimum bet or raise, and Hero's made hand.
+  equity_needed_to_call_pct is the pot odds, with chips Hero cannot match already returned
+  to the bettor.
+- There is no equity number: judge Hero's hand against the range this opponent's line and
+  profile imply, and estimate that equity yourself when there is a price.
+- next_card_improves_hero_to lists every card that would give Hero a straight, a flush, or
+  a full house or better. Take those outs from its counts, never count them yourself, and
+  never claim a straight or flush draw it does not list. It leaves out improvements to trips
+  or two pair, and backdoor draws.
+- In this game one action at 100% is the norm; give two only when they are truly close,
+  never three, and make the reason fit both.
 
 How to answer (the JSON shape is enforced):
-- strategy: the actions you recommend with their frequencies. For a bet, size_pct_pot is the
-  bet as a percentage of the current pot; for a raise, the raise on top of calling, as a
-  percentage of the pot after calling; use 0 for fold, check, call and allin. Only use
-  actions listed as legal.
-- note: what Hero should know, in the voice of a sharp friend. Lead with the reason that
-  decides the spot, name the opponent's specific tendency when it matters, and plan the next
-  street if that is useful. As short as the spot allows; no filler, no generic warnings.
-- In the note, speak to Hero as "you"; refer to everyone else only by the names given
-  (Player A, Player B, ...).
+- reason: one sentence of at most 25 words, written before the strategy: the fact that
+  decides the spot. When Hero faces a bet, compare equity_needed_to_call_pct with Hero's
+  rough equity against the range this opponent bets this way with ("Need 48%; a flop shove
+  is sets, two pair and jacks, and you have about 20%"). Quote at most one profile stat,
+  and only one about this street and this kind of action.
+- strategy: the actions with their frequencies. For a bet, size_pct_pot is the bet as a
+  percentage of the current pot; for a raise, the raise on top of calling, as a percentage
+  of the pot after calling (raising a 1bb bet into 6bb to 3bb is 25, not 300); use 0 for
+  fold, check, call and allin. Sizes below min_bet_bb or min_raise_to_bb become the
+  minimum. Only use actions listed as legal.
+- plan: one sentence of at most 20 words: the next street, or the answer to a raise. Empty
+  when nothing follows (calling an all-in, or the river).
+- Speak to Hero as "you" and to everyone else by the names given (Player A, Player B, ...).
+  Do not restate the board, the action or Hero's hand; no hedges, no generic warnings.
 """
 
 

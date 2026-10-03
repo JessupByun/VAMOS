@@ -46,8 +46,10 @@ SPOT = """Hand so far (amounts in big blinds):
   {"street": "flop", "player": "Player A", "action": "bet", "to_bb": 3.0}],
  "board": ["Qs", "8h", "4c"],
  "facts": {"street": "flop", "pot_bb": 9.0, "to_call_bb": 3.0, "equity_needed_to_call_pct": 25,
-  "effective_stack_bb": 47.5, "stack_to_pot_ratio": 5.28, "hero_hand": "top pair, top kicker",
-  "hero_equity_vs_random_hands_pct": 88, "opponents_in_hand": 1},
+  "effective_stack_bb": 47.5, "stack_to_pot_ratio": 5.28, "hero_acts_last": true,
+  "hero_hand": "top pair, top kicker", "next_card_improves_hero_to": {}, "opponents_in_hand": 1,
+  "bet_faced": {"by": "Player A", "to_bb": 3.0, "pot_before_it_bb": 6.0, "pct_of_pot": 50,
+  "all_in": false}, "min_raise_to_bb": 6.0},
  "legal_actions": ["fold", "call", "raise", "allin"]}
 
 What should Hero do?"""

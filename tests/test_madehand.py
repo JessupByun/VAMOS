@@ -81,3 +81,18 @@ def test_improving_cards_are_exact():
     assert improving_cards(["As", "Ad"], ["5c", "6d", "7h", "8s"]) == {}
     # On the river there is nothing to come.
     assert improving_cards(["As", "Kd"], ["Qs", "8h", "4c", "2d", "7s"]) == {}
+
+
+@pytest.mark.parametrize(
+    ("hero", "board", "label"),
+    [
+        (["Td", "3c"], ["Qd", "Qh", "3s"], "second pair + the board's Queens"),
+        (["Td", "4d"], ["5h", "4s", "6s", "5c"], "bottom pair + the board's 5s"),
+        (["7c", "7d"], ["Qd", "Qh", "3s"], "pocket pair below the top card + the board's Queens"),
+        (["Ac", "Jd"], ["Tc", "Ts", "3d", "7s", "Ah"], "top pair, good kicker + the board's 10s"),
+        (["Ks", "Qd"], ["Kd", "Qh", "3s"], "two pair"),
+        (["As", "Kd"], ["Qd", "Qh", "3s", "3c"], "two pair on the board"),
+    ],
+)
+def test_a_pair_beside_a_board_pair_is_not_called_two_pair(hero, board, label):
+    assert describe(hero, board).startswith(label)

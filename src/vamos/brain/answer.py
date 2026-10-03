@@ -2,8 +2,9 @@
 Claude's postflop answer: the fixed JSON shape it must return, and how that becomes one
 legal action on the card.
 
-The strategy comes first in the schema so it streams before the note. Claude's sizes are
-a percentage of the pot: a bet of that share of the pot, or a raise of that share of the pot
+The reason comes first in the schema, so the model states what decides the spot before
+it picks the action; the plan for the next street follows. Claude's sizes are a
+percentage of the pot: a bet of that share of the pot, or a raise of that share of the pot
 after calling. Code, not the model, makes the answer legal: actions the spot does not allow
 are dropped (an all in where only calling is allowed counts as a call), frequencies are
 renormalized, sizes are snapped between the minimum and the stack (within 10% of the stack
@@ -21,6 +22,7 @@ ACTIONS = ("fold", "check", "call", "bet", "raise", "allin")
 SCHEMA = {
     "type": "object",
     "properties": {
+        "reason": {"type": "string"},
         "strategy": {
             "type": "array",
             "items": {
@@ -34,9 +36,9 @@ SCHEMA = {
                 "additionalProperties": False,
             },
         },
-        "note": {"type": "string"},
+        "plan": {"type": "string"},
     },
-    "required": ["strategy", "note"],
+    "required": ["reason", "strategy", "plan"],
     "additionalProperties": False,
 }
 
@@ -70,7 +72,8 @@ class Choice:
 class Answer:
     mix: tuple[Choice, ...]  # most frequent first
     chosen: Choice
-    note: str
+    reason: str  # the one fact that decides the spot
+    plan: str  # the next street or the answer to a raise; may be empty
 
 
 class BadAnswer(ValueError):
@@ -119,7 +122,8 @@ def settle(text: str, spot: Spot, seed: str, reveal=lambda s: s) -> Answer:
     try:
         data = json.loads(text)
         rows = data["strategy"]
-        note = str(data["note"])
+        reason = str(data["reason"])
+        plan = str(data.get("plan") or "")
     except (ValueError, KeyError, TypeError) as error:
         raise BadAnswer(f"unreadable answer: {error}") from error
     merged: dict[tuple[str, Cents], float] = {}
@@ -148,4 +152,4 @@ def settle(text: str, spot: Spot, seed: str, reveal=lambda s: s) -> Answer:
         if roll < 0:
             chosen = choice
             break
-    return Answer(mix, chosen, reveal(note))
+    return Answer(mix, chosen, reveal(reason), reveal(plan))

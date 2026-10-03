@@ -106,7 +106,12 @@ function Advice({ claude }: { claude: LatestClaude }) {
             {advice.action} <span class="muted">· {advice.model}</span>
           </p>
           {advice.mix && <p class="muted">{advice.mix.join(" · ")}</p>}
-          {advice.note && <p class="note">{advice.note}</p>}
+          {advice.why && <p class="why">{advice.why}</p>}
+          {advice.plan && (
+            <p class="plan">
+              <span class="muted">Next:</span> {advice.plan}
+            </p>
+          )}
         </>
       ) : (
         <p class="muted">

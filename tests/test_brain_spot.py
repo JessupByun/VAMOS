@@ -43,9 +43,10 @@ def test_facing_a_bet():
     assert legal(h, HERO, spot) == ["fold", "call", "raise", "allin"]
     s = betting(h, HERO, spot)
     assert (s.pot, s.to_call, s.price, s.min_raise) == (260, 80, 80, 80)
-    facts = claude_facts(h, spot, {"need": 24, "madeHand": "top pair", "equity": 80})
+    facts = claude_facts(h, HERO, spot, {"need": 24, "madeHand": "top pair"}, {V1: "Player A"})
     assert facts["pot_bb"] == 13.0 and facts["to_call_bb"] == 4.0
-    assert facts["effective_stack_bb"] == 43.0  # the bettor's 10.00 less 1.40 in
+    # The hero's 9.40 behind; the bettor can match it (8.60 behind plus the 0.80 already bet).
+    assert facts["effective_stack_bb"] == 47.0
     assert facts["opponents_in_hand"] == 1
 
 
@@ -85,3 +86,35 @@ def test_the_betting_state_carries_what_the_rules_allow():
     stacks = {HERO: "10.00", V1: "3.00", V2: "10.00"}
     h, spot = hand(stacks, *FLOP, f"{P[V1]} bets 2.40 and go all in", f"{P[V2]} folds")
     assert betting(h, HERO, spot).legal == ("fold", "call")
+
+
+def test_the_bet_faced_is_sized_against_the_pot_it_went_into():
+    h, spot = hand(DEEP, *FLOP, f"{P[V1]} bets 0.80", f"{P[V2]} folds")
+    facts = claude_facts(h, HERO, spot, {}, {V1: "Player A"})
+    assert facts["bet_faced"] == {
+        "by": "Player A",
+        "to_bb": 4.0,
+        "pot_before_it_bb": 9.0,
+        "pct_of_pot": 44,
+        "all_in": False,
+    }
+    assert facts["min_raise_to_bb"] == 8.0 and "min_bet_bb" not in facts
+    assert facts["hero_acts_last"] is True  # the hero has the button
+    assert "hero_equity_vs_random_hands_pct" not in facts
+
+
+def test_facing_an_all_in_bigger_than_the_hero():
+    stacks = {HERO: "5.00", V1: "20.00", V2: "10.00"}
+    h, spot = hand(stacks, *FLOP, f"{P[V1]} bets 15.00 and go all in", f"{P[V2]} folds")
+    facts = claude_facts(h, HERO, spot, {"need": 0}, {V1: "Player A"})
+    assert facts["call_puts_hero_all_in"] is True
+    assert facts["stack_to_pot_ratio"] is None
+    assert facts["effective_stack_bb"] == 22.0  # the hero's 4.40 behind, not 0
+    assert facts["returned_to_bettor_if_called_bb"] == 53.0  # 15.00 bet, 4.40 matched
+    assert facts["bet_faced"]["all_in"] is True
+
+
+def test_checked_to_the_hero_with_a_minimum_bet():
+    h, spot = hand(DEEP, *FLOP, f"{P[V1]} checks", f"{P[V2]} checks")
+    facts = claude_facts(h, HERO, spot, {}, {})
+    assert facts["min_bet_bb"] == 1.0 and "bet_faced" not in facts

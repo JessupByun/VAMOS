@@ -277,7 +277,7 @@ class Backend:
             hero,
             labels,
             positions(hand),
-            claude_facts(hand, spot, card),
+            claude_facts(hand, hero, spot, card, labels),
             legal(hand, hero, spot),
             tonight,
             notes,

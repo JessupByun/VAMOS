@@ -75,7 +75,12 @@ ul {
   font-weight: 700;
 }
 
-.advice .note {
+.advice .why {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.advice .plan {
   white-space: pre-wrap;
 }
 

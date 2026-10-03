@@ -31,8 +31,9 @@ const TABLE_HTML = `<div class="table">${seat(1, "TestHero", HERO_ID, "you-playe
 
 // Profiles get the first pseudonyms, so alex is "Player A" in every prompt.
 const CLAUDE_ANSWER = JSON.stringify({
+  reason: "Player A folds to small bets.",
   strategy: [{ action: "bet", size_pct_pot: 50, freq: 1 }],
-  note: "Player A folds to small bets.",
+  plan: "Check behind if Player A calls and the turn is a club.",
 });
 
 const PROFILE = `---\nname: alex\ntag: Calling station\nplayer_id: ${KNOWN_ID}\n---\n# alex\n`;

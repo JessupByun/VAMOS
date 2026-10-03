@@ -174,7 +174,8 @@ class Advisor:
             "source": "Claude",
             "action": None,
             "mix": None,
-            "note": None,
+            "why": None,  # the answer's reason
+            "plan": None,
             "model": MODEL_NAMES.get(asked, asked),  # who answered, once someone has
             "asked": MODEL_NAMES.get(asked, asked),  # the latest call's model
             "state": state,
@@ -186,7 +187,7 @@ class Advisor:
             out["action"] = describe(answer.chosen, spot)
             if answer.mix[0].freq < MIX_SHOWN_BELOW:
                 out["mix"] = [f"{_short(c, spot)} {round(100 * c.freq)}%" for c in answer.mix]
-            out["note"] = answer.note
+            out["why"], out["plan"] = answer.reason, answer.plan or None
         elif state == "failed":
             out["source"] = "Math"
         return out
