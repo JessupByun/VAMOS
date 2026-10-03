@@ -2,6 +2,7 @@ import { useEffect, useState } from "preact/hooks";
 
 import type { BackendStatus, Facts, Players } from "../shared/protocol";
 import type { SeatElement } from "./dom/seats";
+import type { Layout } from "./ui/placement";
 
 export interface ViewState {
   status: BackendStatus;
@@ -9,8 +10,8 @@ export interface ViewState {
   seats: SeatElement[];
   /** The hero's own seat element, or null when the hero is not seated. */
   heroSeat: Element | null;
-  /** PokerNow's "Your Turn" signal and action buttons, which the action card sits above. */
-  decisionArea: Element[];
+  /** Where the table's parts are on screen, for placing the action card. */
+  layout: Layout | null;
   /** The key of the table at the hero's turn, or null when it is not the hero's turn. */
   turn: string | null;
   facts: Facts | null;

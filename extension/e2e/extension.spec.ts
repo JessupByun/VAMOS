@@ -251,7 +251,7 @@ async function heroTurn(page: Page) {
         .querySelector(".table")
         ?.insertAdjacentHTML(
           "afterbegin",
-          `<div class="table-pot-size"><div class="main-value">${chips("0.00")}</div></div><div class="table-cards run-1"></div>`,
+          `<div class="table-pot-size" style="position:absolute;left:300px;top:200px;width:120px;height:40px"><div class="main-value">${chips("0.00")}</div></div><div class="table-cards run-1"></div>`,
         );
     },
     { hero: HERO_ID, known: KNOWN_ID, stranger: STRANGER_ID },
@@ -275,13 +275,32 @@ test("the action card shows facts on the hero's turn only once the log has caugh
     /^(FOLD|CALL 0\.10 \(0\.5bb\)|RAISE TO \d+\.\d\d \(\d+(\.\d)?bb\)|ALL IN .*)$/,
   );
   await expect(card.locator(".facts")).toHaveText(/^SB · pot 1\.5bb · \d+% vs random · need 25% · ATo$/);
-  // The card sits off the table, just above PokerNow's action buttons on the right.
-  const [cardBox, buttonsBox] = await Promise.all([
-    card.boundingBox(),
-    page.locator(".game-decisions-ctn").boundingBox(),
-  ]);
-  expect(cardBox && buttonsBox && cardBox.y + cardBox.height <= buttonsBox.y).toBe(true);
-  expect(cardBox && buttonsBox && cardBox.x + cardBox.width >= buttonsBox.x + buttonsBox.width - 8).toBe(true);
+  // The card sits at the top of the table, centered just above the pot, clear of every seat.
+  const pot = await page.locator(".table-pot-size").boundingBox();
+  let box = await card.boundingBox();
+  expect(pot && box && Math.abs(box.y + box.height - (pot.y - 10))).toBeLessThan(2);
+  expect(pot && box && Math.abs(box.x + box.width / 2 - (pot.x + pot.width / 2))).toBeLessThan(2);
+  for (const seat of await page.locator(".table-player").all()) {
+    const s = await seat.boundingBox();
+    expect(s && box && (s.y >= box.y + box.height || s.x >= box.x + box.width || s.x + s.width <= box.x)).toBe(true);
+  }
+  // A player sitting at the top sends it to the right, above PokerNow's buttons.
+  await page.evaluate(() =>
+    document
+      .querySelector(".table")
+      ?.insertAdjacentHTML(
+        "beforeend",
+        '<div class="table-player table-player-6" style="position:absolute;left:200px;top:20px;width:700px;height:130px"></div>',
+      ),
+  );
+  const buttons = await page.locator(".game-decisions-ctn").boundingBox();
+  await expect
+    .poll(async () => {
+      box = await card.boundingBox();
+      return Boolean(box && buttons && box.y + box.height <= buttons.y && box.x > 640);
+    })
+    .toBe(true);
+  await page.evaluate(() => document.querySelector(".table-player-6")?.remove());
 
   await page.evaluate(() => document.querySelector(".you-player")?.classList.remove("decision-current"));
   await expect(card).toHaveText("waiting for your turn");

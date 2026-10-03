@@ -1,5 +1,6 @@
 import {
   type ClaudeAdvice,
+  type Facts,
   isClaude,
   type PlayerInfo,
   type Players,
@@ -7,6 +8,7 @@ import {
 } from "../../shared/protocol";
 import type { SeatElement } from "../dom/seats";
 import { type Store, useStore } from "../store";
+import { chooseSpot, type Layout, slotStyle } from "./placement";
 
 function Pill({ store }: { store: Store }) {
   const { status } = useStore(store);
@@ -37,46 +39,39 @@ function factsLine(facts: SpotFacts, advised: boolean): string {
   return parts.filter(Boolean).join(" · ");
 }
 
-/**
- * In the grey margin right of the table, just above PokerNow's "Your Turn" signal and
- * action buttons, so it never covers cards, bets or the pot.
- */
-function docked(area: Element[]): Record<string, string> {
-  const tops = area
-    .map((element) => element.getBoundingClientRect())
-    .filter((rect) => rect.height > 0)
-    .map((rect) => rect.top);
-  if (tops.length === 0) return { right: "16px", top: "45%" };
-  return { right: "16px", bottom: `${window.innerHeight - Math.min(...tops) + 12}px` };
+function placed(layout: Layout | null): Record<string, string> {
+  if (!layout) return { right: "16px", top: "45%" };
+  return slotStyle(chooseSpot(layout), layout);
 }
 
 /** Shown only while the hero is seated; the decision only on the hero's turn. */
 function ActionCard({ store }: { store: Store }) {
-  const { heroSeat, decisionArea, turn, facts } = useStore(store);
+  const { heroSeat, layout, turn, facts } = useStore(store);
   if (!heroSeat) return null;
-  const style = docked(decisionArea);
-  if (turn === null) {
-    return (
-      <div class="action-card waiting" style={style}>
-        waiting for your turn
-      </div>
-    );
-  }
+  return (
+    <div class="card-slot" style={placed(layout)}>
+      <CardBody turn={turn} facts={facts} />
+    </div>
+  );
+}
+
+function CardBody({ turn, facts }: { turn: string | null; facts: Facts | null }) {
+  if (turn === null) return <div class="action-card waiting">waiting for your turn</div>;
   // Facts computed for an earlier state of the table are never shown.
   const current = facts?.key === turn ? facts.facts : null;
   if (!current) {
     return (
-      <div class="action-card" style={style}>
+      <div class="action-card">
         <div class="source math">Math</div>
         <div class="line syncing">syncing with the log...</div>
       </div>
     );
   }
   const advice = current.advice;
-  if (isClaude(advice)) return <ClaudeCard style={style} facts={current} advice={advice} />;
+  if (isClaude(advice)) return <ClaudeCard facts={current} advice={advice} />;
   const chart = advice?.action ? advice : null;
   return (
-    <div class="action-card" style={style}>
+    <div class="action-card">
       <div class={`source ${chart ? "chart" : "math"}`}>{chart ? "Chart" : "Math"}</div>
       <div class="action">{chart ? chart.action : current.madeHand}</div>
       {chart?.mix && <div class="line mix">{chart.mix.join(" · ")}</div>}
@@ -91,17 +86,12 @@ function claudeLabel(model: string): string {
   return model === "Sonnet" ? "Claude" : `Claude · ${model}`;
 }
 
-function ClaudeCard(props: {
-  style: Record<string, string>;
-  facts: SpotFacts;
-  advice: ClaudeAdvice;
-}) {
-  const { style, facts, advice } = props;
+function ClaudeCard({ facts, advice }: { facts: SpotFacts; advice: ClaudeAdvice }) {
   if (advice.action === null) {
     // No answer yet, or none coming: the math stays up, with the reason when there is one.
     const failed = advice.state === "failed";
     return (
-      <div class="action-card" style={style}>
+      <div class="action-card">
         <div class={`source ${failed ? "math" : "claude"}`}>
           {failed ? "Math" : claudeLabel(advice.asked)}
         </div>
@@ -113,7 +103,7 @@ function ClaudeCard(props: {
   }
   const upgrading = advice.asked !== advice.model;
   return (
-    <div class="action-card" style={style}>
+    <div class="action-card">
       <div class="source claude">{claudeLabel(advice.model)}</div>
       <div class="action">{advice.action}</div>
       {advice.mix && <div class="line mix">{advice.mix.join(" · ")}</div>}

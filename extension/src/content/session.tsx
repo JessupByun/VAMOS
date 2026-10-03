@@ -3,7 +3,7 @@ import { render } from "preact";
 import type { BackendStatus, ContentToWorker, WorkerToContent } from "../shared/protocol";
 import { ClockEstimate, readTimeBar } from "./dom/clock";
 import { readSeats, seatsKey } from "./dom/seats";
-import { decisionArea, heroSeat, readHeroTurn } from "./dom/table";
+import { heroSeat, readHeroTurn, readLayout } from "./dom/table";
 import { startLogPoller } from "./log/poller";
 import { createStore } from "./store";
 import overlayCss from "./ui/overlay.css?inline";
@@ -23,7 +23,7 @@ export function startSession(gameId: string): () => void {
     players: null,
     seats: [],
     heroSeat: null,
-    decisionArea: [],
+    layout: null,
     turn: null,
     facts: null,
   });
@@ -94,12 +94,15 @@ export function startSession(gameId: string): () => void {
     store.set({
       seats: readSeats(document),
       heroSeat: heroSeat(document),
-      decisionArea: decisionArea(document),
+      layout: readLayout(document),
     });
     reportSeats();
     reportTurn();
     reportClock();
   }, SEAT_CHECK_MS);
+  // PokerNow rescales the whole table with the window; follow at once, not at the next tick.
+  const relayout = () => store.set({ seats: readSeats(document), layout: readLayout(document) });
+  window.addEventListener("resize", relayout);
 
   // After the extension is reloaded or removed this script keeps running but can no longer
   // reach the worker; only a page reload injects the new version.
@@ -107,6 +110,7 @@ export function startSession(gameId: string): () => void {
     stopped = true;
     poller.stop();
     clearInterval(seatTimer);
+    window.removeEventListener("resize", relayout);
     show({ type: "backend", state: "down", detail: "VAMOS was updated, refresh this tab" });
   };
 
@@ -181,6 +185,7 @@ export function startSession(gameId: string): () => void {
     stopped = true;
     clearTimeout(retryTimer);
     clearInterval(seatTimer);
+    window.removeEventListener("resize", relayout);
     poller.stop();
     port?.disconnect();
     port = null;

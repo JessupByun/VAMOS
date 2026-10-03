@@ -66,9 +66,15 @@
   border-radius: 4px;
 }
 
-.action-card {
+.card-slot {
   position: fixed;
   z-index: 2147483647;
+  /* Its own width, wherever it is pinned; and never in the way of a click on the table. */
+  width: max-content;
+  pointer-events: none;
+}
+
+.action-card {
   box-sizing: border-box;
   min-width: 240px;
   max-width: 340px;
