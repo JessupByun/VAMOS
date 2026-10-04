@@ -1,6 +1,7 @@
 import io
 import json
 import queue
+import re
 import struct
 import threading
 from datetime import datetime
@@ -135,9 +136,9 @@ def test_log_pages_update_tonight_counts_without_saving_anything(backend, tmp_pa
     backend.handle(SEATS)
     [players] = backend.handle(page(*HAND))
     tonight = {p["id"]: p["tonight"] for p in players["players"]}
-    assert tonight == {
-        "Qw3rTy7UiO": {"hands": 1, "vpip": 1, "pfr": 0},
-        "zzzzzzzzzz": {"hands": 1, "vpip": 0, "pfr": 0},
+    assert {pid: (t["hands"], t["vpip"], t["pfr"]) for pid, t in tonight.items()} == {
+        "Qw3rTy7UiO": (1, 1, 0),
+        "zzzzzzzzzz": (1, 0, 0),
     }
     # The same page again brings nothing new, so no badge update is sent.
     assert backend.handle(page(*HAND)) == []
@@ -207,7 +208,7 @@ def test_a_player_whose_id_changed_is_still_recognized(backend):
     )
     [alex] = players["players"]
     assert alex["profile"]["key"] == "alex"
-    assert alex["tonight"] == {"hands": 1, "vpip": 1, "pfr": 0}
+    assert (alex["tonight"]["hands"], alex["tonight"]["vpip"], alex["tonight"]["pfr"]) == (1, 1, 0)
 
 
 HERO_HAND = [
@@ -475,3 +476,33 @@ def test_an_empty_summary_section_is_not_filled_from_the_next_heading():
     assert _summary("## Summary\n\n## Key stats\n- VPIP 45%\n") is None
     assert _summary("## Summary\nCalls a lot. Never folds.\n") == "Calls a lot."
     assert _summary("# rj\n\nLoose floater who cold-calls.\n") == "Loose floater who cold-calls."
+
+
+def test_a_draft_profile_goes_to_data_drafts_and_never_to_profiles(tmp_path):
+    backend, _, _ = claude_backend(tmp_path, [])
+    backend.handle(SEATS)
+    backend.handle(page(*FLOP_HAND))
+    backend.handle({"type": "notes", "playerId": "Qw3rTy7UiO", "text": "very bluffy"})
+    before = sorted(p.name for p in (tmp_path / "profiles").iterdir())
+    [saved] = backend.handle({"type": "save_draft", "gameId": GAME, "playerId": "Qw3rTy7UiO"})
+    assert saved["type"] == "draft_saved"
+    assert re.fullmatch(
+        rf"data/drafts/alex-\d{{4}}-\d{{2}}-\d{{2}}-{GAME.lower()}-9u4gp8c1eh\.md", saved["path"]
+    )
+    text = (tmp_path / saved["path"]).read_text()
+    assert "draft_of: alex" in text and "- Hands: 1" in text and "very bluffy" in text
+    assert sorted(p.name for p in (tmp_path / "profiles").iterdir()) == before
+    # Another player's draft from the same game never overwrites this one.
+    [other] = backend.handle({"type": "save_draft", "gameId": GAME, "playerId": "zzzzzzzzzz"})
+    assert other["path"] != saved["path"] and (tmp_path / saved["path"]).exists()
+
+
+def test_a_draft_frontmatter_stays_valid_for_any_nickname():
+    from vamos.host.server import _draft_text
+    from vamos.profiles import parse_profile
+
+    for nickname in ("Al: the shark", "#1 fish", "[x]", "Bob, Jr"):
+        text = _draft_text("Al", nickname, "aaaaaaaaaa", None, None, "", datetime(2026, 10, 3))
+        # Moved into profiles/ as is, the draft parses, with the nickname as one alias.
+        profile = parse_profile("al", text)
+        assert profile.aliases == (nickname,) and profile.player_ids == ("aaaaaaaaaa",)

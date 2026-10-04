@@ -11,6 +11,8 @@ import {
   type PanelToWorker,
   type PlayerInfo,
   type Players,
+  type ShownHand,
+  type TonightRead,
   type Settings,
   type WorkerToPanel,
 } from "../shared/protocol";
@@ -48,6 +50,8 @@ interface Hand {
   live: string | null;
 }
 const hands = new Map<string, Hand>();
+// Where each player's draft was last saved this session.
+const savedDrafts = new Map<string, string>();
 const playersByGame = new Map<string, Players>();
 // The table last heard from; a table with a live decision is shown before it.
 let lastGame: string | null = null;
@@ -120,6 +124,7 @@ function connect() {
     }
     else if (message.type === "settings") settings = message;
     else if (message.type === "costs") costs = message;
+    else if (message.type === "draft_saved") savedDrafts.set(message.playerId, message.path);
     else if (message.type === "hand") {
       onHand(message);
       lastGame = message.gameId;
@@ -322,10 +327,7 @@ function Dial({ settings }: { settings: Settings }) {
               onChange={() => send({ type: "settings", preset: preset.name })}
             />
             <span class="model">{preset.label}</span>
-            <span class="detail">
-              {preset.effort ? `${preset.effort} thinking · ` : ""}
-              {preset.seconds} s
-            </span>
+            <span class="detail">usually {preset.seconds} s</span>
           </label>
         ))}
       </div>
@@ -424,13 +426,55 @@ function PlayerNotes({ player }: { player: PlayerInfo }) {
   );
 }
 
-function PlayerRow({ player, profiles }: { player: PlayerInfo; profiles: Players["profiles"] }) {
+function TonightLine({ t }: { t: TonightRead | null }) {
+  if (!t || t.hands === 0) return <>no hands yet</>;
+  const parts = [
+    `VPIP ${pct(t.vpip, t.hands)}`,
+    `PFR ${pct(t.pfr, t.hands)}`,
+    t.threeBetChances > 0 && `3-bet ${t.threeBets}/${t.threeBetChances}`,
+    t.cbetChances > 0 && `c-bet ${t.cbets}/${t.cbetChances}`,
+    `bets ${t.betsRaises} : calls ${t.calls}`,
+    t.facedBets > 0 && `folds to bets ${t.foldsToBets}/${t.facedBets}`,
+  ].filter(Boolean);
+  return (
+    <>
+      {parts.join(" · ")} <span class="muted">({t.hands} hand{t.hands === 1 ? "" : "s"})</span>
+    </>
+  );
+}
+
+const RESULT_TEXT: Record<ShownHand["result"], string> = {
+  won: "won",
+  lost: "lost",
+  split: "won part",
+  folded: "shown after folding",
+  uncontested: "shown, no call",
+};
+
+function Showdowns({ t }: { t: TonightRead | null }) {
+  if (!t || t.showdowns.length === 0) return null;
+  return (
+    <ul class="shown">
+      {t.showdowns.map((s) => (
+        <li key={s.number}>
+          <span class="cards">
+            {s.cards.map((c) => (
+              <Card key={c} card={c} />
+            ))}
+          </span>
+          <span class="line">
+            {s.line}
+            <span class={s.result}> · {RESULT_TEXT[s.result]}</span>
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function PlayerRow(props: { player: PlayerInfo; profiles: Players["profiles"]; gameId: string }) {
+  const { player, profiles, gameId } = props;
   const profile = player.profile;
-  const t = player.tonight;
-  const tonight =
-    t && t.hands > 0
-      ? `VPIP ${pct(t.vpip, t.hands)} · PFR ${pct(t.pfr, t.hands)} (${t.hands} hand${t.hands === 1 ? "" : "s"})`
-      : "no hands yet";
   const lifetime = profile
     ? [
         profile.stats.vpip && `VPIP ${profile.stats.vpip}%`,
@@ -439,12 +483,23 @@ function PlayerRow({ player, profiles }: { player: PlayerInfo; profiles: Players
         profile.meta.net && `net ${profile.meta.net}`,
       ].filter(Boolean)
     : [];
+  const saved = savedDrafts.get(player.id);
   return (
     <li class={player.hero ? "player me" : "player"}>
       <div class="row1">
         <span class="who">{player.hero ? `${player.name} (You)` : (profile?.name ?? player.name)}</span>
         {profile && profile.name !== player.name && <span class="muted nick">{player.name}</span>}
         {profile?.tag && <span class="tag">{profile.tag}</span>}
+        {!player.hero && (
+          <button
+            type="button"
+            class="mini"
+            title="Write tonight's read and your notes to data/drafts/ for you to review"
+            onClick={() => send({ type: "save_draft", gameId, playerId: player.id })}
+          >
+            Save draft
+          </button>
+        )}
         {!player.hero && player.source !== "player_id" && (
           <span class="picker">
             <IdentityPicker player={player} profiles={profiles} />
@@ -453,7 +508,7 @@ function PlayerRow({ player, profiles }: { player: PlayerInfo; profiles: Players
       </div>
       {profile?.summary && <p class="summary">{profile.summary}</p>}
       <p class="numbers">
-        <span class="label">Tonight</span> {tonight}
+        <span class="label">Tonight</span> <TonightLine t={player.tonight} />
         {lifetime.length > 0 && (
           <>
             <br />
@@ -467,7 +522,9 @@ function PlayerRow({ player, profiles }: { player: PlayerInfo; profiles: Players
           </>
         )}
       </p>
+      <Showdowns t={player.tonight} />
       {!player.hero && <PlayerNotes player={player} />}
+      {saved && <p class="muted small saved">Draft saved to {saved}</p>}
       {profile && (
         <details>
           <summary>Profile file</summary>
@@ -485,7 +542,7 @@ function PlayersSection({ players }: { players: Players }) {
       {players.players.length > 0 ? (
         <ul class="players">
           {players.players.map((p) => (
-            <PlayerRow key={p.id} player={p} profiles={players.profiles} />
+            <PlayerRow key={p.id} player={p} profiles={players.profiles} gameId={players.gameId} />
           ))}
         </ul>
       ) : (

@@ -288,6 +288,20 @@ test("the action card shows facts on the hero's turn only once the log has caugh
     const s = await seat.boundingBox();
     expect(s && box && (s.y >= box.y + box.height || s.x >= box.x + box.width || s.x + s.width <= box.x)).toBe(true);
   }
+  // An empty seat's placeholder at the top (PokerNow draws one for every free seat before a
+  // game fills up) is not a player: the card stays above the pot.
+  await page.evaluate(() =>
+    document
+      .querySelector(".table")
+      ?.insertAdjacentHTML(
+        "beforeend",
+        '<div class="table-player table-player-seat table-player-7" style="position:absolute;left:200px;top:20px;width:700px;height:130px"><button class="table-player-seat-button">Sit</button></div>',
+      ),
+  );
+  await page.waitForTimeout(800);
+  box = await card.boundingBox();
+  expect(pot && box && Math.abs(box.y + box.height - (pot.y - 10))).toBeLessThan(2);
+  await page.evaluate(() => document.querySelector(".table-player-seat")?.remove());
   // A player sitting at the top sends it to the right, above PokerNow's buttons.
   await page.evaluate(() =>
     document
@@ -363,6 +377,10 @@ test("after the flop the card shows Claude's answer and the panel its reasoning"
   // The hero sits at the table too; every other player has a notes box.
   await expect(panel.locator(".players li.me .who")).toHaveText("TestHero (You)");
   await expect(panel.getByRole("textbox", { name: "Notes on alex" })).toBeVisible();
+  // A draft of tonight's read goes to data/drafts/, never to profiles/.
+  const alexRow = panel.locator(".players li.player", { has: panel.locator(".who", { hasText: /^alex$/ }) });
+  await alexRow.getByRole("button", { name: "Save draft" }).click();
+  await expect(panel.locator(".players .saved")).toHaveText(/^Draft saved to data\/drafts\/alex-\d{4}-\d{2}-\d{2}-e2etest-known00001\.md$/);
 
   await page.evaluate(() => document.querySelector(".you-player")?.classList.remove("decision-current"));
   await expect(card).toContainText("waiting for your turn");

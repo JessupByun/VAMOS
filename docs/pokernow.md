@@ -61,6 +61,7 @@ Your hand is 4♠, 10♠
 ## DOM
 
 - Seats: `.table-player.table-player-<P>`; `<P>` is a visual position rotated so the hero sits at 1, not the physical seat.
+  An empty seat is drawn as `.table-player.table-player-seat` with a `.table-player-seat-button` (Sit) and no player link; before a game fills up, every empty seat shows one.
   Join DOM seats to log players by the player link `a[href="/players/<id>"]`, never by `<P>`.
 - Classes on a seat: `you-player` (the local user), `decision-current` (whoever must act), `fold`, `offline`, `winner`.
 - Dealer: `.dealer-button-ctn.dealer-position-<P>`, in the same rotated frame as the seats.

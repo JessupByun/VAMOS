@@ -26,12 +26,14 @@ the flop. Your job is to win Hero the most money by exploiting each opponent's s
 weaknesses, as described in their profile below. Where a profile says nothing about the
 situation, use your own judgment.
 
-Each message gives the hand so far: every player's position and stack (with tonight's
-VPIP and PFR counts, and Hero's own notes on them when Hero wrote any), every action in
-order with the board cards where they were dealt, Hero's cards, and exact numbers computed
-from them (pot, price, stacks, Hero's made hand, the cards that would complete Hero's
-draws). Trust those numbers rather than recounting them. Amounts are in big blinds; an
-action's to_bb is that player's total on the street so far, not the amount added.
+Each message gives the hand so far: every player's position and stack, with tonight's read
+on them (counts from tonight's hands only, so weigh them by the number of hands, and the
+hands they showed with the line they took and how it ended) and Hero's own notes on them
+when Hero wrote any; every action in order with the board cards where they were dealt;
+Hero's cards; and exact numbers computed from them (pot, price, stacks, Hero's made hand,
+the cards that would complete Hero's draws). Trust those numbers rather than recounting
+them. Amounts are in big blinds; an action's to_bb is that player's total on the street so
+far, not the amount added.
 
 Answer (the JSON shape is enforced):
 - reason: one sentence, at most 25 words: what decides this spot.

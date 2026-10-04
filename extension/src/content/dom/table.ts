@@ -62,7 +62,10 @@ let lastCenter: { viewport: string; box: Box } | null = null;
  * container's own box leaves those out.
  */
 export function readLayout(root: ParentNode): Layout {
-  const seats = boxes(root, ".table-player");
+  // Taken seats only: before a game fills up, PokerNow draws every empty seat as a
+  // ".table-player-seat" placeholder with a Sit button, which the card may cover (it never
+  // takes clicks).
+  const seats = boxes(root, ".table-player:not(.table-player-seat)");
   const decisions = union(boxes(root, "p.action-signal, .game-decisions-ctn, .game-decisions-ctn *"));
   const pot = union(boxes(root, ".table-pot-size, .table-pot-size *"));
   const board = union(boxes(root, ".table-cards, .table-cards *"));
@@ -81,7 +84,10 @@ export function readLayout(root: ParentNode): Layout {
     decisions,
     obstacles: [
       ...seats,
-      ...boxes(root, ".table-player .card-container, .table-player-bet-value, .dealer-button-ctn, .dealer-button-ctn *"),
+      ...boxes(
+        root,
+        ".table-player:not(.table-player-seat) .card-container, .table-player-bet-value, .dealer-button-ctn, .dealer-button-ctn *",
+      ),
       ...[pot, board, decisions].filter((b) => b !== null),
     ],
     soft: seats.map((b) => ({ left: b.left, top: b.top + b.height, width: b.width, height: BADGE_HEIGHT })),

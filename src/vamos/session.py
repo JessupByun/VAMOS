@@ -80,3 +80,181 @@ class GameSession:
                 voluntary[pid] = voluntary.get(pid, 0) + (pid in put_in)
                 raised[pid] = raised.get(pid, 0) + (pid in raisers)
         return {pid: Counts(dealt[pid], voluntary[pid], raised[pid]) for pid in dealt}
+
+
+@dataclass(frozen=True)
+class Showdown:
+    number: int  # the hand number
+    cards: tuple[str, ...]
+    board: tuple[str, ...]
+    second_board: tuple[str, ...]  # run it twice: the second runout, else empty
+    line: str  # their actions by street, e.g. "preflop call · flop call · turn check"
+    # "won", "lost", "split" (won part: a chop, one run of two, or a side pot), "folded"
+    # (shown after folding) or "uncontested" (shown after everyone else folded).
+    result: str
+
+
+@dataclass(frozen=True)
+class Read:
+    """Tonight's read on one player, counted from tonight's log only."""
+
+    hands: int
+    vpip: int
+    pfr: int
+    three_bets: int  # re-raises of the first preflop raise
+    three_bet_chances: int  # hands where they acted facing exactly one preflop raise
+    cbets: int  # flop bets as the preflop raiser, with no bet before them
+    cbet_chances: int  # flops where the preflop raiser acted first or was checked to
+    bets_raises: int  # postflop bets and raises
+    calls: int  # postflop calls
+    folds_to_bets: int  # postflop folds when facing a bet
+    faced_bets: int  # postflop decisions facing a bet
+    showdowns: tuple[Showdown, ...]
+
+    def summary(self) -> dict:
+        """The read as Claude gets it: exact counts, with the last few hands shown."""
+        return {
+            "hands": self.hands,
+            "vpip": self.vpip,
+            "pfr": self.pfr,
+            "three_bet": f"{self.three_bets}/{self.three_bet_chances}",
+            "cbet": f"{self.cbets}/{self.cbet_chances}",
+            "postflop_bets_and_raises": self.bets_raises,
+            "postflop_calls": self.calls,
+            "folds_to_postflop_bets": f"{self.folds_to_bets}/{self.faced_bets}",
+            "hands_shown": [
+                {
+                    "cards": list(s.cards),
+                    "board": list(s.board),
+                    **({"second_board": list(s.second_board)} if s.second_board else {}),
+                    "line": s.line,
+                    "result": s.result,
+                }
+                for s in self.showdowns[-5:]
+            ],
+        }
+
+
+def reads(log: HandLog) -> dict[str, Read]:
+    """Tonight's read on every player dealt in, under their current ID."""
+    tally: dict[str, dict] = {}
+    shown: dict[str, list[Showdown]] = {}
+    for hand in log.hands:
+        if not hand.seats:
+            continue
+        ids = [log.current_id(s.player.id) for s in hand.seats]
+        for pid in ids:
+            t = tally.setdefault(pid, dict.fromkeys(_READ_FIELDS, 0))
+            t["hands"] += 1
+        preflop = [a for a in hand.actions if a.street == Street.PREFLOP]
+        raises = [a for a in preflop if a.kind == "raise"]
+        for pid in {log.current_id(a.player) for a in preflop if a.kind in VOLUNTARY}:
+            tally[pid]["vpip"] += 1
+        for pid in {log.current_id(a.player) for a in raises}:
+            tally[pid]["pfr"] += 1
+        if raises:
+            # Everyone who acted after the first raise and up to the re-raise had the
+            # chance to 3-bet; only the first re-raise is one (later ones are 4-bets).
+            until = raises[1].order if len(raises) > 1 else None
+            opener = log.current_id(raises[0].player)
+            faced = {
+                log.current_id(a.player)
+                for a in preflop
+                if a.order > raises[0].order
+                and (until is None or a.order <= until)
+                and a.kind in VOLUNTARY | {"fold"}
+            }
+            for pid in faced - {opener}:
+                tally[pid]["three_bet_chances"] += 1
+            if len(raises) > 1:
+                tally[log.current_id(raises[1].player)]["three_bets"] += 1
+        _postflop(hand, log, tally, log.current_id(raises[-1].player) if raises else None)
+        # Cards shown while an all-in runs out come before the result; wait for the end.
+        if not hand.ended:
+            continue
+        for raw, cards in hand.shows.items():
+            pid = log.current_id(raw)
+            shown.setdefault(pid, []).append(
+                Showdown(
+                    hand.number,
+                    tuple(cards),
+                    tuple(hand.board),
+                    tuple(hand.second_run or hand.second_board),
+                    _line(hand, log, pid),
+                    _result(hand, log, pid, ids),
+                )
+            )
+    return {pid: Read(**t, showdowns=tuple(shown.get(pid, ()))) for pid, t in tally.items()}
+
+
+_READ_FIELDS = (
+    "hands",
+    "vpip",
+    "pfr",
+    "three_bets",
+    "three_bet_chances",
+    "cbets",
+    "cbet_chances",
+    "bets_raises",
+    "calls",
+    "folds_to_bets",
+    "faced_bets",
+)
+
+
+def _result(hand, log: HandLog, pid: str, ids: list[str]) -> str:
+    # Collected and folded are keyed by the ID at the time, which may since have changed.
+    won: dict[str, int] = {}
+    for raw, amount in hand.collected.items():
+        won[log.current_id(raw)] = won.get(log.current_id(raw), 0) + amount
+    folded = {log.current_id(p) for p in hand.folded()}
+    if pid in folded:
+        return "folded"
+    live = [p for p in ids if p not in folded]
+    if len(live) < 2:
+        return "uncontested"
+    if won.get(pid, 0) <= 0:
+        return "lost"
+    return "split" if any(won.get(p, 0) > 0 for p in live if p != pid) else "won"
+
+
+def _postflop(hand, log: HandLog, tally: dict[str, dict], aggressor: str | None) -> None:
+    # A c-bet chance is the preflop raiser's first flop action with no bet before it; a
+    # donk bet, or an all-in preflop that leaves no flop action, is no chance.
+    bet_seen = False
+    for a in (a for a in hand.actions if a.street == Street.FLOP):
+        if log.current_id(a.player) == aggressor:
+            tally[aggressor]["cbet_chances"] += not bet_seen
+            tally[aggressor]["cbets"] += not bet_seen and a.kind == "bet"
+            break
+        bet_seen = bet_seen or a.kind in ("bet", "raise")
+    for street in (Street.FLOP, Street.TURN, Street.RIVER):
+        price = 0
+        put: dict[str, int] = {}
+        for a in (a for a in hand.actions if a.street == street):
+            pid = log.current_id(a.player)
+            if a.kind in ("bet", "raise"):
+                tally[pid]["bets_raises"] += 1
+            elif a.kind == "call":
+                tally[pid]["calls"] += 1
+            if a.kind in VOLUNTARY | {"fold", "check"} and price > put.get(pid, 0):
+                tally[pid]["faced_bets"] += 1
+                tally[pid]["folds_to_bets"] += a.kind == "fold"
+            if a.to is not None:
+                put[pid] = max(put.get(pid, 0), a.to)
+                price = max(price, a.to)
+
+
+def _line(hand, log: HandLog, pid: str) -> str:
+    parts = []
+    for street in (Street.PREFLOP, Street.FLOP, Street.TURN, Street.RIVER):
+        moves = [
+            a.kind
+            for a in hand.actions
+            if a.street == street
+            and log.current_id(a.player) == pid
+            and a.kind in VOLUNTARY | {"check", "fold"}
+        ]
+        if moves:
+            parts.append(f"{street.name.lower()} {', '.join(moves)}")
+    return " · ".join(parts) or "no action"

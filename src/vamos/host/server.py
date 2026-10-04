@@ -15,6 +15,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, BinaryIO
 
+import yaml
+
 from vamos.brain import prompt
 from vamos.brain.advisor import DEFAULT_SECONDS, SPARE_SECONDS, Advisor, Job
 from vamos.brain.costs import SOFT_CAP, Ledger
@@ -38,7 +40,7 @@ from vamos.identity import IdentityMap, Resolution
 from vamos.log.hands import Hand, Street
 from vamos.money import parse_chips
 from vamos.profiles import Profile, ProfileSet, load_profiles
-from vamos.session import GameSession
+from vamos.session import GameSession, Read, Showdown, reads
 
 log = logging.getLogger("vamos.host")
 
@@ -175,6 +177,8 @@ class Backend:
             else:
                 self.notes = text
             return []
+        if kind == "save_draft":
+            return [self._save_draft(message["gameId"], message["playerId"])]
         if kind == "ask":
             return self._ask(message)
         if kind == "settings_request":
@@ -262,6 +266,42 @@ class Backend:
             return self.player_notes[pid]
         old = [o for o, new in aliases.items() if new == pid and o in self.player_notes]
         return self.player_notes[old[-1]] if old else ""
+
+    def _save_draft(self, game_id: str, pid: str) -> Message:
+        """
+        Tonight's read and notes on one player as a draft profile in data/drafts/, for the
+        user to review and merge into profiles/ themselves. VAMOS never writes profiles/.
+        """
+        session = self._session(game_id)
+        aliases = session.log.aliases
+        current = session.log.current_id(pid)
+        seat = next((s for s in self.seated.get(game_id, []) if s["id"] == pid), {"name": pid})
+        profiles = self.profiles()
+        resolution = self._resolve(pid, profiles, aliases)
+        profile = profiles.profiles.get(resolution.profile or "")
+        read = reads(session.log).get(current)
+        name = profile.name if profile else seat.get("name") or pid
+        today = datetime.now()
+        # One file per player per game: saving again overwrites tonight's earlier save.
+        stem = f"{_slug(name)}-{today:%Y-%m-%d}-{_slug(game_id)}-{_slug(current)}"
+        path = self.data_dir / "drafts" / f"{stem}.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            _draft_text(
+                name,
+                seat.get("name", ""),
+                current,
+                profile,
+                read,
+                self._notes_for(pid, aliases),
+                today,
+            )
+        )
+        return {
+            "type": "draft_saved",
+            "playerId": pid,
+            "path": str(path.relative_to(self.data_dir.parent)),
+        }
 
     def _hero_id(self, game_id: str) -> str | None:
         seat = self.hero_seat.get(game_id)
@@ -356,10 +396,7 @@ class Backend:
             if s.player.id != hero
         }
         labels[hero] = HERO
-        counts = self._session(game_id).counts()
-        tonight = {
-            pid: {"hands": c.hands, "vpip": c.vpip, "pfr": c.pfr} for pid, c in counts.items()
-        }
+        tonight = {pid: r.summary() for pid, r in reads(self._session(game_id).log).items()}
         # The hand itself names players only by pseudonym; the notes are the user's own words.
         notes = names.hide(self.notes)
         game_log = self._session(game_id).log
@@ -453,12 +490,12 @@ class Backend:
     def _players(self, game_id: str) -> Message:
         profiles = self.profiles()
         session = self._session(game_id)
-        counts = session.counts()
+        tonight_reads = reads(session.log)
         aliases = session.log.aliases
         players = []
         hero = self.hero_seat.get(game_id)
         if hero:
-            mine = counts.get(aliases.get(hero["id"], hero["id"]))
+            mine = tonight_reads.get(aliases.get(hero["id"], hero["id"]))
             players.append(
                 {
                     "id": hero["id"],
@@ -467,9 +504,7 @@ class Backend:
                     "status": "none",
                     "source": None,
                     "profile": None,
-                    "tonight": (
-                        {"hands": mine.hands, "vpip": mine.vpip, "pfr": mine.pfr} if mine else None
-                    ),
+                    "tonight": _read_view(mine),
                     "notes": "",
                 }
             )
@@ -477,7 +512,7 @@ class Backend:
             pid = seated["id"]
             resolution = self._resolve(pid, profiles, aliases)
             profile = profiles.profiles.get(resolution.profile or "")
-            tonight = counts.get(aliases.get(pid, pid))
+            tonight = tonight_reads.get(aliases.get(pid, pid))
             players.append(
                 {
                     "id": pid,
@@ -485,11 +520,7 @@ class Backend:
                     "status": resolution.kind,
                     "source": resolution.source,
                     "profile": _profile_view(profile) if profile else None,
-                    "tonight": (
-                        {"hands": tonight.hands, "vpip": tonight.vpip, "pfr": tonight.pfr}
-                        if tonight
-                        else None
-                    ),
+                    "tonight": _read_view(tonight),
                     "notes": self._notes_for(pid, aliases),
                 }
             )
@@ -520,6 +551,110 @@ class Backend:
         path = game_dir / f"dom_{message['capturedAt']}.html"
         path.write_text(message["html"])
         return {"type": "ack", "what": "dom_snapshot", "detail": path.name}
+
+
+def _slug(name: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_-]+", "-", name).strip("-").lower() or "player"
+
+
+def _pct(count: int, of: int) -> str:
+    return f"{round(100 * count / of)}% ({count}/{of})" if of else "n/a"
+
+
+def _draft_text(
+    name: str,
+    nickname: str,
+    pid: str,
+    profile: Profile | None,
+    read: Read | None,
+    notes: str,
+    today: datetime,
+) -> str:
+    """A draft profile in the template's shape: frontmatter, then what tonight showed."""
+    # Dumped, not formatted, so a nickname like "Al: the shark" or "Bob, Jr" stays valid.
+    meta = {
+        "name": name,
+        "aliases": [nickname] if nickname and nickname != name else [],
+        "player_id": pid,
+        "draft_of": profile.key if profile else "none",
+        "saved": today.isoformat(timespec="minutes"),
+    }
+    lines = [
+        "---",
+        yaml.safe_dump(meta, sort_keys=False, allow_unicode=True).rstrip("\n"),
+        "---",
+        f"# Draft for {name}, {today:%Y-%m-%d}",
+        "",
+        "Written by VAMOS! from one session, for you to review. It is not a profile: merge what",
+        f"is useful into profiles/{profile.key if profile else '<name>'}.md yourself.",
+        "",
+        "## Tonight's numbers",
+    ]
+    if read is None or read.hands == 0:
+        lines.append("- No hands dealt tonight.")
+    else:
+        lines += [
+            f"- Hands: {read.hands}",
+            f"- VPIP: {_pct(read.vpip, read.hands)}",
+            f"- PFR: {_pct(read.pfr, read.hands)}",
+            f"- 3-bet: {_pct(read.three_bets, read.three_bet_chances)}",
+            f"- C-bet: {_pct(read.cbets, read.cbet_chances)}",
+            f"- Postflop bets and raises: {read.bets_raises}; calls: {read.calls}",
+            f"- Folds to postflop bets: {_pct(read.folds_to_bets, read.faced_bets)}",
+        ]
+    lines += ["", "## Hands shown"]
+    shown = read.showdowns if read else ()
+    lines += [
+        f"- Hand #{s.number}: {' '.join(s.cards)} on {_boards(s)}; {s.line}; "
+        f"{_RESULT_TEXT[s.result]}"
+        for s in shown
+    ] or ["- None tonight."]
+    lines += ["", "## Your notes tonight", notes.strip() or "None.", ""]
+    return "\n".join(lines)
+
+
+_RESULT_TEXT = {
+    "won": "won",
+    "lost": "lost at showdown",
+    "split": "won part of the pot",
+    "folded": "shown after folding",
+    "uncontested": "shown after everyone folded",
+}
+
+
+def _boards(s: Showdown) -> str:
+    board = " ".join(s.board) or "no board"
+    return f"{board} / second run {' '.join(s.second_board)}" if s.second_board else board
+
+
+def _read_view(read: Read | None) -> Message | None:
+    """Tonight's read for the side panel."""
+    if read is None:
+        return None
+    return {
+        "hands": read.hands,
+        "vpip": read.vpip,
+        "pfr": read.pfr,
+        "threeBets": read.three_bets,
+        "threeBetChances": read.three_bet_chances,
+        "cbets": read.cbets,
+        "cbetChances": read.cbet_chances,
+        "betsRaises": read.bets_raises,
+        "calls": read.calls,
+        "foldsToBets": read.folds_to_bets,
+        "facedBets": read.faced_bets,
+        "showdowns": [
+            {
+                "number": s.number,
+                "cards": list(s.cards),
+                "board": list(s.board),
+                "secondBoard": list(s.second_board),
+                "line": s.line,
+                "result": s.result,
+            }
+            for s in read.showdowns[-5:]
+        ],
+    }
 
 
 # Frontmatter fields shown in the side panel; names, aliases and IDs stay out of the UI.

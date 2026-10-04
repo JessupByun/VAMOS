@@ -77,12 +77,52 @@ export interface PlayerInfo {
   /** A profile's player_id (fixed) or the user's own answer (changeable). */
   source: "player_id" | "answer" | null;
   profile: ProfileView | null;
-  /** Tonight only, never saved: hands dealt, and of those voluntarily played / raised preflop. */
-  tonight: { hands: number; vpip: number; pfr: number } | null;
+  /** Tonight's read, counted from tonight's log only and never saved. */
+  tonight: TonightRead | null;
   /** The hero's own row. */
   hero?: boolean;
   /** The user's notes on this player tonight; sent to Claude with every hand they play. */
   notes: string;
+}
+
+export interface TonightRead {
+  hands: number;
+  /** Hands voluntarily played / raised preflop. */
+  vpip: number;
+  pfr: number;
+  /** First re-raises preflop, out of hands where they acted facing exactly one raise. */
+  threeBets: number;
+  threeBetChances: number;
+  /** Flop bets as the preflop raiser, out of flops where they acted with no bet before them. */
+  cbets: number;
+  cbetChances: number;
+  /** Postflop bets and raises, and calls. */
+  betsRaises: number;
+  calls: number;
+  /** Postflop folds when facing a bet, out of decisions facing one. */
+  foldsToBets: number;
+  facedBets: number;
+  /** The last few hands they showed. */
+  showdowns: ShownHand[];
+}
+
+export interface ShownHand {
+  number: number;
+  cards: string[];
+  board: string[];
+  /** Run it twice: the second runout, else empty. */
+  secondBoard: string[];
+  line: string;
+  /** "split" is part of the pot: a chop, one run of two, or a side pot. */
+  result: "won" | "lost" | "split" | "folded" | "uncontested";
+}
+
+/** A draft profile was written for the user to review. */
+export interface DraftSaved {
+  type: "draft_saved";
+  playerId: string;
+  /** Relative to the repo, e.g. "data/drafts/alex-2026-10-03.md". */
+  path: string;
 }
 
 /** The hand on the table from the hero's seat; sent whenever it changes. */
@@ -262,9 +302,19 @@ export type PanelToWorker =
   | { type: "settings_request" }
   /** Notes for tonight's prompts, on one player or the whole table; kept in memory only. */
   | { type: "notes"; text: string; playerId?: string }
-  /** Re-run the decision on the table with another preset ("Ask Opus"). */
-  | { type: "ask"; gameId: string; preset: Preset };
-export type WorkerToPanel = BackendStatus | HostAck | Players | Facts | Settings | Costs | HandInfo;
+  /** Re-run the decision on the table with another preset ("Ask deeper"). */
+  | { type: "ask"; gameId: string; preset: Preset }
+  /** Write tonight's read and notes on a player to data/drafts/ for the user to review. */
+  | { type: "save_draft"; gameId: string; playerId: string };
+export type WorkerToPanel =
+  | BackendStatus
+  | HostAck
+  | Players
+  | Facts
+  | Settings
+  | Costs
+  | HandInfo
+  | DraftSaved;
 export type HostToWorker =
   | { type: "ready"; version: string; recording: boolean }
   | HostAck
@@ -273,4 +323,5 @@ export type HostToWorker =
   | Settings
   | Costs
   | HandInfo
+  | DraftSaved
   | { type: "error"; message: string };
