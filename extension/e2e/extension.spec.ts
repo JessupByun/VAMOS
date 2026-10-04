@@ -348,13 +348,13 @@ test("after the flop the card shows Claude's answer and the panel its reasoning"
       .map((cls) => `<div class="card-container ${cls} flipped"></div>`)
       .join("");
   });
-  await expect(card.locator(".source")).toHaveText("VAMOS! AI (Claude Sonnet 5.5)");
+  await expect(card.locator(".source")).toHaveText("VAMOS! AI (Claude Opus 5.5 · low)");
   await expect(card.locator(".action")).toHaveText("BET 0.20 (1bb)");
   await expect(card.locator(".facts")).toHaveText(/^SB · pot 2bb · Ace high$/);
 
   await expect(panel.locator(".advice .why")).toHaveText("alex folds to small bets.");
   await expect(panel.locator(".advice .plan")).toHaveText("Next: Check behind if alex calls and the turn is a club.");
-  await expect(panel.getByRole("button", { name: "Ask Opus" })).toBeVisible();
+  await expect(panel.getByRole("button", { name: "Ask deeper" })).toBeVisible();
   await expect(panel.locator(".stat.tonight .value")).toHaveText("$0.00");
   // The current hand: the hero's cards and the flop drawn as cards, and the hero's position.
   await expect(panel.locator(".hand-head .mine .pcard")).toHaveText(["A♠", "10♦"]);
@@ -367,7 +367,7 @@ test("after the flop the card shows Claude's answer and the panel its reasoning"
   await page.evaluate(() => document.querySelector(".you-player")?.classList.remove("decision-current"));
   await expect(card).toContainText("waiting for your turn");
   await expect(panel.locator(".decision.live")).toHaveCount(0);
-  await expect(panel.getByRole("button", { name: "Ask Opus" })).toHaveCount(0);
+  await expect(panel.getByRole("button", { name: "Ask deeper" })).toHaveCount(0);
 
   // The turn: the flop's decision stays in the panel above the new one.
   harness.addLogLines([

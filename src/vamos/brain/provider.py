@@ -31,13 +31,15 @@ class Preset:
     seconds: str = ""  # measured time to an answer, for the side panel
 
 
-# Measured live (2026-10-03, 42 decisions): Sonnet at medium 2.5-4.3s, Opus at medium
-# 4.7-13.8s; Sonnet at high took 12-20s on hard spots. Haiku 4.5 was dropped after it
-# misread hands in 3 of 5 live answers.
+# Opus 5.5 only. On 36 logged spots judged blind (2026-10-03), Opus at low and medium
+# effort both beat Sonnet 5.5 at medium clearly (a third of the factual errors, no clear
+# mistakes); low answered in 3.3s typically (never over 11s), medium in 6.6s (3 of 36 past
+# a 14s clock). Haiku 4.5 and Sonnet 5.5 were dropped.
 PRESETS = {
-    "balanced": Preset("balanced", "claude-sonnet-5-5", "medium", "Sonnet 5.5", "2-5"),
-    "deep": Preset("deep", "claude-opus-5-5", "medium", "Opus 5.5", "5-14"),
+    "standard": Preset("standard", "claude-opus-5-5", "low", "Opus 5.5 · low thinking", "2-7"),
+    "deep": Preset("deep", "claude-opus-5-5", "medium", "Opus 5.5 · medium thinking", "5-14"),
 }
+DEFAULT_PRESET = "standard"
 MAX_TOKENS = 16_000  # room for thinking as well as the answer
 REQUEST_TIMEOUT = 60.0  # seconds; the advisor's deadline is usually much shorter
 

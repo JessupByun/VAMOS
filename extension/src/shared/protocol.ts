@@ -162,10 +162,13 @@ export interface ClaudeAdvice {
   why: string | null;
   /** The next street, or the answer to a raise; null when nothing follows. */
   plan: string | null;
-  /** The model whose answer is shown (or, before any answer, the one asked), e.g. "Claude Sonnet 5.5". */
+  /** The model and effort of the answer shown (or, before any, of the call), e.g. "Claude Opus 5.5 · low". */
   model: string;
-  /** The model of the latest call, e.g. "Claude Opus 5.5" while Ask Opus runs. */
+  /** The model and effort of the latest call, e.g. "Claude Opus 5.5 · medium" while Ask deeper runs. */
   asked: string;
+  /** The presets behind the answer shown and the latest call. */
+  preset: Preset;
+  askedPreset: Preset;
   state: "thinking" | "done" | "failed" | "cancelled";
   /** Why the latest call gave no answer, e.g. "timed out". */
   reason: string | null;
@@ -203,7 +206,7 @@ export interface ClockReport {
   secondsLeft: number;
 }
 
-export type Preset = "balanced" | "deep";
+export type Preset = "standard" | "deep";
 
 export interface PresetInfo {
   name: Preset;
@@ -219,6 +222,8 @@ export interface Settings {
   type: "settings";
   preset: Preset;
   presets: PresetInfo[];
+  /** The preset "Ask deeper" uses. */
+  deep: Preset;
 }
 
 export interface Costs {

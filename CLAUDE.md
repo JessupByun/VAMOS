@@ -43,7 +43,7 @@ After a rebuild, reload VAMOS in `chrome://extensions` and then reload the Poker
 - VAMOS only reads and displays. It never clicks, types into, or otherwise operates PokerNow.
 - Profiles belong to the user. VAMOS reads `profiles/*.md` (skipping files that start with `_`) and never writes them.
 - No log ingestion, stats engine, or automatic learning in v1. Deferred features (AI preflop, range tables, HRC tables, review mode, training mode) are built only when the user asks.
-- Postflop models are Claude Sonnet 5.5 (default, effort medium) and Opus 5.5 only. Haiku 4.5 was dropped for misreading hands; never Claude Fable 5.1.
+- Postflop runs on Claude Opus 5.5 only: effort low by default, medium as the deeper option. Sonnet 5.5 and Haiku 4.5 were dropped after blind comparisons on logged spots; never Claude Fable 5.1.
 - Ask the user before any non-trivial design choice the plan does not cover.
 
 ### Correctness
@@ -54,7 +54,7 @@ After a rebuild, reload VAMOS in `chrome://extensions` and then reload the Poker
 - DOM seat classes (`table-player-N`) are hero-relative positions, not physical seats; join DOM to log by player ID (`/players/<id>` link).
 - Respect PokerNow's rate limit (about one log request per 2s per IP): back off on 429/503, never add parallel pollers.
 - Never advise on stale state: advice is stamped with its decision node and only shown while that node is current.
-- Every piece of advice shows its source on the card: `Chart` (preflop charts), `VAMOS AI (Claude Sonnet 5.5)` (postflop, always naming the model), `Math` (facts only, no suggestion); fallbacks are never silent.
+- Every piece of advice shows its source on the card: `Chart` (preflop charts), `VAMOS! AI (Claude Opus 5.5 · low)` (postflop, always naming the model and effort), `Math` (facts only, no suggestion); fallbacks are never silent.
 - Prompts use pseudonyms; no real name, alias or PokerNow nickname may reach the API.
 - Label approximations honestly ("approximate", "vs standard range"), and back claims with tests or sources.
 - Never call eval7's range helpers directly: `py_hand_vs_range_exact` does not deal the turn and river, and both it and `py_hand_vs_range_monte_carlo` silently ignore combo weights. Use `vamos.engine.equity.equity`, which is tested against brute force.

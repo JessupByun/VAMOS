@@ -39,7 +39,6 @@ MIN_SECONDS = 3.0  # with less time than this, no call is started
 RETRY_SECONDS = 6.0  # the least time left for a second try
 RETRYABLE = ("Claude unavailable", "no connection to Claude", "unreadable answer")
 MODEL_NAMES = {
-    "claude-sonnet-5-5": "Claude Sonnet 5.5",
     "claude-opus-5-5": "Claude Opus 5.5",
 }
 
@@ -67,6 +66,13 @@ class Call:
     @property
     def model(self) -> str:
         return self.job.request.preset.model
+
+
+def _label(call: "Call") -> str:
+    """The model and its effort, e.g. "Claude Opus 5.5 · low"."""
+    name = MODEL_NAMES.get(call.model, call.model)
+    effort = call.job.request.preset.effort
+    return f"{name} · {effort}" if effort else name
 
 
 def describe(choice: Choice, spot: Spot) -> str:
@@ -167,7 +173,7 @@ class Advisor:
             if call is None or call.job.node != node:
                 return None
             shown = self._answered.get(game_id)
-            state, reason, asked = call.state, call.reason, call.model
+            state, reason, asked = call.state, call.reason, _label(call)
         out: dict[str, Any] = {
             "source": "Claude",
             "action": None,
@@ -177,14 +183,17 @@ class Advisor:
             "deviation": False,  # drawn from a less frequent option than the top one
             "why": None,  # the answer's reason
             "plan": None,
-            "model": MODEL_NAMES.get(asked, asked),  # who answered, once someone has
-            "asked": MODEL_NAMES.get(asked, asked),  # the latest call's model
+            "model": asked,  # who answered, once someone has, e.g. "Claude Opus 5.5 · low"
+            "asked": asked,  # the latest call's model and effort
+            "preset": call.job.request.preset.name,  # the preset of the answer shown
+            "askedPreset": call.job.request.preset.name,
             "state": state,
             "reason": reason,
         }
         if shown is not None and shown.answer is not None:
             spot, answer = shown.job.spot, shown.answer
-            out["model"] = MODEL_NAMES.get(shown.model, shown.model)
+            out["model"] = _label(shown)
+            out["preset"] = shown.job.request.preset.name
             out["action"] = describe(answer.chosen, spot)
             out["mix"] = [f"{_short(c, spot)} {round(100 * c.freq)}%" for c in answer.mix]
             out["pick"] = answer.mix.index(answer.chosen)

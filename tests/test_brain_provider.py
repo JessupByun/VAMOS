@@ -9,21 +9,21 @@ from vamos.brain import provider
 from vamos.brain.provider import PRESETS, AnthropicProvider, CallFailed, Request, params
 
 
-def request(name="balanced"):
+def request(name="standard"):
     return Request(
         PRESETS[name], [{"type": "text", "text": "prefix"}], [{"role": "user", "content": "spot"}]
     )
 
 
 def test_request_parameters_per_preset():
-    balanced = params(request("balanced"))
-    assert balanced["model"] == "claude-sonnet-5-5"
-    assert balanced["output_config"]["effort"] == "medium"
-    assert balanced["output_config"]["format"]["type"] == "json_schema"
-    assert "thinking" not in balanced  # adaptive is the default and the only mode on 5.5
+    standard = params(request("standard"))
+    assert standard["model"] == "claude-opus-5-5"
+    assert standard["output_config"]["effort"] == "low"
+    assert standard["output_config"]["format"]["type"] == "json_schema"
+    assert "thinking" not in standard  # adaptive is the default on Opus 5.5
     deep = params(request("deep"))
     assert (deep["model"], deep["output_config"]["effort"]) == ("claude-opus-5-5", "medium")
-    assert set(PRESETS) == {"balanced", "deep"}  # Haiku was dropped
+    assert set(PRESETS) == {"standard", "deep"}  # Opus only: Haiku and Sonnet were dropped
 
 
 def test_api_key_from_the_environment_or_the_env_file(tmp_path, monkeypatch):

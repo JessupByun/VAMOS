@@ -18,7 +18,14 @@ from typing import Any, BinaryIO
 from vamos.brain import prompt
 from vamos.brain.advisor import DEFAULT_SECONDS, SPARE_SECONDS, Advisor, Job
 from vamos.brain.costs import SOFT_CAP, Ledger
-from vamos.brain.provider import PRESETS, AnthropicProvider, CannedProvider, Provider, Request
+from vamos.brain.provider import (
+    DEFAULT_PRESET,
+    PRESETS,
+    AnthropicProvider,
+    CannedProvider,
+    Provider,
+    Request,
+)
 from vamos.brain.pseudonyms import HERO, LeakError, Pseudonyms
 from vamos.brain.spot import betting, claude_facts, legal
 from vamos.config import DATA_DIR, PROFILES_DIR, VERSION
@@ -80,7 +87,7 @@ class Backend:
         # they are kept out of prompts like everyone else's.
         self.settings_path = data_dir / "settings.json"
         saved = _read_json(self.settings_path)
-        self.preset = saved.get("preset") if saved.get("preset") in PRESETS else "balanced"
+        self.preset = saved.get("preset") if saved.get("preset") in PRESETS else DEFAULT_PRESET
         self.hero_names = [str(n) for n in saved.get("heroNames", []) if isinstance(n, str)]
         self.notes = ""  # tonight's quick notes, never saved
         self.player_notes: dict[str, str] = {}  # PokerNow ID -> tonight's notes on that player
@@ -191,6 +198,7 @@ class Backend:
                 {"name": p.name, "label": p.label, "effort": p.effort, "seconds": p.seconds}
                 for p in PRESETS.values()
             ],
+            "deep": "deep",  # the preset "Ask deeper" uses
         }
 
     def _costs(self) -> Message:
@@ -224,7 +232,7 @@ class Backend:
         return self._turn_started.get(game_id, self.clock()) + DEFAULT_SECONDS
 
     def _ask(self, message: Message) -> list[Message]:
-        """Ask Opus (or another preset) about the decision on the table right now."""
+        """Ask again with another preset (the deeper one) about the decision on the table."""
         game_id = message.get("gameId")
         preset = message.get("preset", "deep")
         if game_id not in self.turns or preset not in PRESETS:

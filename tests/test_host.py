@@ -81,11 +81,22 @@ def test_hello_reports_ready_with_settings_and_costs(backend):
     assert ready == {"type": "ready", "version": VERSION, "recording": False}
     assert settings == {
         "type": "settings",
-        "preset": "balanced",
+        "preset": "standard",
         "presets": [
-            {"name": "balanced", "label": "Sonnet 5.5", "effort": "medium", "seconds": "2-5"},
-            {"name": "deep", "label": "Opus 5.5", "effort": "medium", "seconds": "5-14"},
+            {
+                "name": "standard",
+                "label": "Opus 5.5 · low thinking",
+                "effort": "low",
+                "seconds": "2-7",
+            },
+            {
+                "name": "deep",
+                "label": "Opus 5.5 · medium thinking",
+                "effort": "medium",
+                "seconds": "5-14",
+            },
         ],
+        "deep": "deep",
     }
     assert (costs["type"], costs["session"], costs["overCap"]) == ("costs", 0, False)
 
@@ -295,7 +306,7 @@ def test_claude_answers_postflop_under_pseudonyms(tmp_path):
     assert (advice["source"], advice["state"], advice["action"]) == ("Claude", "thinking", None)
 
     [request] = fake.requests
-    assert request.preset.name == "balanced"
+    assert request.preset.name == "standard"
     sent_text = json.dumps(request.system) + json.dumps(request.messages)
     assert "alex" not in sent_text and "Qw3rTy7UiO" not in sent_text
     assert "Loose-passive." in sent_text and "Player A" in sent_text
@@ -320,10 +331,10 @@ def test_claude_answers_postflop_under_pseudonyms(tmp_path):
     assert again["facts"]["advice"]["action"] == "BET 60 (3bb)"
     assert len(fake.requests) == 1
 
-    # Asking Opus adds one deep call for the same decision.
+    # Asking deeper adds one call with the deep preset for the same decision.
     fake.script.append(Reply(BET_HALF, "end_turn", {}))
     backend.handle({"type": "ask", "gameId": GAME, "preset": "deep"})
-    assert [r.preset.name for r in fake.requests] == ["balanced", "deep"]
+    assert [r.preset.name for r in fake.requests] == ["standard", "deep"]
 
 
 def test_the_turn_ending_stops_claude(tmp_path):
@@ -352,7 +363,7 @@ def test_the_dial_is_locked_for_the_rest_of_the_hand(tmp_path):
     backend.handle(page(*FLOP_HAND, *turn_card))
     table = {**FLOP_TURN["table"], "board": ["Ks", "7d", "2c", "9h"]}
     backend.handle({**FLOP_TURN, "key": "k4", "table": table})
-    assert [r.preset.name for r in fake.requests] == ["balanced", "balanced"]
+    assert [r.preset.name for r in fake.requests] == ["standard", "standard"]
 
 
 def test_the_dial_and_the_heros_names_come_from_settings(tmp_path):

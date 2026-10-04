@@ -52,7 +52,7 @@ def rig(tmp_path):
                 advice_log=self.advice_log,
             )
 
-        def job(self, node="h1:1:8", preset="balanced"):
+        def job(self, node="h1:1:8", preset="standard"):
             request = Request(PRESETS[preset], [{"type": "text", "text": "prefix"}], [])
             return Job(node, request, SPOT, lambda s: s.replace("Player A", "alex"))
 
@@ -71,7 +71,7 @@ def test_an_answer_reaches_the_card_with_real_names(rig):
     assert view["action"] == "BET 0.90 (4.5bb)"
     assert (view["mix"], view["pick"], view["pickPct"]) == (["bet 4.5bb 100%"], 0, 100)
     assert (view["why"], view["plan"]) == ("alex calls too much", "Bet again on blanks.")
-    assert view["model"] == "Claude Sonnet 5.5"
+    assert view["model"] == "Claude Opus 5.5 · low"
     assert r.ledger.totals(datetime(2026, 10, 2, 14))["session"] > 0
     assert r.advisor.view("g", "h1:1:9") is None  # never shown for another node
 
@@ -163,8 +163,8 @@ def test_asking_opus_keeps_the_first_answer_up_meanwhile(rig):
     view = r.advisor.view("g", "h1:1:8")
     assert (view["action"], view["model"], view["asked"], view["state"]) == (
         "BET 0.90 (4.5bb)",
-        "Claude Sonnet 5.5",
-        "Claude Opus 5.5",
+        "Claude Opus 5.5 · low",
+        "Claude Opus 5.5 · medium",
         "thinking",
     )
     gate.set()
@@ -172,7 +172,7 @@ def test_asking_opus_keeps_the_first_answer_up_meanwhile(rig):
     view = r.advisor.view("g", "h1:1:8")
     assert (view["action"], view["model"], view["why"]) == (
         "CHECK",
-        "Claude Opus 5.5",
+        "Claude Opus 5.5 · medium",
         "alex traps",
     )
 
@@ -181,7 +181,7 @@ def test_a_refused_call_is_never_sent(rig):
     r = rig([])
     r.advisor.start("g", r.job(), r.clock.t + 20, refuse="blocked: a real name was left")
     assert r.advisor.view("g", "h1:1:8")["reason"] == "blocked: a real name was left"
-    assert r.advisor.asked("g", "h1:1:8") and r.advisor.asked("g", "h1:1:8", "balanced")
+    assert r.advisor.asked("g", "h1:1:8") and r.advisor.asked("g", "h1:1:8", "standard")
     assert not r.advisor.asked("g", "h1:1:8", "deep")
     assert r.provider.requests == []
 
@@ -195,6 +195,6 @@ def test_answers_and_failures_are_logged_under_pseudonyms(rig):
     first, second = (json.loads(line) for line in r.advice_log.read_text().splitlines())
     assert (first["node"], first["state"], first["chosen"]) == ("h1:1:8", "done", ["bet", 90])
     assert (first["seconds"], first["allowed"]) == (0, 20)  # the test clock stands still
-    assert first["model"] == "claude-sonnet-5-5"
+    assert first["model"] == "claude-opus-5-5"
     assert "Player A calls too much" in first["answer"]  # as Claude wrote it
     assert (second["state"], second["reason"], second["answer"]) == ("failed", "rate limited", None)

@@ -225,9 +225,9 @@ function DecisionView(props: { decision: Decision; live: boolean; gameId: string
           {advice.asked}: {advice.reason}
         </p>
       )}
-      {live && !advice.model.includes("Opus") && !advice.asked.includes("Opus") && (
+      {live && advice.preset !== "deep" && advice.askedPreset !== "deep" && (
         <button type="button" class="secondary" onClick={() => send({ type: "ask", gameId, preset: "deep" })}>
-          Ask Opus
+          Ask deeper
         </button>
       )}
     </div>
