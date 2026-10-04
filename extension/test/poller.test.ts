@@ -178,6 +178,37 @@ describe("log poller", () => {
     poller.stop();
   });
 
+  it("starting with nothing held, walks the whole game back to its start between live polls", async () => {
+    server.add(3 * PAGE_SIZE + 7); // the night so far
+    const poller = startLogPoller("g1", deliver);
+    poller.resume(null);
+    await vi.advanceTimersByTimeAsync(POLL_MS);
+    server.add(4); // play goes on during the walk
+    for (let i = 0; i < 12; i += 1) await vi.advanceTimersByTimeAsync(POLL_MS);
+    // Every row of the game was delivered, old and new, and the walk took turns with live polls.
+    expect(deliveredIds()).toEqual(new Set(server.rows.map((r) => r.created_at)));
+    const queries = server.requests.map((r) => new URL(r, "https://www.pokernow.com").search);
+    const walks = queries.filter((q) => q.startsWith("?before_at="));
+    expect(walks.length).toBeGreaterThanOrEqual(3);
+    for (let i = 1; i < queries.length; i += 1) {
+      expect(queries[i]?.startsWith("?before_at=") && queries[i - 1]?.startsWith("?before_at=")).toBe(false);
+    }
+    // History pages never count as fresh, so the backend marks no gap.
+    expect(delivered.filter((p) => p.fresh)).toHaveLength(1);
+    poller.stop();
+  });
+
+  it("does not walk history when the backend already holds the game", async () => {
+    server.add(2 * PAGE_SIZE);
+    const held = server.rows[0]?.created_at ?? "";
+    server.add(3);
+    const poller = startLogPoller("g1", deliver);
+    poller.resume(held);
+    for (let i = 0; i < 5; i += 1) await vi.advanceTimersByTimeAsync(POLL_MS);
+    expect(server.requests.some((r) => r.includes("before_at=") && !r.includes("after_at="))).toBe(false);
+    poller.stop();
+  });
+
   it("backs off on 429 and 503, honoring Retry-After, and recovers", async () => {
     server.add(1);
     let status = 429;

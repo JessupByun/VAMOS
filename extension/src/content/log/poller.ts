@@ -39,6 +39,12 @@ export function startLogPoller(gameId: string, deliver: (page: LogPage) => boole
   let delay = POLL_MS;
   let cursor: string | null = null;
   let backfill: Backfill | null = null;
+  // The game's older rows, walked back to its start from the oldest row fetched so far: done
+  // when the backend holds nothing of this game (VAMOS opened mid-game), in turns with the
+  // live polls, so the night's numbers fill in while the hero's turns stay current.
+  let history: string | null = null;
+  let wantHistory = false;
+  let historyNext = false;
   // Bumped by resync(), so a response to a request made before it cannot move the cursor.
   let generation = 0;
   let stopped = false;
@@ -47,6 +53,7 @@ export function startLogPoller(gameId: string, deliver: (page: LogPage) => boole
   let lastStart = -Infinity;
 
   function query(): string {
+    if (historyNext && history) return `?before_at=${history}`;
     if (backfill) return `?after_at=${backfill.floor}&before_at=${backfill.before}`;
     return cursor ? `?after_at=${cursor}` : "";
   }
@@ -66,6 +73,10 @@ export function startLogPoller(gameId: string, deliver: (page: LogPage) => boole
     // Not delivered (no backend connected): leave everything as is and ask again next tick.
     if (!deliver({ type: "log_page", gameId, fetchedAt: Date.now(), fresh, body })) return;
     const full = rows.length >= PAGE_SIZE;
+    if (fresh && wantHistory) {
+      wantHistory = false;
+      if (full) history = oldest;
+    }
     if (backfill) {
       if (full) backfill = { ...backfill, before: oldest };
       else {
@@ -79,8 +90,21 @@ export function startLogPoller(gameId: string, deliver: (page: LogPage) => boole
     }
   }
 
+  function advanceHistory(body: LogBody) {
+    const rows = body.logs ?? [];
+    const oldest = rows.at(-1)?.created_at;
+    // The start of the game, or a page that went no further back: the walk is over.
+    if (oldest === undefined || history === null || BigInt(oldest) >= BigInt(history)) {
+      history = null;
+      return;
+    }
+    if (!deliver({ type: "log_page", gameId, fetchedAt: Date.now(), fresh: false, body })) return;
+    history = rows.length >= PAGE_SIZE ? oldest : null;
+  }
+
   async function tick() {
     const requestedIn = generation;
+    const walking = historyNext && history !== null;
     inFlight = true;
     lastStart = Date.now();
     try {
@@ -92,13 +116,18 @@ export function startLogPoller(gameId: string, deliver: (page: LogPage) => boole
         delay = POLL_MS;
         if (response.ok) {
           const body: LogBody = await response.json();
-          if (!stopped && requestedIn === generation) advance(body);
+          if (!stopped && requestedIn === generation) {
+            if (walking) advanceHistory(body);
+            else advance(body);
+          }
         }
       }
     } catch {
       delay = Math.min(delay * 2, MAX_BACKOFF_MS);
     }
     inFlight = false;
+    // Live and history requests take turns while there is history left to walk.
+    historyNext = history !== null && !walking;
     if (!stopped) timer = setTimeout(tick, delay);
   }
 
@@ -112,10 +141,14 @@ export function startLogPoller(gameId: string, deliver: (page: LogPage) => boole
       generation += 1;
       cursor = after;
       backfill = null;
+      history = null;
+      // Holding nothing of this game, the backend gets its whole log, oldest rows last.
+      wantHistory = after === null;
     },
     soon: () => {
       // A request already on its way brings the rows; a backoff after 429s stands.
       if (stopped || inFlight || delay !== POLL_MS) return;
+      historyNext = false;
       clearTimeout(timer);
       timer = setTimeout(tick, Math.max(0, lastStart + MIN_GAP_MS - Date.now()));
     },
