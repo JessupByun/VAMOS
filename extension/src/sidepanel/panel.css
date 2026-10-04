@@ -1,7 +1,8 @@
-/* Two advice color families, never mixed, the same as the card on the table: where advice
-   came from (blue chart, cyan Claude low, purple Claude medium) and what it says (red fold,
-   green check or call, amber bet or raise, pink all in). Status (active, warnings, errors,
-   won or lost) keeps its own green, yellow and red. Orange is only the wordmark. */
+/* Calm by default: everything is neutral except what an action says, colored along the
+   rainbow by how much money it puts in (orange-red fold, yellow call, green bet, blue raise,
+   purple all in; a check puts in nothing and stays neutral). Where advice came from is told
+   by its label. Status (active, warnings, won or lost) keeps its own green, yellow and red;
+   orange is only the wordmark. The card on the table uses the same colors. */
 :root {
   color-scheme: light dark;
   --bg: #f4f5f7;
@@ -11,13 +12,11 @@
   --muted: #5f646d;
   --soft: rgba(20, 22, 26, 0.05);
   --brand: #d9783a;
-  --chart: #0550ae;
-  --ai: #045a63;
-  --ai-deep: #6e40c9;
-  --fold: #a40e26;
-  --pass: #116329;
-  --bet: #6b4700;
-  --allin: #99286e;
+  --fold: #9c3412;
+  --call: #5c5400;
+  --bet: #126130;
+  --raise: #184f9e;
+  --allin: #6838a8;
   --ok: #116329;
   --warn: #7d5400;
   --bad: #a40e26;
@@ -32,13 +31,11 @@
     --muted: #9aa0a9;
     --soft: rgba(255, 255, 255, 0.05);
     --brand: #f0a46c;
-    --chart: #58a6ff;
-    --ai: #39c5cf;
-    --ai-deep: #bc8cff;
-    --fold: #ff7b72;
-    --pass: #56d364;
-    --bet: #e3b341;
-    --allin: #f778ba;
+    --fold: #ef8a5e;
+    --call: #d8cf6e;
+    --bet: #7fcf91;
+    --raise: #7fb0f0;
+    --allin: #bf9cf2;
     --ok: #7ad38f;
     --warn: #e8c46a;
     --bad: #f08a7e;
@@ -134,27 +131,24 @@ p {
   color: var(--fold);
 }
 
-.act-check,
-.act-call {
-  color: var(--pass);
+.act-check {
+  color: var(--fg);
 }
 
-.act-bet,
-.act-raise {
+.act-call {
+  color: var(--call);
+}
+
+.act-bet {
   color: var(--bet);
+}
+
+.act-raise {
+  color: var(--raise);
 }
 
 .act-allin {
   color: var(--allin);
-}
-
-/* Where advice came from. */
-.standard {
-  --source: var(--ai);
-}
-
-.deep {
-  --source: var(--ai-deep);
 }
 
 /* The hand's decisions, oldest first; the one on the table now is lit. */
@@ -203,10 +197,15 @@ p {
   background: var(--fg);
 }
 
-/* One call's answer, edged in its model's color; a deeper one sits under the first. */
+/* One call's answer; a deeper one sits under the first. The one on the table now is edged
+   a shade brighter. */
 .answer {
   padding: 2px 0 2px 11px;
-  border-left: 3px solid var(--source, var(--border));
+  border-left: 3px solid var(--border);
+}
+
+.decision.live .answer {
+  border-left-color: var(--muted);
 }
 
 .answer.deeper {
@@ -219,7 +218,7 @@ p {
   align-items: center;
   font-size: 11.5px;
   font-weight: 700;
-  color: var(--source, var(--muted));
+  color: var(--muted);
 }
 
 .answer .source .dot {
@@ -235,7 +234,7 @@ p {
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--source);
+  color: var(--muted);
 }
 
 .advice .pick {
@@ -273,8 +272,8 @@ p {
   border: 1px solid var(--border);
 }
 
-/* Each option keeps its action's color; the one drawn has the border, fill and weight. */
-.chip:not([class*="act-"]) {
+/* Options are quiet; only the one drawn takes its action's color, border and fill. */
+.chip:not(.picked):not(.deviation) {
   color: var(--muted);
 }
 
@@ -330,16 +329,6 @@ button.secondary:hover {
   border-color: var(--muted);
 }
 
-/* Asking Claude at medium effort, in that model's purple. */
-button.secondary.ask-deeper {
-  color: var(--ai-deep);
-  border-color: color-mix(in srgb, var(--ai-deep) 45%, transparent);
-}
-
-button.secondary.ask-deeper:hover {
-  border-color: var(--ai-deep);
-}
-
 .segmented {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -360,7 +349,7 @@ button.secondary.ask-deeper:hover {
 
 .segmented label.on {
   background: var(--card);
-  border-color: var(--source);
+  border-color: var(--fg);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
@@ -375,7 +364,7 @@ button.secondary.ask-deeper:hover {
 }
 
 .segmented label.on .model {
-  color: var(--source);
+  color: var(--fg);
 }
 
 .segmented .detail {
@@ -397,7 +386,7 @@ textarea {
 
 textarea:focus,
 select:focus {
-  outline: 2px solid var(--chart);
+  outline: 2px solid var(--muted);
   outline-offset: -1px;
 }
 
@@ -749,7 +738,7 @@ input.notes {
 }
 
 input.notes:focus {
-  outline: 2px solid var(--chart);
+  outline: 2px solid var(--muted);
   outline-offset: -1px;
 }
 
@@ -764,7 +753,7 @@ button.mini {
 }
 
 button.mini:hover {
-  border-color: var(--chart);
+  border-color: var(--muted);
 }
 
 .saved {
@@ -805,7 +794,7 @@ details.file[open] summary::before {
 }
 
 details.file summary:hover {
-  border-color: var(--chart);
+  border-color: var(--muted);
 }
 
 details.file .path {

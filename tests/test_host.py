@@ -359,6 +359,11 @@ def test_claude_answers_postflop_under_pseudonyms(tmp_path):
     assert "alex" not in sent_text and "Qw3rTy7UiO" not in sent_text
     assert "Loose-passive." in sent_text and "Player A" in sent_text
     assert '\\"legal_actions\\":[\\"check\\",\\"bet\\",\\"allin\\"]' in sent_text
+    # Tonight's read goes with each opponent; Hero's own numbers are not sent.
+    content = request.messages[-1]["content"]
+    spot = json.JSONDecoder().raw_decode(content[content.index("{") :])[0]
+    reads_sent = {p["name"]: "tonight" in p for p in spot["players"]}
+    assert reads_sent == {"Hero": False, "Player A": True}
 
     gate.set()
     update = sent.get(timeout=3)

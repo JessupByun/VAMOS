@@ -247,7 +247,7 @@ function DecisionView(props: { decision: Decision; live: boolean; gameId: string
       {live && !answers.some((a) => a.preset === "deep") && (
         <button
           type="button"
-          class="secondary ask-deeper"
+          class="secondary"
           onClick={() => send({ type: "ask", gameId, preset: "deep" })}
         >
           Ask deeper

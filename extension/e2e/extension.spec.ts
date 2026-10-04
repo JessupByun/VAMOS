@@ -366,9 +366,8 @@ test("after the flop the card shows Claude's answer and the panel its reasoning"
   });
   await expect(card.locator(".source")).toHaveText("VAMOS! AI (Claude Opus 5.5 · low)");
   await expect(card.locator(".action")).toHaveText("BET 0.20 (1bb)");
-  // Colored by what it says (a bet) and by who said it (Claude at low effort).
+  // Colored by what it says (a bet); who said it is in the label.
   await expect(card.locator(".action")).toHaveClass(/act-bet/);
-  await expect(card).toHaveClass(/standard/);
   await expect(card.locator(".facts")).toHaveText(/^SB · pot 2bb · Ace high$/);
 
   await expect(panel.locator(".advice .why")).toHaveText("alex folds to small bets.");
@@ -414,7 +413,6 @@ test("after the flop the card shows Claude's answer and the panel its reasoning"
   await expect(answers.nth(1).locator(".pick")).toHaveText("BET 0.20 (1bb)");
   await expect(panel.getByRole("button", { name: "Ask deeper" })).toHaveCount(0);
   await expect(card.locator(".source")).toHaveText("VAMOS! AI (Claude Opus 5.5 · medium)");
-  await expect(card).toHaveClass(/deep/);
 
   await page.evaluate(() => document.querySelector(".you-player")?.classList.remove("decision-current"));
   await expect(card).toContainText("waiting for your turn");

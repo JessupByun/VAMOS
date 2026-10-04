@@ -27,7 +27,7 @@ weaknesses, as described in their profile below. Where a profile says nothing ab
 situation, use your own judgment.
 
 Each message gives the hand so far: every player's position and stack, with tonight's read
-on them (counts from tonight's hands only, so weigh them by the number of hands) and
+on each opponent (counts from tonight's hands only, so weigh them by the number of hands) and
 Hero's own notes on them when Hero wrote any; every action in order with the board cards
 where they were dealt; Hero's cards; and exact numbers computed from them (pot, price,
 stacks, Hero's made hand, the cards that would complete Hero's draws). Trust those numbers

@@ -180,7 +180,7 @@ function ClaudeCard({ facts, advice }: { facts: SpotFacts; advice: ClaudeAdvice 
     // No answer yet, or none coming: the facts stay up, with the reason when there is one.
     const failed = advice.state === "failed";
     return (
-      <div class={`action-card claude ${advice.askedPreset}`}>
+      <div class="action-card claude">
         <Source kind="claude" label={aiLabel(advice.asked)} />
         {failed ? <Action text={facts.madeHand} /> : <Action text="" thinking />}
         {failed && <div class="line note warn">no answer: {advice.reason}</div>}
@@ -190,7 +190,7 @@ function ClaudeCard({ facts, advice }: { facts: SpotFacts; advice: ClaudeAdvice 
   }
   const upgrading = advice.asked !== advice.model;
   return (
-    <div class={`action-card claude ${advice.preset}`}>
+    <div class="action-card claude">
       <Source kind="claude" label={aiLabel(advice.model)} />
       <Action text={advice.action} />
       {advice.mix && <Mix parts={advice.mix} pick={advice.pick} deviation={advice.deviation} />}

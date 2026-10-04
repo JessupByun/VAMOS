@@ -127,6 +127,25 @@ def test_sdk_errors_become_plain_reasons():
         AnthropicProvider(NS(messages=NS(stream=stream))).run(request(), threading.Event())
 
 
+@pytest.mark.parametrize(
+    ("status", "error", "text"),
+    [
+        (402, anthropic.APIStatusError, "Billing or payment problem"),
+        (400, anthropic.BadRequestError, "Your credit balance is too low to access the API."),
+    ],
+)
+def test_running_out_of_credits_says_so(status, error, text):
+    response = httpx2.Response(
+        status, request=httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
+    )
+
+    def stream(**kwargs):
+        raise error(text, response=response, body=None)
+
+    with pytest.raises(CallFailed, match=r"^out of API credits$"):
+        AnthropicProvider(NS(messages=NS(stream=stream))).run(request(), threading.Event())
+
+
 class QuietStream(FakeStream):
     """A stream that sends nothing while the model thinks, until it is closed."""
 

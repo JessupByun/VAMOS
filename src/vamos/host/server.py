@@ -435,7 +435,10 @@ class Backend:
             if s.player.id != hero
         }
         labels[hero] = HERO
-        tonight = {pid: r.summary() for pid, r in reads(self._session(game_id).log).items()}
+        # Tonight's read on the opponents only: Hero's own numbers are not sent.
+        tonight = {
+            pid: r.summary() for pid, r in reads(self._session(game_id).log).items() if pid != hero
+        }
         # The hand itself names players only by pseudonym; the notes are the user's own words.
         notes = names.hide(self.notes)
         game_log = self._session(game_id).log

@@ -10,7 +10,10 @@ export function actionKind(text: string | null | undefined): ActionKind | null {
   return null;
 }
 
-/** The CSS class that colors an action: red folds, green checks and calls, amber bets and raises, pink all-ins. */
+/**
+ * The CSS class that colors an action, along the rainbow by the money it puts in: orange-red
+ * fold, neutral check, yellow call, green bet, blue raise, purple all in.
+ */
 export function actionClass(text: string | null | undefined): string {
   const kind = actionKind(text);
   return kind ? `act-${kind}` : "";

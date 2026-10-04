@@ -188,6 +188,11 @@ def _close_when(cancelled: threading.Event, finished: threading.Event, stream: A
 def _failure(error: Exception, usage: dict[str, Any]) -> CallFailed:
     import anthropic
 
+    # Out of credits comes as a 402 billing error, or as a 400 naming the credit balance.
+    if isinstance(error, anthropic.APIStatusError) and (
+        error.status_code == 402 or "credit balance" in str(error).lower()
+    ):
+        return CallFailed("out of API credits")
     if isinstance(error, anthropic.AuthenticationError):
         return CallFailed("API key rejected")
     if isinstance(error, anthropic.PermissionDeniedError):
