@@ -537,7 +537,13 @@ class Backend:
             notes,
             player_notes,
         )
-        system = prompt.prefix(profiles, names)
+        # Only the profiles of players at this table (seated or dealt in), never the hero's.
+        at_table = {s["id"] for s in self.seated.get(game_id, [])} | {
+            s.player.id for s in hand.seats
+        }
+        keys = {self._person(game_id, game_log.current_id(pid), profiles) for pid in at_table}
+        keys.discard(self._person(game_id, hero, profiles))
+        system = prompt.prefix(profiles, names, keys)
         request = Request(PRESETS[preset], system.blocks, [{"role": "user", "content": message}])
         job = Job(
             spot.node,

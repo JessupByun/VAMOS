@@ -737,3 +737,18 @@ def test_profile_stats_read_the_templates_wording_and_the_older_one():
         "61",
         "35",
     )
+
+
+def test_claude_gets_only_the_profiles_of_players_at_the_table(tmp_path):
+    backend, fake, _ = claude_backend(tmp_path, [])
+    # A second friend with a profile, not at this table.
+    (tmp_path / "profiles" / "zed.md").write_text(
+        "---\nname: zed\nplayer_id: zzzzzzzzzz9\n---\n## Summary\nNever folds the river.\n"
+    )
+    backend.handle(SEATS)
+    backend.handle(page(*FLOP_HAND))
+    backend.handle(FLOP_TURN)
+    [request] = fake.requests
+    system = json.dumps(request.system)
+    assert "Loose-passive." in system  # alex, seated
+    assert "Never folds the river." not in system  # zed, not at the table

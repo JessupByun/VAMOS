@@ -56,9 +56,15 @@ class Prefix:
         return "\n".join(b["text"] for b in self.blocks)
 
 
-def prefix(profiles: ProfileSet, pseudonyms: Pseudonyms) -> Prefix:
+def prefix(profiles: ProfileSet, pseudonyms: Pseudonyms, keys: set[str] | None = None) -> Prefix:
+    """
+    The cached part of every call: the role, then the profiles of `keys` (the players at the
+    table; every profile when None). Seated profiles only, so heads-up sends one profile; the
+    cache is written again when the set of profiled players at the table changes.
+    """
     described = []
-    for key in sorted(profiles.profiles, key=lambda k: pseudonyms.label(k)):
+    chosen = [k for k in profiles.profiles if keys is None or k in keys]
+    for key in sorted(chosen, key=lambda k: pseudonyms.label(k)):
         profile = profiles.profiles[key]
         # The body only: the frontmatter's names and PokerNow IDs are of no use to Claude.
         # Only the user's own text is hidden: a player called "river" must not rewrite the

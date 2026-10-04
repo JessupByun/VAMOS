@@ -1,7 +1,6 @@
 ---
 name: bob
 tag: Loose-aggressive
-aliases: [bob, bobby]
 player_id: AbCdEf1234
 hands: 380
 sessions: [A 2026-09-30, B 2026-10-01]

@@ -16,7 +16,7 @@ Write one Markdown profile per player except [your name], following the attached
 Requirements:
 - `name`: the file name without `.md` (lowercase first name or handle).
 - `tag`: 1 to 3 words describing their style (it is shown on a small seat badge).
-- `aliases`: every nickname they used in these logs.
+- Refer to every player only by their profile name (the `name` field), never by an in-game nickname or display name.
 - `player_id`: the PokerNow ID after the "@" in "Name @ ID". If they used more than one ID (another device), list them all: `player_id: [ID1, ID2]`. VAMOS uses this to recognize them at the table.
 - `hands`, `sessions`, `hole_cards_known`, `last_updated`: how much data the profile rests on and when it was written. Each session is a label and a date, e.g. `A 2026-09-30`, nothing more.
 - `net`: their total and per session, using the same labels as `sessions`, e.g. `net: +12.40 (A +20.00, B -7.60)`.
