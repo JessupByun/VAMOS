@@ -12,7 +12,7 @@ export function actionKind(text: string | null | undefined): ActionKind | null {
 
 /**
  * The CSS class that colors an action, along the rainbow by the money it puts in: orange-red
- * fold, neutral check, yellow call, green bet, blue raise, purple all in.
+ * fold, neutral check, yellow call, blue bet, purple raise, pink all in.
  */
 export function actionClass(text: string | null | undefined): string {
   const kind = actionKind(text);

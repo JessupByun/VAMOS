@@ -1,6 +1,6 @@
 /* Calm by default: everything is neutral except what an action says, colored along the
-   rainbow by how much money it puts in (orange-red fold, yellow call, green bet, blue raise,
-   purple all in; a check puts in nothing and stays neutral). Where advice came from is told
+   rainbow by how much money it puts in (orange-red fold, yellow call, blue bet, purple raise,
+   pink all in; a check puts in nothing and stays neutral). Where advice came from is told
    by its label. Status (active, warnings, won or lost) keeps its own green, yellow and red;
    orange is only the wordmark. The card on the table uses the same colors. */
 :root {
@@ -14,9 +14,9 @@
   --brand: #d9783a;
   --fold: #9c3412;
   --call: #5c5400;
-  --bet: #126130;
-  --raise: #184f9e;
-  --allin: #6838a8;
+  --bet: #184f9e;
+  --raise: #6838a8;
+  --allin: #9b2563;
   --ok: #116329;
   --warn: #7d5400;
   --bad: #a40e26;
@@ -33,9 +33,9 @@
     --brand: #f0a46c;
     --fold: #ef8a5e;
     --call: #d8cf6e;
-    --bet: #7fcf91;
-    --raise: #7fb0f0;
-    --allin: #bf9cf2;
+    --bet: #7fb0f0;
+    --raise: #bf9cf2;
+    --allin: #f29bc8;
     --ok: #7ad38f;
     --warn: #e8c46a;
     --bad: #f08a7e;

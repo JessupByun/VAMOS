@@ -1,6 +1,6 @@
 /* VAMOS's own layer over the table. Dark glass that reads on PokerNow's dark grey and green.
    Calm by default: only what an action says is colored, along the rainbow by how much money
-   it puts in (orange-red fold, yellow call, green bet, blue raise, purple all in; a check
+   it puts in (orange-red fold, yellow call, blue bet, purple raise, pink all in; a check
    stays neutral). Where advice came from is told by its label. Status (connecting, warnings,
    errors) keeps its own soft yellow and red. The side panel uses the same colors. */
 :host {
@@ -11,9 +11,9 @@
   --vamos-muted: #a2a8b3;
   --vamos-fold: #ef8a5e;
   --vamos-call: #d8cf6e;
-  --vamos-bet: #7fcf91;
-  --vamos-raise: #7fb0f0;
-  --vamos-allin: #bf9cf2;
+  --vamos-bet: #7fb0f0;
+  --vamos-raise: #bf9cf2;
+  --vamos-allin: #f29bc8;
   --vamos-ok: #7ad38f;
   --vamos-warn: #e8c46a;
   --vamos-bad: #f08a7e;
