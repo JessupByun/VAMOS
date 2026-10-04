@@ -140,3 +140,16 @@ def test_no_advice_for_a_hand_the_solve_learned_nothing_for():
     table.spots[()] = Spot(root.position, root.actions, root.strategy, unlearned)
     assert advise([table], [], "SB", ("7h", "2c"), depth=50, seed="u") is None
     assert advise([table], [], "SB", ("As", "Ad"), depth=50, seed="u") is not None
+
+
+def test_exactly_on_a_solved_depth_the_neighbor_covers_a_spot_its_own_table_does_not():
+    # At exactly 50bb the 20bb table has zero weight in the blend; when the 50bb table has
+    # nothing for the hand, the 20bb table answers alone instead of dividing by zero.
+    shallow, deep, deeper = heads_up_table(20), heads_up_table(50), heads_up_table(100)
+    root = deep.spots[()]
+    unlearned = np.zeros(169, dtype=bool)
+    unlearned[INDEX["72o"]] = True
+    deep.spots[()] = Spot(root.position, root.actions, root.strategy, unlearned)
+    shallow.spots[()].strategy[:, INDEX["72o"]] = [1, 0, 0, 0]
+    advice = advise([shallow, deep, deeper], [], "SB", ("7h", "2c"), depth=50, seed="z")
+    assert advice is not None and advice.mix[0] == ("fold", 1.0) and advice.depths == (20,)

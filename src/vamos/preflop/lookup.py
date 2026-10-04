@@ -199,9 +199,7 @@ def advise(
     two solved depths nearest `depth`; None if no table covers the spot.
     """
     by_stack = {t.stack: t for t in tables}
-    mix: dict[str, float] = {}
-    used = []
-    total = 0.0
+    found = []
     price = 1.0
     for stack, weight in _blend(depth, sorted(by_stack)):
         table = by_stack[stack]
@@ -210,16 +208,21 @@ def advise(
         hand = INDEX[hand_class(*cards)]
         if spot is None or spot.position != hero_position or table.untrained[path][hand]:
             continue
-        column = spot.strategy[:, hand]
-        for action, freq in zip(spot.actions, column, strict=True):
-            mix[action] = mix.get(action, 0.0) + weight * float(freq)
-        if not used:
+        if not found:
             price = faced(path, table.stack)
-        used.append(stack)
-        total += weight
-    if not used:
+        found.append((stack, weight, spot.actions, spot.strategy[:, hand]))
+    if not found:
         return None
-    ordered = tuple(sorted(((a, f / total) for a, f in mix.items()), key=lambda m: -m[1]))
+    # Exactly on a solved depth whose table does not cover the spot, the neighbor that does
+    # has zero weight in the blend; it is used alone then, as anywhere else between the two.
+    total = sum(weight for _, weight, _, _ in found)
+    mix: dict[str, float] = {}
+    for _, weight, actions, column in found:
+        share = weight / total if total > 0 else 1 / len(found)
+        for action, freq in zip(actions, column, strict=True):
+            mix[action] = mix.get(action, 0.0) + share * float(freq)
+    used = [stack for stack, _, _, _ in found]
+    ordered = tuple(sorted(mix.items(), key=lambda m: -m[1]))
     # Sampled once per decision, so the card does not flicker between refreshes.
     roll = random.Random(seed).random()
     action = ordered[-1][0]
