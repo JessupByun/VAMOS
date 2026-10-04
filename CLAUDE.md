@@ -36,7 +36,7 @@ After a rebuild, reload VAMOS in `chrome://extensions` and then reload the Poker
 - `docs/pokernow.md` verified facts about PokerNow's log endpoint, log lines and DOM; `docs/log-grammar.md` the full line grammar with evidence. Read both before touching parsing or DOM code.
 - `tests/` pytest suite, one test file per module.
 - `profiles/` the user's opponent profiles, gitignored except `_TEMPLATE.md` and `_PROMPT.md`.
-- `data/` VAMOS's own local state (identity map, advice log, cost ledger, logs, `settings.json` with the dial and the hero's own names to keep out of prompts, `drafts/` from the side panel's Save draft, `games/` with each game's log rows), gitignored. `settings.json` also holds the AI switch (`aiOn`: off makes no Claude calls) and the table card switch (`showCard`).
+- `data/` VAMOS's own local state (identity map, advice log, cost ledger, logs, `settings.json` with the dial and the hero's own names to keep out of prompts, `drafts/` from the side panel's Save draft, `games/` with each game's log rows), gitignored. `settings.json` also holds the AI switch (`aiOn`: off makes no Claude calls) and the table switches (`showCard`, `showBadges`). Per-player notes are saved per game in `games/<game>.notes.json`.
 
 ## Rules
 

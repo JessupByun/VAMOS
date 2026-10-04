@@ -176,6 +176,33 @@ test("seat badges show profiles, ask about strangers, and show the hero's own nu
   expect(seat && mine && Math.abs(mine.y - (seat.y + seat.height + 2)) < 2).toBe(true);
 });
 
+test("switches in the side panel hide the card and the badges on the table, and bring them back", async () => {
+  const page = await openTable();
+  const panel = await harness.context.newPage();
+  await panel.goto(PANEL_URL);
+  const card = page.locator("#vamos-root .action-card");
+  const badges = page.locator("#vamos-root .badge");
+  await expect(card).toContainText("waiting for your turn");
+  await expect(badges).toHaveCount(3); // alex, the stranger and the hero
+
+  const cardSwitch = panel.getByRole("switch", { name: /Card on table/ });
+  const badgeSwitch = panel.getByRole("switch", { name: /Badges on table/ });
+  await badgeSwitch.click();
+  await expect(badges).toHaveCount(0);
+  await expect(card).toHaveCount(1);
+  await cardSwitch.click();
+  await expect(card).toHaveCount(0);
+  await expect(cardSwitch).toHaveAttribute("aria-checked", "false");
+  // Remembered by the backend, for the next session too.
+  const saved = JSON.parse(readFileSync(join(harness.dataDir, "settings.json"), "utf8"));
+  expect([saved.showCard, saved.showBadges]).toEqual([false, false]);
+
+  await cardSwitch.click();
+  await badgeSwitch.click();
+  await expect(card).toContainText("waiting for your turn");
+  await expect(badges).toHaveCount(3);
+});
+
 test("matching a profile from the badge updates it and is remembered", async () => {
   const page = await openTable();
   await badge(page, STRANGER_ID).locator("select").selectOption({ label: "No profile" });

@@ -17,6 +17,8 @@ export interface ViewState {
   facts: Facts | null;
   /** The action card shown on the table; switched in the side panel. */
   showCard: boolean;
+  /** The players' badges shown under their seats; switched in the side panel. */
+  showBadges: boolean;
 }
 
 export interface Store {

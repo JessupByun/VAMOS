@@ -27,8 +27,9 @@ const STREETS = ["Preflop", "Flop", "Turn", "River"];
 
 const noteTimers = new Map<string, ReturnType<typeof setTimeout>>();
 // What the user typed, kept here too so a re-render from a backend update never drops it,
-// and so the notes can be sent again to a backend that restarted.
+// and so the notes can be sent again to a backend that restarted; with the game it was on.
 const drafts = new Map<string, string>();
+const draftGames = new Map<string, string>();
 
 let port: chrome.runtime.Port | null = null;
 let status: BackendStatus = { type: "backend", state: "connecting" };
@@ -95,10 +96,11 @@ function onFacts(gameId: string, node: string | null, advice: unknown) {
   hands.set(gameId, { ...current, decisions, live: node });
 }
 
-// Notes live in the backend's memory, so a new backend has none: send them again.
+// The backend saves notes with each game; typed ones are sent again in case a restart
+// landed between typing and saving.
 function resendNotes() {
   for (const [playerId, text] of drafts) {
-    if (text.trim()) send({ type: "notes", playerId, text });
+    if (text.trim()) send({ type: "notes", playerId, text, gameId: draftGames.get(playerId) });
   }
 }
 
@@ -432,23 +434,24 @@ function IdentityPicker({ player, profiles }: { player: PlayerInfo; profiles: Pl
   );
 }
 
-function PlayerNotes({ player }: { player: PlayerInfo }) {
+function PlayerNotes({ player, gameId }: { player: PlayerInfo; gameId: string }) {
   const [, rerender] = useState(0);
   const value = drafts.get(player.id) ?? player.notes;
   const change = (event: Event) => {
     const text = (event.currentTarget as HTMLInputElement).value;
     drafts.set(player.id, text);
+    draftGames.set(player.id, gameId);
     rerender((n) => n + 1);
     clearTimeout(noteTimers.get(player.id));
     noteTimers.set(
       player.id,
-      setTimeout(() => send({ type: "notes", playerId: player.id, text }), 500),
+      setTimeout(() => send({ type: "notes", playerId: player.id, text, gameId }), 500),
     );
   };
   const flush = () => {
     clearTimeout(noteTimers.get(player.id));
     const text = drafts.get(player.id);
-    if (text !== undefined) send({ type: "notes", playerId: player.id, text });
+    if (text !== undefined) send({ type: "notes", playerId: player.id, text, gameId });
   };
   return (
     <input
@@ -627,7 +630,7 @@ function PlayerRow(props: { player: PlayerInfo; profiles: Players["profiles"]; g
       {profile?.summary && <p class="summary">{profile.summary}</p>}
       <TonightStats t={player.tonight} />
       {profile && <ProfileStats profile={profile} />}
-      {!player.hero && <PlayerNotes player={player} />}
+      {!player.hero && <PlayerNotes player={player} gameId={gameId} />}
       {saved && <p class="muted small saved">Draft saved to {saved}</p>}
       {profile && (
         <details class="file">
@@ -737,6 +740,12 @@ function Panel() {
               on={settings.showCard}
               hint={settings.showCard ? "shown on your turn" : "hidden"}
               onChange={(on) => send({ type: "settings", showCard: on })}
+            />
+            <Switch
+              label="Badges on table"
+              on={settings.showBadges}
+              hint={settings.showBadges ? "under each seat" : "hidden"}
+              onChange={(on) => send({ type: "settings", showBadges: on })}
             />
           </div>
         )}

@@ -99,9 +99,13 @@ class Backend:
         # The off switch for Claude: when off, no call is made and the card keeps the facts.
         self.ai_on = saved.get("aiOn") is not False
         self.show_card = saved.get("showCard") is not False  # the card on the table
+        self.show_badges = saved.get("showBadges") is not False  # the badges under the seats
         self.hero_names = [str(n) for n in saved.get("heroNames", []) if isinstance(n, str)]
         self.notes = ""  # tonight's quick notes, never saved
         self.player_notes: dict[str, str] = {}  # PokerNow ID -> tonight's notes on that player
+        # Per game, the notes written at that table, saved next to its log so a restarted
+        # backend has them too.
+        self._game_notes: dict[str, dict[str, str]] = {}
         # Per table: the hero's own seat as the extension reports it, and the summary of the
         # current hand last sent to the side panel.
         self.hero_seat: dict[str, Message] = {}
@@ -178,6 +182,8 @@ class Backend:
                 self.preset = message["preset"]
             if isinstance(message.get("showCard"), bool):
                 self.show_card = message["showCard"]
+            if isinstance(message.get("showBadges"), bool):
+                self.show_badges = message["showBadges"]
             if isinstance(message.get("aiOn"), bool):
                 self.ai_on = message["aiOn"]
                 if not self.ai_on:
@@ -199,8 +205,10 @@ class Backend:
         if kind == "notes":
             text = str(message.get("text", ""))[:2000]
             if message.get("playerId"):
-                # Notes about one player, kept by PokerNow ID for tonight only.
+                # Notes about one player, kept by PokerNow ID, and saved with the game's log.
                 self.player_notes[message["playerId"]] = text
+                if message.get("gameId"):
+                    self._save_notes(message["gameId"], message["playerId"], text)
             else:
                 self.notes = text
             return []
@@ -218,6 +226,7 @@ class Backend:
         saved["preset"] = self.preset
         saved["aiOn"] = self.ai_on
         saved["showCard"] = self.show_card
+        saved["showBadges"] = self.show_badges
         self.settings_path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.settings_path.with_suffix(".tmp")
         tmp.write_text(json.dumps(saved, indent=2, sort_keys=True) + "\n")
@@ -234,6 +243,7 @@ class Backend:
             "deep": "deep",  # the preset "Ask deeper" uses
             "aiOn": self.ai_on,
             "showCard": self.show_card,
+            "showBadges": self.show_badges,
         }
 
     def _costs(self) -> Message:
@@ -274,14 +284,47 @@ class Backend:
             return []
         return [self._spot_facts(game_id, ask=preset)]
 
+    def _game_file(self, game_id: str, suffix: str) -> Path | None:
+        # Game IDs come from the page; only plain ones name a file.
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", game_id):
+            return None
+        return self.games_dir / f"{game_id}{suffix}"
+
     def _session(self, game_id: str) -> GameSession:
         session = self.sessions.get(game_id)
         if session is None:
-            # Game IDs come from the page; only plain ones name a file.
-            safe = re.fullmatch(r"[A-Za-z0-9_-]{1,64}", game_id)
-            store = self.games_dir / f"{game_id}.jsonl" if safe else None
-            session = self.sessions[game_id] = GameSession(game_id, store)
+            session = self.sessions[game_id] = GameSession(
+                game_id, self._game_file(game_id, ".jsonl")
+            )
+            self._load_notes(game_id)
         return session
+
+    def _load_notes(self, game_id: str) -> None:
+        path = self._game_file(game_id, ".notes.json")
+        saved = _read_json(path) if path else {}
+        notes = {str(k): str(v) for k, v in saved.items() if isinstance(v, str)}
+        self._game_notes[game_id] = notes
+        for pid, text in notes.items():
+            # Notes typed since this backend started are newer than the saved ones.
+            self.player_notes.setdefault(pid, text)
+
+    def _save_notes(self, game_id: str, pid: str, text: str) -> None:
+        path = self._game_file(game_id, ".notes.json")
+        self._session(game_id)  # loads the saved ones first, so none are dropped
+        notes = self._game_notes.setdefault(game_id, {})
+        if text.strip():
+            notes[pid] = text
+        else:
+            notes.pop(pid, None)
+        if path is None:
+            return
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(notes, indent=1, sort_keys=True) + "\n")
+            os.replace(tmp, path)
+        except OSError:
+            log.exception("[VAMOS] could not save notes to %s", path)
 
     def _log_page(self, message: Message) -> list[Message]:
         game_id = message["gameId"]
@@ -636,7 +679,7 @@ KEEP_GAMES_DAYS = 3  # saved game logs older than this are deleted when the back
 
 def _prune(directory: Path, days: int) -> None:
     cutoff = time.time() - days * 86400
-    for path in directory.glob("*.jsonl") if directory.exists() else []:
+    for path in directory.glob("*.json*") if directory.exists() else []:
         try:
             if path.stat().st_mtime < cutoff:
                 path.unlink()

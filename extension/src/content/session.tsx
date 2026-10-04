@@ -27,6 +27,7 @@ export function startSession(gameId: string): () => void {
     turn: null,
     facts: null,
     showCard: true,
+    showBadges: true,
   });
   let port: chrome.runtime.Port | null = null;
   let stopped = false;
@@ -144,7 +145,7 @@ export function startSession(gameId: string): () => void {
           resumed = true;
         }
       } else if (message.type === "settings") {
-        store.set({ showCard: message.showCard !== false });
+        store.set({ showCard: message.showCard !== false, showBadges: message.showBadges !== false });
       } else if (message.type === "players") {
         if (message.gameId === gameId) store.set({ players: message });
       } else if (message.type === "facts") {

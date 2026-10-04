@@ -284,6 +284,8 @@ export interface Settings {
   aiOn: boolean;
   /** The action card on the table shown or hidden. */
   showCard: boolean;
+  /** The players' badges under their seats shown or hidden. */
+  showBadges: boolean;
 }
 
 /** Content script to backend, when it starts polling a game's log (again). */
@@ -332,10 +334,10 @@ export type PanelToWorker =
   | SnapshotRequest
   | AssignIdentity
   | ForgetIdentity
-  | { type: "settings"; preset?: Preset; aiOn?: boolean; showCard?: boolean }
+  | { type: "settings"; preset?: Preset; aiOn?: boolean; showCard?: boolean; showBadges?: boolean }
   | { type: "settings_request" }
-  /** Notes for tonight's prompts, on one player or the whole table; kept in memory only. */
-  | { type: "notes"; text: string; playerId?: string }
+  /** Notes for tonight's prompts, on one player (saved with that game's log) or the whole table. */
+  | { type: "notes"; text: string; playerId?: string; gameId?: string }
   /** Re-run the decision on the table with another preset ("Ask deeper"). */
   | { type: "ask"; gameId: string; preset: Preset }
   /** Write tonight's read and notes on a player to data/drafts/ for the user to review. */

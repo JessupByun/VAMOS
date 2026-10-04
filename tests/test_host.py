@@ -100,6 +100,7 @@ def test_hello_reports_ready_with_settings_and_costs(backend):
         "deep": "deep",
         "aiOn": True,
         "showCard": True,
+        "showBadges": True,
     }
     assert (costs["type"], costs["session"], costs["overCap"]) == ("costs", 0, False)
 
@@ -453,7 +454,7 @@ def test_the_dial_and_the_heros_names_come_from_settings(tmp_path):
     backend, fake, _ = claude_backend(tmp_path, [Reply(BET_HALF, "end_turn", {})])
     backend.handle({"type": "settings", "preset": "deep"})
     saved = json.loads((tmp_path / "data/settings.json").read_text())
-    assert saved == {"preset": "deep", "aiOn": True, "showCard": True}
+    assert saved == {"preset": "deep", "aiOn": True, "showCard": True, "showBadges": True}
     saved["heroNames"] = ["Jessica Q"]
     (tmp_path / "data/settings.json").write_text(json.dumps(saved))
     (tmp_path / "profiles/alex.md").write_text(ALEX + "Hates it when Jessica Q check-raises.\n")
@@ -675,3 +676,19 @@ def test_a_restarted_backend_keeps_tonights_rows_and_says_where_to_resume(tmp_pa
     # An unknown game has nothing to resume from, and odd game IDs never name a file.
     assert second.handle({"type": "resume_request", "gameId": "other"})[0]["after"] is None
     assert second._session("../x")._store is None
+
+
+def test_notes_on_a_player_are_saved_with_the_game_and_back_after_a_restart(tmp_path):
+    first, _, _ = claude_backend(tmp_path, [])
+    first.handle(SEATS)
+    first.handle({"type": "notes", "gameId": GAME, "playerId": "Qw3rTy7UiO", "text": "tilted"})
+    saved = json.loads((tmp_path / f"data/games/{GAME}.notes.json").read_text())
+    assert saved == {"Qw3rTy7UiO": "tilted"}
+    # A restarted backend has them as soon as the game comes back.
+    second, _ = claude_backend_with_data(tmp_path)
+    [players, *_] = second.handle(SEATS)
+    alex = next(p for p in players["players"] if p["id"] == "Qw3rTy7UiO")
+    assert alex["notes"] == "tilted"
+    # Clearing a note removes it from the file too.
+    second.handle({"type": "notes", "gameId": GAME, "playerId": "Qw3rTy7UiO", "text": ""})
+    assert json.loads((tmp_path / f"data/games/{GAME}.notes.json").read_text()) == {}

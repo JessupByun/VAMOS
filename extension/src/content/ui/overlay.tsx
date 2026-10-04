@@ -282,14 +282,14 @@ export function Overlay(props: {
   store: Store;
   onAssign: (playerId: string, profile: string | null) => void;
 }) {
-  const { seats, players, heroSeat } = useStore(props.store);
+  const { seats, players, heroSeat, showBadges } = useStore(props.store);
   const byId = new Map(players?.players.map((p) => [p.id, p]));
   // The hero's own numbers tonight, under the hero's seat like everyone else's.
   const hero = players?.players.find((p) => p.hero);
   return (
     <>
       <ActionCard store={props.store} />
-      {heroSeat && hero && (
+      {showBadges && heroSeat && hero && (
         <Badge
           key={`hero-${hero.id}`}
           seat={{ id: hero.id, name: hero.name, element: heroSeat }}
@@ -298,7 +298,8 @@ export function Overlay(props: {
           onAssign={props.onAssign}
         />
       )}
-      {seats.map((seat) => (
+      {showBadges &&
+        seats.map((seat) => (
         <Badge
           key={seat.id}
           seat={seat}
