@@ -26,7 +26,8 @@ the flop. Your job is to win Hero the most money by exploiting each opponent's s
 weaknesses, as described in their profile below. Where a profile says nothing about the
 situation, use your own judgment.
 
-Each message gives the hand so far: every player's position and stack, every action in
+Each message gives the hand so far: every player's position and stack (with tonight's
+VPIP and PFR counts, and Hero's own notes on them when Hero wrote any), every action in
 order with the board cards where they were dealt, Hero's cards, and exact numbers computed
 from them (pot, price, stacks, Hero's made hand, the cards that would complete Hero's
 draws). Trust those numbers rather than recounting them. Amounts are in big blinds; an
@@ -87,6 +88,7 @@ def spot_message(
     legal: list[str],
     tonight: dict[str, dict] | None = None,
     notes: str = "",  # already pseudonymized
+    player_notes: dict[str, str] | None = None,  # PokerNow ID -> Hero's notes, pseudonymized
 ) -> str:
     """The hand so far from Hero's seat, as JSON inside a short user message."""
     bb = hand.big_blind or 1
@@ -104,6 +106,7 @@ def spot_message(
             "behind_bb": _bb(stacks[pid] - hand.put_in.get(pid, 0), bb),
             **({"folded": True} if pid in folded else {}),
             **({"tonight": tonight[pid]} if tonight and pid in tonight else {}),
+            **({"hero_notes": player_notes[pid]} if player_notes and pid in player_notes else {}),
         }
         for pid in sorted(stacks, key=lambda p: list(positions).index(p) if p in positions else 99)
     ]

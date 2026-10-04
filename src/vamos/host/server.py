@@ -6,6 +6,7 @@ closes its stdin when the last one closes, which ends `serve`.
 import json
 import logging
 import os
+import re
 import sys
 import threading
 import time
@@ -23,6 +24,7 @@ from vamos.brain.spot import betting, claude_facts, legal
 from vamos.config import DATA_DIR, PROFILES_DIR, VERSION
 from vamos.engine.advice import preflop_advice
 from vamos.engine.facts import TableView, current_spot, facts
+from vamos.engine.madehand import describe
 from vamos.engine.state import Decision, positions
 from vamos.host.framing import read_message, write_message
 from vamos.identity import IdentityMap, Resolution
@@ -81,6 +83,11 @@ class Backend:
         self.preset = saved.get("preset") if saved.get("preset") in PRESETS else "balanced"
         self.hero_names = [str(n) for n in saved.get("heroNames", []) if isinstance(n, str)]
         self.notes = ""  # tonight's quick notes, never saved
+        self.player_notes: dict[str, str] = {}  # PokerNow ID -> tonight's notes on that player
+        # Per table: the hero's own seat as the extension reports it, and the summary of the
+        # current hand last sent to the side panel.
+        self.hero_seat: dict[str, Message] = {}
+        self._hand_sent: dict[str, Message] = {}
         # One set of pseudonyms for the whole session, so the notes (shared by every table)
         # hide a name seen at any table.
         self.names = Pseudonyms()
@@ -116,8 +123,13 @@ class Backend:
         if kind == "dom_snapshot":
             return [self._save_snapshot(message)] if self.record else []
         if kind == "seats":
-            self.seated[message["gameId"]] = message["players"]
-            return [self._players(message["gameId"])]
+            game_id = message["gameId"]
+            self.seated[game_id] = message["players"]
+            if message.get("hero"):
+                self.hero_seat[game_id] = message["hero"]
+            else:
+                self.hero_seat.pop(game_id, None)
+            return [self._players(game_id), *self._hand_update(game_id)]
         if kind == "assign_identity":
             self.identity.assign(message["playerId"], message.get("profile"))
             return [self._players(game_id) for game_id in self.seated]
@@ -149,7 +161,12 @@ class Backend:
                 self._save_settings()
             return [self._settings()]
         if kind == "notes":
-            self.notes = str(message.get("text", ""))[:2000]
+            text = str(message.get("text", ""))[:2000]
+            if message.get("playerId"):
+                # Notes about one player, kept by PokerNow ID for tonight only.
+                self.player_notes[message["playerId"]] = text
+            else:
+                self.notes = text
             return []
         if kind == "ask":
             return self._ask(message)
@@ -229,7 +246,63 @@ class Backend:
         replies = [self._players(game_id)] if game_id in self.seated else []
         if game_id in self.turns:
             replies.append(self._spot_facts(game_id))
-        return replies
+        return [*replies, *self._hand_update(game_id)]
+
+    def _notes_for(self, pid: str, aliases: dict[str, str]) -> str:
+        """Notes on a player, also when written under an ID they had before logging in."""
+        if pid in self.player_notes:
+            return self.player_notes[pid]
+        old = [o for o, new in aliases.items() if new == pid and o in self.player_notes]
+        return self.player_notes[old[-1]] if old else ""
+
+    def _hero_id(self, game_id: str) -> str | None:
+        seat = self.hero_seat.get(game_id)
+        turn = self.turns.get(game_id)
+        pid = seat["id"] if seat else turn["table"]["heroId"] if turn else None
+        return self._session(game_id).log.current_id(pid) if pid else None
+
+    def _hand_update(self, game_id: str) -> list[Message]:
+        """The hand on the table from the hero's seat, sent to the side panel when it changes."""
+        hero = self._hero_id(game_id)
+        log = self._session(game_id).log
+        if hero is None or not log.hands:
+            return []
+        hand = log.hands[-1]
+        if hero not in {s.player.id for s in hand.seats}:
+            return []
+        bb = hand.big_blind or 1
+        put = hand.put_in.get(hero, 0) - hand.returned.get(hero, 0)
+        bounty = sum(
+            (e.amount or 0)
+            * (
+                (e.other is not None and e.other.id == hero)
+                - (e.player is not None and e.player.id == hero)
+            )
+            for e in hand.bounties
+            if e.kind == "bounty_paid"
+        )
+        summary = {
+            "type": "hand",
+            "gameId": game_id,
+            "key": str(hand.hand_id or hand.number),
+            "number": hand.number,
+            "heroCards": list(hand.hero_cards),
+            "board": list(hand.board),
+            # Run it twice or a double board: the second board in full.
+            "secondBoard": list(hand.second_run or hand.second_board),
+            "position": positions(hand).get(hero),
+            "madeHand": describe(hand.hero_cards, hand.board) if hand.hero_cards else None,
+            "folded": hero in hand.folded(),
+            "ended": hand.ended,
+            # Won or lost, in big blinds, once the hand is over.
+            "resultBb": (
+                round((hand.collected.get(hero, 0) - put + bounty) / bb, 2) if hand.ended else None
+            ),
+        }
+        if self._hand_sent.get(game_id) == summary:
+            return []
+        self._hand_sent[game_id] = summary
+        return [summary]
 
     def _spot_facts(self, game_id: str, ask: str | None = None) -> Message:
         turn = self.turns[game_id]
@@ -276,9 +349,17 @@ class Backend:
         }
         labels[hero] = HERO
         counts = self._session(game_id).counts()
-        tonight = {pid: {"hands": c.hands, "vpip": c.vpip} for pid, c in counts.items()}
+        tonight = {
+            pid: {"hands": c.hands, "vpip": c.vpip, "pfr": c.pfr} for pid, c in counts.items()
+        }
         # The hand itself names players only by pseudonym; the notes are the user's own words.
         notes = names.hide(self.notes)
+        game_log = self._session(game_id).log
+        player_notes = {
+            game_log.current_id(pid): names.hide(text)
+            for pid, text in self.player_notes.items()
+            if text.strip() and game_log.current_id(pid) in labels
+        }
         message = prompt.spot_message(
             hand,
             hero,
@@ -288,6 +369,7 @@ class Backend:
             legal(hand, hero, spot),
             tonight,
             notes,
+            player_notes,
         )
         system = prompt.prefix(profiles, names)
         request = Request(PRESETS[preset], system.blocks, [{"role": "user", "content": message}])
@@ -300,7 +382,7 @@ class Backend:
         )
         refuse = None
         try:
-            names.check(system.user_text + "\n" + notes)
+            names.check("\n".join([system.user_text, notes, *player_notes.values()]))
         except LeakError as error:
             log.error("[VAMOS] %s", error)
             refuse = "blocked: a real name was left in the prompt"
@@ -333,6 +415,18 @@ class Backend:
                         names.merge(pid, person)  # mapped to a profile since first seen
                     profile = profiles.profiles.get(person)
                     names.add(person, [nickname], shown=profile.name if profile else nickname)
+        # Players seated but not yet dealt in (waiting for the big blind, sitting out) are in
+        # no hand, but a note can still name them.
+        for game_id, seated in self.seated.items():
+            game_log = self._session(game_id).log
+            for seat in seated:
+                pid = game_log.current_id(seat["id"])
+                person = self._person(game_id, pid, profiles)
+                profile = profiles.profiles.get(person)
+                nickname = seat.get("name", "")
+                names.add(person, [nickname], shown=profile.name if profile else nickname)
+        for seat in self.hero_seat.values():
+            names.add_hero_name(seat.get("name", ""))
         return names
 
     def _resolve(self, pid: str, profiles: ProfileSet, aliases: dict[str, str]) -> Resolution:
@@ -354,6 +448,23 @@ class Backend:
         counts = session.counts()
         aliases = session.log.aliases
         players = []
+        hero = self.hero_seat.get(game_id)
+        if hero:
+            mine = counts.get(aliases.get(hero["id"], hero["id"]))
+            players.append(
+                {
+                    "id": hero["id"],
+                    "name": hero.get("name", ""),
+                    "hero": True,
+                    "status": "none",
+                    "source": None,
+                    "profile": None,
+                    "tonight": (
+                        {"hands": mine.hands, "vpip": mine.vpip, "pfr": mine.pfr} if mine else None
+                    ),
+                    "notes": "",
+                }
+            )
         for seated in self.seated.get(game_id, []):
             pid = seated["id"]
             resolution = self._resolve(pid, profiles, aliases)
@@ -371,6 +482,7 @@ class Backend:
                         if tonight
                         else None
                     ),
+                    "notes": self._notes_for(pid, aliases),
                 }
             )
         return {
@@ -418,8 +530,25 @@ def _profile_view(profile: Profile) -> Message:
         "name": profile.name,
         "tag": profile.tag,
         "meta": meta,
+        "summary": _summary(profile.body),
+        "stats": {
+            name: m.group(1)
+            for name, pattern in (("vpip", r"\bVPIP\D{0,3}(\d+)%"), ("pfr", r"\bPFR\D{0,3}(\d+)%"))
+            if (m := re.search(pattern, profile.body))
+        },
         "body": profile.body,
     }
+
+
+def _summary(body: str) -> str | None:
+    """The first sentence of the profile's "Summary" section, else of its first paragraph."""
+    section = re.search(
+        r"^#+[ \t]*Summary[ \t]*\n\s*(?![#-])(\S.+?)(?:\n\s*\n|\n#|\Z)", body, re.M | re.S | re.I
+    )
+    paragraphs = [p for p in re.split(r"\n\s*\n", body) if p.strip() and p.lstrip()[0] not in "#-"]
+    text = section.group(1) if section else (paragraphs[0] if paragraphs else "")
+    sentence = re.split(r"(?<=[.!?])\s", " ".join(text.split()), maxsplit=1)[0]
+    return sentence or None
 
 
 def _read_json(path: Path) -> dict:

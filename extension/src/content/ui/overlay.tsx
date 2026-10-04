@@ -32,7 +32,7 @@ function placed(layout: Layout | null): Record<string, string> {
 
 function statusText(status: BackendStatus): string {
   if (status.state === "ready") {
-    return `ready (v${status.version})${status.recording ? " · recording" : ""}`;
+    return `active (v${status.version})${status.recording ? " · recording" : ""}`;
   }
   if (status.state === "connecting") return "connecting...";
   return `down: ${status.detail ?? "unknown"}`;
@@ -51,7 +51,7 @@ function ActionCard({ store }: { store: Store }) {
       <div class={`action-card waiting ${status.state}`}>
         <span class="brand">{BRAND}</span>
         <span class="status">{statusText(status)}</span>
-        {ready && heroSeat && <span class="wait">· waiting for your turn</span>}
+        {ready && <span class="wait">· {heroSeat ? "waiting for your turn" : "not seated"}</span>}
       </div>
     );
   } else {

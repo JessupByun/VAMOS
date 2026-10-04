@@ -145,6 +145,9 @@ def main() -> None:
             continue
         labels = {pid: name for name, pid in ids.items()}
         tonight = {ids[p["name"]]: p["tonight"] for p in spot["players"] if p.get("tonight")}
+        player_notes = {
+            ids[p["name"]]: p["hero_notes"] for p in spot["players"] if p.get("hero_notes")
+        }
         message = prompt.spot_message(
             hand,
             hero,
@@ -154,6 +157,7 @@ def main() -> None:
             legal(hand, hero, state),
             tonight,
             notes.group(1) if notes else "",
+            player_notes,
         )
         if args.dry_run:
             print(f"--- line {number}\n{message}\n")

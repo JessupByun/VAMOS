@@ -35,11 +35,12 @@ export interface SeatedPlayer {
   name: string;
 }
 
-/** The opponents currently seated at the table (the hero is never reported). */
+/** The opponents currently seated at the table, and the hero's own seat when seated. */
 export interface SeatsReport {
   type: "seats";
   gameId: string;
   players: SeatedPlayer[];
+  hero: SeatedPlayer | null;
 }
 
 /** The user's answer to "who is this?": a profile key, or null for "no profile". */
@@ -61,6 +62,10 @@ export interface ProfileView {
   tag: string | null;
   /** A few frontmatter fields: hands, sessions (a count), net, last_updated. */
   meta: Record<string, string | number>;
+  /** The first sentence of the profile's "Summary" section. */
+  summary: string | null;
+  /** Headline numbers found in the profile's text, in percent, e.g. {vpip: "51", pfr: "23"}. */
+  stats: Record<string, string>;
   /** The profile's text, exactly as the user wrote it. */
   body: string;
 }
@@ -74,6 +79,29 @@ export interface PlayerInfo {
   profile: ProfileView | null;
   /** Tonight only, never saved: hands dealt, and of those voluntarily played / raised preflop. */
   tonight: { hands: number; vpip: number; pfr: number } | null;
+  /** The hero's own row. */
+  hero?: boolean;
+  /** The user's notes on this player tonight; sent to Claude with every hand they play. */
+  notes: string;
+}
+
+/** The hand on the table from the hero's seat; sent whenever it changes. */
+export interface HandInfo {
+  type: "hand";
+  gameId: string;
+  /** The hand's ID, the first part of every decision node in it. */
+  key: string;
+  number: number;
+  heroCards: string[];
+  board: string[];
+  /** Run it twice or a double board: the second board in full; empty otherwise. */
+  secondBoard: string[];
+  position: string | null;
+  madeHand: string | null;
+  folded: boolean;
+  ended: boolean;
+  /** Won or lost, in big blinds, once the hand is over. */
+  resultBb: number | null;
 }
 
 export interface Players {
@@ -227,11 +255,11 @@ export type PanelToWorker =
   | ForgetIdentity
   | { type: "settings"; preset: Preset }
   | { type: "settings_request" }
-  /** Quick notes for tonight's prompts; kept in memory only. */
-  | { type: "notes"; text: string }
+  /** Notes for tonight's prompts, on one player or the whole table; kept in memory only. */
+  | { type: "notes"; text: string; playerId?: string }
   /** Re-run the decision on the table with another preset ("Ask Opus"). */
   | { type: "ask"; gameId: string; preset: Preset };
-export type WorkerToPanel = BackendStatus | HostAck | Players | Facts | Settings | Costs;
+export type WorkerToPanel = BackendStatus | HostAck | Players | Facts | Settings | Costs | HandInfo;
 export type HostToWorker =
   | { type: "ready"; version: string; recording: boolean }
   | HostAck
@@ -239,4 +267,5 @@ export type HostToWorker =
   | Facts
   | Settings
   | Costs
+  | HandInfo
   | { type: "error"; message: string };

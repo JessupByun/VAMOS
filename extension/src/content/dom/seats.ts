@@ -24,6 +24,14 @@ export function readSeats(root: ParentNode): SeatElement[] {
   return seats;
 }
 
+/** The hero's own seat, or null when the hero is not seated. */
+export function readHero(root: ParentNode): SeatedPlayer | null {
+  const element = root.querySelector(".table-player.you-player");
+  const id = element ? playerId(element) : null;
+  if (!element || !id) return null;
+  return { id, name: element.querySelector(".table-player-name")?.textContent?.trim() ?? "" };
+}
+
 /** The PokerNow ID of the player in a `.table-player` seat. */
 export function playerId(seat: Element): string | null {
   const href = seat.querySelector('a[href^="/players/"]')?.getAttribute("href") ?? "";

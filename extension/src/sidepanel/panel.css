@@ -430,3 +430,160 @@ ul {
   margin-top: 8px;
   color: var(--muted);
 }
+
+/* The current hand: the hero's cards and the board as small playing cards. */
+.hand-head {
+  margin-bottom: 4px;
+}
+
+.hand-head .cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  align-items: center;
+}
+
+.hand-head .mine,
+.hand-head .board {
+  display: flex;
+  gap: 4px;
+}
+
+.pcard {
+  display: inline-flex;
+  gap: 1px;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 38px;
+  padding: 0 3px;
+  border-radius: 6px;
+  font-size: 15px;
+  font-weight: 800;
+  background: #fbfbfc;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.pcard .suit {
+  font-size: 16px;
+}
+
+.pcard.red {
+  color: #d22e3a;
+}
+
+.pcard.black {
+  color: #16181c;
+}
+
+.hand-line {
+  margin-top: 8px;
+}
+
+.strong {
+  font-weight: 700;
+}
+
+.result {
+  font-weight: 700;
+  color: var(--bad);
+}
+
+.result.won {
+  color: var(--ok);
+}
+
+/* Players: everything worth knowing without expanding; expanding shows the profile file. */
+.players li.player {
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.players li.player:last-child {
+  border-bottom: none;
+}
+
+.players li.me .who {
+  color: var(--accent);
+}
+
+.row1 {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.row1 .who {
+  font-size: 13.5px;
+  font-weight: 800;
+}
+
+.row1 .nick {
+  font-size: 11.5px;
+}
+
+.row1 .tag {
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--soft);
+}
+
+.row1 .picker {
+  margin-left: auto;
+}
+
+.summary {
+  display: -webkit-box;
+  margin-top: 3px;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--muted);
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.numbers {
+  margin-top: 4px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.numbers .label {
+  display: inline-block;
+  min-width: 50px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+input.notes {
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 6px;
+  padding: 5px 9px;
+  border-radius: 7px;
+  font: inherit;
+  font-size: 12px;
+  color: inherit;
+  background: var(--soft);
+  border: 1px solid var(--border);
+}
+
+input.notes:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.players details summary {
+  margin-top: 5px;
+  font-size: 11.5px;
+  color: var(--muted);
+  cursor: pointer;
+}

@@ -2,7 +2,7 @@ import { render } from "preact";
 
 import type { BackendStatus, ContentToWorker, WorkerToContent } from "../shared/protocol";
 import { ClockEstimate, readTimeBar } from "./dom/clock";
-import { readSeats, seatsKey } from "./dom/seats";
+import { readHero, readSeats, seatsKey } from "./dom/seats";
 import { heroSeat, readHeroTurn, readLayout } from "./dom/table";
 import { startLogPoller } from "./log/poller";
 import { createStore } from "./store";
@@ -55,11 +55,12 @@ export function startSession(gameId: string): () => void {
 
   function reportSeats(force = false) {
     const seats = store.get().seats;
-    const key = seatsKey(seats);
+    const hero = readHero(document);
+    const key = `${seatsKey(seats)}#${hero ? seatsKey([hero]) : ""}`;
     if (!force && key === reportedSeats) return;
     if (status().state !== "ready") return;
     const players = seats.map(({ id, name }) => ({ id, name }));
-    if (send({ type: "seats", gameId, players })) reportedSeats = key;
+    if (send({ type: "seats", gameId, players, hero })) reportedSeats = key;
   }
 
   function reportTurn(force = false) {

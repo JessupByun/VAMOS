@@ -69,9 +69,15 @@ export function readLayout(root: ParentNode): Layout {
   const viewport = `${window.innerWidth}x${window.innerHeight}`;
   if (pot) lastCenter = { viewport, box: pot };
   const remembered = lastCenter?.viewport === viewport ? lastCenter.box : null;
+  // Before any pot has been seen, where PokerNow draws it: the middle of the table, about
+  // a quarter of the way down (its stylesheet puts the pot at 24%).
+  const table = box(root.querySelector(".table"));
+  const expected = table
+    ? { left: table.left + table.width / 2 - 50, top: table.top + table.height * 0.24, width: 100, height: 30 }
+    : null;
   return {
     viewport: { width: window.innerWidth, height: window.innerHeight },
-    center: pot ?? remembered ?? board,
+    center: pot ?? remembered ?? board ?? expected,
     decisions,
     obstacles: [
       ...seats,

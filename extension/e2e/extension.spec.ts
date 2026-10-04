@@ -33,7 +33,7 @@ const pageCount = () => harness.recordedPages().length;
 async function openTable() {
   const page = await harness.context.newPage();
   await page.goto(`${ORIGIN}/games/${GAME_ID}`);
-  await expect(pillStatus(page)).toHaveText(/^ready \(v\d+\.\d+\.\d+\)/);
+  await expect(pillStatus(page)).toHaveText(/^active \(v\d+\.\d+\.\d+\)/);
   return page;
 }
 
@@ -58,7 +58,7 @@ test("game page reached by replaceState from start-game still gets the pill", as
   await page.click("#create");
 
   await expect(page).toHaveURL(`${ORIGIN}/games/${GAME_ID}`);
-  await expect(pillStatus(page)).toHaveText(/^ready/);
+  await expect(pillStatus(page)).toHaveText(/^active/);
 });
 
 test("the poller asks only for new rows and delivers each new row once", async () => {
@@ -80,7 +80,7 @@ test("side panel shows the backend status of an open table", async () => {
   await openTable();
   const panel = await harness.context.newPage();
   await panel.goto(PANEL_URL);
-  await expect(panel.locator(".state")).toHaveText(/ready/);
+  await expect(panel.locator(".state")).toHaveText(/active/);
   await expectPanelRoundTrip(panel);
 });
 
@@ -101,7 +101,7 @@ test("a backend that crashes mid-session is relaunched and re-sent the newest ro
 
   await expect.poll(() => harness.hostStarts(), { timeout: 15_000 }).toBe(2);
   const page = harness.context.pages().find((p) => p.url().includes(GAME_ID));
-  await expect(pillStatus(page as Page)).toHaveText(/^ready/);
+  await expect(pillStatus(page as Page)).toHaveText(/^active/);
   // No rows arrived after the first page, so only the post-crash resync can explain this.
   await expect
     .poll(() => harness.recordedPages().some((p) => p.fetchedAt > killedAt && p.body.logs.length === 2))
@@ -112,14 +112,14 @@ test("pill and side panel recover when Chrome stops the service worker", async (
   const game = await openTable();
   const panel = await harness.context.newPage();
   await panel.goto(PANEL_URL);
-  await expect(panel.locator(".state")).toHaveText(/ready/);
+  await expect(panel.locator(".state")).toHaveText(/active/);
 
   const cdp = await harness.context.newCDPSession(panel);
   await cdp.send("ServiceWorker.enable");
   await cdp.send("ServiceWorker.stopAllWorkers");
 
   await expect.poll(() => harness.hostStarts(), { timeout: 15_000 }).toBe(2);
-  await expect(pillStatus(game)).toHaveText(/^ready/);
+  await expect(pillStatus(game)).toHaveText(/^active/);
   // Stale "ready" text would pass a text check; only a live port completes the round trip.
   await expectPanelRoundTrip(panel);
 });
@@ -135,7 +135,7 @@ test("a side panel open with no table survives an idle worker stop", async () =>
 
   // A panel that never reconnected would keep showing "no PokerNow table open".
   await openTable();
-  await expect(panel.locator(".state")).toHaveText(/ready/);
+  await expect(panel.locator(".state")).toHaveText(/active/);
 });
 
 test("endpoints under a game URL are not treated as a table page", async () => {
@@ -195,7 +195,6 @@ test("an answer can be changed or cleared from the side panel", async () => {
 
   const panel = await harness.context.newPage();
   await panel.goto(PANEL_URL);
-  await panel.locator(".table summary", { hasText: "new guy" }).click();
   const change = panel.getByRole("combobox", { name: "Change who new guy is" });
   await change.selectOption({ label: "alex" });
   await expect(badge(page, STRANGER_ID)).toHaveText("alex");
@@ -214,7 +213,7 @@ test("leaving the table and coming back with the back button restores VAMOS", as
     () => (performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming).type,
   );
   expect(restored).toBe("back_forward");
-  await expect(pillStatus(page)).toHaveText(/^ready/);
+  await expect(pillStatus(page)).toHaveText(/^active/);
   await expect(badge(page, KNOWN_ID)).toHaveText(/^alex/);
 });
 
@@ -357,6 +356,13 @@ test("after the flop the card shows Claude's answer and the panel its reasoning"
   await expect(panel.locator(".advice .plan")).toHaveText("Next: Check behind if alex calls and the turn is a club.");
   await expect(panel.getByRole("button", { name: "Ask Opus" })).toBeVisible();
   await expect(panel.locator(".stat.tonight .value")).toHaveText("$0.00");
+  // The current hand: the hero's cards and the flop drawn as cards, and the hero's position.
+  await expect(panel.locator(".hand-head .mine .pcard")).toHaveText(["A♠", "10♦"]);
+  await expect(panel.locator(".hand-head .board .pcard")).toHaveCount(3);
+  await expect(panel.locator(".hand-line")).toContainText("SB");
+  // The hero sits at the table too; every other player has a notes box.
+  await expect(panel.locator(".players li.me .who")).toHaveText("TestHero (You)");
+  await expect(panel.getByRole("textbox", { name: "Notes on alex" })).toBeVisible();
 
   await page.evaluate(() => document.querySelector(".you-player")?.classList.remove("decision-current"));
   await expect(card).toContainText("waiting for your turn");
@@ -417,7 +423,7 @@ test("screenshots of the card and the side panel", async () => {
   });
   await expect(card.locator(".action")).toHaveText("BET 0.20 (1bb)");
   await card.screenshot({ path: `${dir}/3-claude-card.png` });
-  await panel.locator(".table summary", { hasText: "alex" }).click();
+  await panel.locator(".players details summary").first().click();
   await panel.screenshot({ path: `${dir}/4-panel-dark.png`, fullPage: true });
   await panel.emulateMedia({ colorScheme: "light" });
   await panel.screenshot({ path: `${dir}/5-panel-light.png`, fullPage: true });

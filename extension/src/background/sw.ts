@@ -1,5 +1,6 @@
 import {
   type BackendStatus,
+  type HandInfo,
   type ContentToWorker,
   HOST_NAME,
   type HostToWorker,
@@ -20,8 +21,52 @@ let host: chrome.runtime.Port | null = null;
 let status: BackendStatus = { type: "backend", state: "down", detail: "no PokerNow table open" };
 const retry = new HostRetry();
 let retryTimer: ReturnType<typeof setTimeout> | undefined;
-// The latest of each, replayed to a side panel when it opens.
+// What a side panel needs when it opens, replayed to it: the latest settings and costs,
+// and per table the players, the current hand, and every message about that hand's
+// decisions (Claude's answers by node, then the latest, which says whether one is live).
 const latest = new Map<string, WorkerToPanel>();
+interface TableMemory {
+  players?: WorkerToPanel;
+  hand?: HandInfo;
+  decisions: Map<string, WorkerToPanel>;
+  last?: WorkerToPanel;
+}
+const tables = new Map<string, TableMemory>();
+
+function table(gameId: string): TableMemory {
+  let memory = tables.get(gameId);
+  if (!memory) {
+    memory = { decisions: new Map() };
+    tables.set(gameId, memory);
+  }
+  return memory;
+}
+
+function remember(message: HostToWorker) {
+  if (message.type === "settings" || message.type === "costs") latest.set(message.type, message);
+  else if (message.type === "players") table(message.gameId).players = message;
+  else if (message.type === "hand") {
+    const memory = table(message.gameId);
+    if (memory.hand?.key !== message.key) memory.decisions.clear();
+    memory.hand = message;
+  } else if (message.type === "facts") {
+    const memory = table(message.gameId);
+    const node = message.facts?.node;
+    if (node && message.facts?.advice && "state" in message.facts.advice) memory.decisions.set(node, message);
+    memory.last = message;
+  }
+}
+
+function replay(port: chrome.runtime.Port) {
+  for (const message of latest.values()) port.postMessage(message);
+  for (const memory of tables.values()) {
+    if (memory.players) port.postMessage(memory.players);
+    if (memory.hand) port.postMessage(memory.hand);
+    const nodes = [...memory.decisions.keys()].sort((a, b) => a.localeCompare(b, "en", { numeric: true }));
+    for (const node of nodes) port.postMessage(memory.decisions.get(node));
+    if (memory.last) port.postMessage(memory.last);
+  }
+}
 
 chrome.sidePanel
   .setPanelBehavior({ openPanelOnActionClick: true })
@@ -36,6 +81,8 @@ function setStatus(next: BackendStatus) {
 function connectHost() {
   clearTimeout(retryTimer);
   retryTimer = undefined;
+  // A new backend starts with no tables: nothing remembered from the last one is current.
+  tables.clear();
   setStatus({ type: "backend", state: "connecting" });
   const port = chrome.runtime.connectNative(HOST_NAME);
   host = port;
@@ -50,16 +97,12 @@ function connectHost() {
       });
     } else if (message.type === "error") {
       setStatus({ type: "backend", state: "down", detail: message.message });
-    } else if (message.type === "players") {
-      // Each content script keeps only its own game's players.
-      for (const content of contentPorts) content.postMessage(message satisfies WorkerToContent);
-      for (const panel of panelPorts) panel.postMessage(message satisfies WorkerToPanel);
-    } else if (message.type === "facts") {
-      for (const content of contentPorts) content.postMessage(message satisfies WorkerToContent);
-      latest.set(message.type, message);
-      for (const panel of panelPorts) panel.postMessage(message satisfies WorkerToPanel);
     } else {
-      if (message.type === "settings" || message.type === "costs") latest.set(message.type, message);
+      remember(message);
+      // Each content script keeps only its own game's players and facts.
+      if (message.type === "players" || message.type === "facts") {
+        for (const content of contentPorts) content.postMessage(message satisfies WorkerToContent);
+      }
       for (const panel of panelPorts) panel.postMessage(message satisfies WorkerToPanel);
     }
   });
@@ -96,6 +139,7 @@ chrome.runtime.onConnect.addListener((port) => {
       clearTimeout(retryTimer);
       retryTimer = undefined;
       retry.reset();
+      tables.clear();
       if (host !== null) {
         const closing = host;
         host = null;
@@ -106,7 +150,7 @@ chrome.runtime.onConnect.addListener((port) => {
   } else if (port.name === "panel") {
     panelPorts.add(port);
     port.postMessage(status satisfies WorkerToPanel);
-    for (const message of latest.values()) port.postMessage(message);
+    replay(port);
     port.onMessage.addListener((message: PanelToWorker) => {
       if (message.type === "snapshot_request") {
         for (const content of contentPorts) content.postMessage(message satisfies WorkerToContent);

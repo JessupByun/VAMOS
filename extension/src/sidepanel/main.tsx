@@ -5,6 +5,7 @@ import {
   type BackendStatus,
   type ClaudeAdvice,
   type Costs,
+  type HandInfo,
   type HostAck,
   isClaude,
   type PanelToWorker,
@@ -20,15 +21,20 @@ const RECONNECT_MAX_MS = 10000;
 const BRAND = "VAMOS!";
 const STREETS = ["Preflop", "Flop", "Turn", "River"];
 
+const noteTimers = new Map<string, ReturnType<typeof setTimeout>>();
+// What the user typed, kept here too so a re-render from a backend update never drops it,
+// and so the notes can be sent again to a backend that restarted.
+const drafts = new Map<string, string>();
+
 let port: chrome.runtime.Port | null = null;
 let status: BackendStatus = { type: "backend", state: "connecting" };
 let acks: HostAck[] = [];
-let players: Players | null = null;
 let settings: Settings | null = null;
 let costs: Costs | null = null;
 
-// Claude's answers for the current hand, in order, so earlier streets stay readable. A node
-// is "<hand>:<street>:<actions so far>"; a new hand starts a new list.
+// Per table: the players, the hand on the table (from the backend's hand updates) and
+// Claude's answers in it, in order, so earlier streets stay readable. A decision node is
+// "<hand>:<street>:<actions so far>"; a new hand clears the list the moment it is dealt.
 interface Decision {
   node: string;
   street: string;
@@ -37,10 +43,14 @@ interface Decision {
 interface Hand {
   gameId: string;
   key: string;
+  info: HandInfo | null;
   decisions: Decision[];
   live: string | null;
 }
-let hand: Hand | null = null;
+const hands = new Map<string, Hand>();
+const playersByGame = new Map<string, Players>();
+// The table last heard from; a table with a live decision is shown before it.
+let lastGame: string | null = null;
 let retryDelay = RECONNECT_MIN_MS;
 const subscribers = new Set<() => void>();
 
@@ -48,18 +58,42 @@ const notifyAll = () => {
   for (const notify of subscribers) notify();
 };
 
+function shownGame(): string | null {
+  for (const [gameId, hand] of hands) if (hand.live) return gameId;
+  return lastGame;
+}
+
+function onHand(info: HandInfo) {
+  const hand = hands.get(info.gameId);
+  hands.set(
+    info.gameId,
+    hand && hand.key === info.key
+      ? { ...hand, info }
+      : { gameId: info.gameId, key: info.key, info, decisions: [], live: null },
+  );
+}
+
 function onFacts(gameId: string, node: string | null, advice: unknown) {
+  const hand = hands.get(gameId);
   if (node === null || !isClaude(advice as ClaudeAdvice | null)) {
-    // The decision passed (or a preflop chart is up): nothing on the table is live.
-    if (hand) hand = { ...hand, live: null };
+    // The decision passed (or a preflop chart is up): nothing on this table is live.
+    if (hand) hands.set(gameId, { ...hand, live: null });
     return;
   }
   const [key = "", street = ""] = node.split(":");
   const entry = { node, street: STREETS[Number(street)] ?? "", advice: advice as ClaudeAdvice };
-  const same = hand && hand.gameId === gameId && hand.key === key;
-  const kept = same && hand ? hand.decisions.filter((d) => d.node !== node) : [];
-  const decisions = [...kept, entry].sort((a, b) => a.node.localeCompare(b.node, "en", { numeric: true }));
-  hand = { gameId, key, decisions, live: node };
+  const current: Hand = hand && hand.key === key ? hand : { gameId, key, info: null, decisions: [], live: null };
+  const decisions = [...current.decisions.filter((d) => d.node !== node), entry].sort((a, b) =>
+    a.node.localeCompare(b.node, "en", { numeric: true }),
+  );
+  hands.set(gameId, { ...current, decisions, live: node });
+}
+
+// Notes live in the backend's memory, so a new backend has none: send them again.
+function resendNotes() {
+  for (const [playerId, text] of drafts) {
+    if (text.trim()) send({ type: "notes", playerId, text });
+  }
 }
 
 // The worker replies the moment the port connects, so the listener is attached here,
@@ -71,11 +105,25 @@ function connect() {
   port = next;
   next.onMessage.addListener((message: WorkerToPanel) => {
     retryDelay = RECONNECT_MIN_MS;
-    if (message.type === "backend") status = message;
-    else if (message.type === "players") players = message;
+    if (message.type === "backend") {
+      const becameReady = message.state === "ready" && status.state !== "ready";
+      status = message;
+      if (message.state === "down") {
+        // No table is open: nothing shown about one is current any more.
+        hands.clear();
+        playersByGame.clear();
+      }
+      if (becameReady) resendNotes();
+    } else if (message.type === "players") {
+      playersByGame.set(message.gameId, message);
+      lastGame = message.gameId;
+    }
     else if (message.type === "settings") settings = message;
     else if (message.type === "costs") costs = message;
-    else if (message.type === "facts") {
+    else if (message.type === "hand") {
+      onHand(message);
+      lastGame = message.gameId;
+    } else if (message.type === "facts") {
       onFacts(message.gameId, message.facts?.node ?? null, message.facts?.advice ?? null);
     } else acks = [message, ...acks].slice(0, 20);
     notifyAll();
@@ -104,6 +152,9 @@ function useWorkerState() {
       subscribers.delete(notify);
     };
   }, []);
+  const game = shownGame();
+  const hand = game ? (hands.get(game) ?? null) : null;
+  const players = game ? (playersByGame.get(game) ?? null) : null;
   return { status, acks, players, settings, costs, hand };
 }
 
@@ -183,14 +234,76 @@ function DecisionView(props: { decision: Decision; live: boolean; gameId: string
   );
 }
 
-function Decisions({ hand }: { hand: Hand }) {
-  const live = hand.live !== null;
+const SUITS: Record<string, string> = { s: "\u2660", h: "\u2665", d: "\u2666", c: "\u2663" };
+
+/** A playing card drawn small: "Ah" as A with a red heart. */
+function Card({ card }: { card: string }) {
+  const rank = card[0] === "T" ? "10" : (card[0] ?? "");
+  const suit = card[1] ?? "";
   return (
-    <section class={live ? "card advice" : "card advice past"}>
-      <h2>This hand's decisions</h2>
-      {hand.decisions.map((d) => (
-        <DecisionView key={d.node} decision={d} live={d.node === hand.live} gameId={hand.gameId} />
-      ))}
+    <span class={`pcard ${suit === "h" || suit === "d" ? "red" : "black"}`}>
+      {rank}
+      <span class="suit">{SUITS[suit]}</span>
+    </span>
+  );
+}
+
+function HandHeader({ info }: { info: HandInfo }) {
+  const result =
+    info.resultBb === null
+      ? info.folded
+        ? "folded"
+        : null
+      : info.resultBb > 0
+        ? `won ${info.resultBb}bb`
+        : info.resultBb < 0
+          ? `lost ${-info.resultBb}bb`
+          : "even";
+  return (
+    <div class="hand-head">
+      <div class="cards">
+        <span class="mine">
+          {info.heroCards.map((c) => (
+            <Card key={c} card={c} />
+          ))}
+        </span>
+        {info.board.length > 0 && (
+          <span class="board">
+            {info.board.map((c) => (
+              <Card key={c} card={c} />
+            ))}
+          </span>
+        )}
+        {info.secondBoard.length > 0 && (
+          <span class="board second" title="second run">
+            {info.secondBoard.map((c) => (
+              <Card key={`2-${c}`} card={c} />
+            ))}
+          </span>
+        )}
+      </div>
+      <p class="hand-line">
+        <span class="strong">{info.madeHand ?? "no cards yet"}</span>
+        {info.position && <span class="muted"> · {info.position}</span>}
+        <span class="muted"> · hand #{info.number}</span>
+        {result && <span class={`result ${info.resultBb && info.resultBb > 0 ? "won" : ""}`}> · {result}</span>}
+      </p>
+    </div>
+  );
+}
+
+function CurrentHand({ hand }: { hand: Hand }) {
+  return (
+    <section class="card advice">
+      <h2>Current hand</h2>
+      {hand.info && <HandHeader info={hand.info} />}
+      {hand.decisions.length === 0 ? (
+        <p class="muted small">No AI decisions yet this hand; they come after the flop.</p>
+      ) : (
+        hand.decisions.map((d) => (
+          <DecisionView key={d.node} decision={d} live={d.node === hand.live} gameId={hand.gameId} />
+        ))
+      )}
     </section>
   );
 }
@@ -198,8 +311,8 @@ function Decisions({ hand }: { hand: Hand }) {
 function Dial({ settings }: { settings: Settings }) {
   return (
     <section class="card">
-      <h2>Model after the flop</h2>
-      <div class="segmented" role="radiogroup" aria-label="Model after the flop">
+      <h2>Model (currently used only postflop)</h2>
+      <div class="segmented" role="radiogroup" aria-label="Model">
         {settings.presets.map((preset) => (
           <label key={preset.name} class={settings.preset === preset.name ? "on" : ""}>
             <input
@@ -247,47 +360,11 @@ function Spend({ costs }: { costs: Costs }) {
   );
 }
 
-let notesTimer: ReturnType<typeof setTimeout> | undefined;
-
-function Notes() {
-  const [text, setText] = useState("");
-  const change = (event: Event) => {
-    const value = (event.currentTarget as HTMLTextAreaElement).value;
-    setText(value);
-    clearTimeout(notesTimer);
-    notesTimer = setTimeout(() => send({ type: "notes", text: value }), 600);
-  };
-  return (
-    <section class="card">
-      <h2>Notes for tonight</h2>
-      <textarea rows={3} value={text} onInput={change} placeholder="e.g. alex is tilted after losing a big pot" />
-      <p class="muted small">Sent with every AI call tonight; never saved.</p>
-    </section>
-  );
-}
-
 const NO_PROFILE = "__none__";
 const ASK_AGAIN = "__ask__";
-const META_LABELS: Record<string, string> = {
-  hands: "hands in profile",
-  sessions: "sessions",
-  net: "net",
-  last_updated: "updated",
-};
 
 function pct(count: number, of: number): string {
   return `${Math.round((100 * count) / of)}%`;
-}
-
-function TonightStats({ player }: { player: PlayerInfo }) {
-  const t = player.tonight;
-  if (!t || t.hands === 0) return <span class="muted">no hands yet tonight</span>;
-  return (
-    <span class="tonight">
-      VPIP {pct(t.vpip, t.hands)} <span class="muted">({t.vpip}/{t.hands})</span> · PFR {pct(t.pfr, t.hands)}{" "}
-      <span class="muted">({t.pfr}/{t.hands})</span>
-    </span>
-  );
 }
 
 function IdentityPicker({ player, profiles }: { player: PlayerInfo; profiles: Players["profiles"] }) {
@@ -315,60 +392,107 @@ function IdentityPicker({ player, profiles }: { player: PlayerInfo; profiles: Pl
   );
 }
 
-function TableRow({ player, profiles }: { player: PlayerInfo; profiles: Players["profiles"] }) {
-  const profile = player.profile;
-  const meta = profile ? Object.entries(profile.meta) : [];
+
+function PlayerNotes({ player }: { player: PlayerInfo }) {
+  const [, rerender] = useState(0);
+  const value = drafts.get(player.id) ?? player.notes;
+  const change = (event: Event) => {
+    const text = (event.currentTarget as HTMLInputElement).value;
+    drafts.set(player.id, text);
+    rerender((n) => n + 1);
+    clearTimeout(noteTimers.get(player.id));
+    noteTimers.set(
+      player.id,
+      setTimeout(() => send({ type: "notes", playerId: player.id, text }), 500),
+    );
+  };
+  const flush = () => {
+    clearTimeout(noteTimers.get(player.id));
+    const text = drafts.get(player.id);
+    if (text !== undefined) send({ type: "notes", playerId: player.id, text });
+  };
   return (
-    <li>
-      <details>
-        <summary>
-          <span class="who">{profile?.name ?? player.name}</span>
-          {profile && profile.name !== player.name && <span class="muted"> ({player.name})</span>}
-          <span class="what">
-            <TonightStats player={player} />
+    <input
+      class="notes"
+      type="text"
+      value={value}
+      onInput={change}
+      onBlur={flush}
+      placeholder="Notes for tonight, e.g. very bluffy"
+      aria-label={`Notes on ${player.name}`}
+    />
+  );
+}
+
+function PlayerRow({ player, profiles }: { player: PlayerInfo; profiles: Players["profiles"] }) {
+  const profile = player.profile;
+  const t = player.tonight;
+  const tonight =
+    t && t.hands > 0
+      ? `VPIP ${pct(t.vpip, t.hands)} · PFR ${pct(t.pfr, t.hands)} (${t.hands} hand${t.hands === 1 ? "" : "s"})`
+      : "no hands yet";
+  const lifetime = profile
+    ? [
+        profile.stats.vpip && `VPIP ${profile.stats.vpip}%`,
+        profile.stats.pfr && `PFR ${profile.stats.pfr}%`,
+        profile.meta.hands && `${profile.meta.hands} hands`,
+        profile.meta.net && `net ${profile.meta.net}`,
+      ].filter(Boolean)
+    : [];
+  return (
+    <li class={player.hero ? "player me" : "player"}>
+      <div class="row1">
+        <span class="who">{player.hero ? `${player.name} (You)` : (profile?.name ?? player.name)}</span>
+        {profile && profile.name !== player.name && <span class="muted nick">{player.name}</span>}
+        {profile?.tag && <span class="tag">{profile.tag}</span>}
+        {!player.hero && player.source !== "player_id" && (
+          <span class="picker">
+            <IdentityPicker player={player} profiles={profiles} />
           </span>
-        </summary>
-        <div class="profile">
-          {profile ? (
-            <>
-              <p>
-                <span class="tag">{profile.tag ?? "no tag"}</span>
-                {meta.map(([key, value]) => (
-                  <span key={key} class="meta">
-                    {META_LABELS[key] ?? key}: {String(value)}
-                  </span>
-                ))}
-              </p>
-              <pre class="body">{profile.body}</pre>
-            </>
-          ) : (
-            <p class="muted">
-              {player.status === "none" ? "No profile: Claude plays them on judgment alone." : "Not identified yet."}
-            </p>
-          )}
-          {/* A profile's player_id is changed in that file, not here. */}
-          {player.source !== "player_id" && <IdentityPicker player={player} profiles={profiles} />}
-        </div>
-      </details>
+        )}
+      </div>
+      {profile?.summary && <p class="summary">{profile.summary}</p>}
+      <p class="numbers">
+        <span class="label">Tonight</span> {tonight}
+        {lifetime.length > 0 && (
+          <>
+            <br />
+            <span class="label">Profile</span> {lifetime.join(" · ")}
+          </>
+        )}
+        {!player.hero && !profile && (
+          <>
+            <br />
+            <span class="muted">{player.status === "unknown" ? "Not identified yet" : "No profile"}</span>
+          </>
+        )}
+      </p>
+      {!player.hero && <PlayerNotes player={player} />}
+      {profile && (
+        <details>
+          <summary>Profile file</summary>
+          <pre class="body">{profile.body}</pre>
+        </details>
+      )}
     </li>
   );
 }
 
-function Table({ players }: { players: Players }) {
+function PlayersSection({ players }: { players: Players }) {
   return (
     <section class="card">
-      <h2>Table</h2>
+      <h2>Players</h2>
       {players.players.length > 0 ? (
-        <ul class="table">
+        <ul class="players">
           {players.players.map((p) => (
-            <TableRow key={p.id} player={p} profiles={players.profiles} />
+            <PlayerRow key={p.id} player={p} profiles={players.profiles} />
           ))}
         </ul>
       ) : (
         <p class="muted small">Nobody seated yet.</p>
       )}
       <p class="muted small">
-        {players.profiles.length} profiles loaded from profiles/ · tonight's numbers are never saved
+        {players.profiles.length} profiles loaded from profiles/ · tonight's numbers and notes are never saved
       </p>
       {players.problems.length > 0 && (
         <ul class="problems">
@@ -384,23 +508,23 @@ function Table({ players }: { players: Players }) {
 function Panel() {
   const { status, acks, players, settings, costs, hand } = useWorkerState();
   const requestSnapshot = () => send({ type: "snapshot_request" });
+  const state = status.state === "ready" ? "active" : status.state;
 
   return (
     <main>
       <header class="top">
         <span class="wordmark">{BRAND}</span>
         <span class={`state ${status.state}`}>
-          {status.state}
+          {state}
           {status.version ? ` · v${status.version}` : ""}
           {status.recording ? " · recording log pages" : ""}
           {status.detail ? ` · ${status.detail}` : ""}
         </span>
       </header>
-      {players && <Table players={players} />}
-      {hand && <Decisions hand={hand} />}
-      <Notes />
       {settings && <Dial settings={settings} />}
       {costs && <Spend costs={costs} />}
+      {hand && <CurrentHand hand={hand} />}
+      {players && <PlayersSection players={players} />}
       {status.recording && (
         <section class="card">
           <h2>Recording</h2>
