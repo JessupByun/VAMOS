@@ -708,3 +708,32 @@ def test_profile_stats_allow_a_few_words_before_the_number():
     stats = _profile_view(parse_profile("x", body))["stats"]
     assert stats["cbet"] == {"pct": "20", "count": "1/5"}
     assert stats["vpip"] == {"pct": "49", "count": "23/47"}
+
+
+def test_profile_stats_read_the_templates_wording_and_the_older_one():
+    from vamos.host.server import _profile_view
+    from vamos.profiles import parse_profile
+
+    template = (
+        "---\nname: x\n---\n## Summary\nCalls a lot. Facing a 3-bet: call 82% (14/17).\n"
+        "## Key stats\n- VPIP 48% (304/627), PFR 11% (68/627)\n"
+        "- 3-bet 5% (11/232); facing a 3-bet or 4-bet: call 82% (14/17)\n"
+        "- Flop c-bet 90% (18/20); facing a flop bet: fold 50% (76/152)\n"
+    )
+    older = (
+        "---\nname: y\n---\n- 3-bet vs an open 6% (7/114)\n- C-bets 61% (36/59)\n"
+        "- Faced a bet: fold 35% (33/94)\n"
+    )
+    want = (
+        {"pct": "5", "count": "11/232"},
+        {"pct": "90", "count": "18/20"},
+        {"pct": "50", "count": "76/152"},
+    )
+    stats = _profile_view(parse_profile("x", template))["stats"]
+    assert (stats["threeBet"], stats["cbet"], stats["foldToFlopBet"]) == want
+    stats = _profile_view(parse_profile("y", older))["stats"]
+    assert (stats["threeBet"]["pct"], stats["cbet"]["pct"], stats["foldToFlopBet"]["pct"]) == (
+        "6",
+        "61",
+        "35",
+    )

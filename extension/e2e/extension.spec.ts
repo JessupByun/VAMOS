@@ -407,6 +407,8 @@ test("after the flop the card shows Claude's answer and the panel its reasoning"
   await expect(panel.locator(".advice .plan")).toHaveText("Next: Check behind if alex calls and the turn is a club.");
   await expect(panel.getByRole("button", { name: "Ask deeper" })).toBeVisible();
   await expect(panel.locator(".stat.tonight .value")).toHaveText("$0.00");
+  await expect(panel.locator(".stat.tonight .label")).toHaveText("This session");
+  await expect(panel.locator(".players li.me .group-head .label")).toHaveText("Current session");
   // The current hand: the hero's cards, the flop face up and the turn and river face down.
   await expect(panel.locator(".hand-head .mine .pcard")).toHaveText(["A♠", "10♦"]);
   await expect(panel.locator(".hand-head .board .pcard:not(.back)")).toHaveCount(3);

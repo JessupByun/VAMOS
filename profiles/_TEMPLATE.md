@@ -6,6 +6,7 @@ player_id: AbCdEf1234
 hands: 380
 sessions: [A 2026-09-30, B 2026-10-01]
 hole_cards_known: all 380
+net: +12.40 (A +20.00, B -7.60)
 last_updated: 2026-10-02
 ---
 
@@ -13,7 +14,7 @@ last_updated: 2026-10-02
 
 ## Summary
 
-Two to four sentences: overall style and the single most important way to exploit it.
+Two to four sentences. The first one is their playstyle in a single line (the side panel shows only that sentence), then the single most important way to exploit them.
 
 ## Key stats
 
@@ -21,9 +22,11 @@ Source: N hands, YYYY-MM-DD to YYYY-MM-DD, mostly 4-handed at 50bb.
 Every number carries its sample size.
 
 - VPIP 45% (171/380), PFR 30% (114/380)
-- 3-bet 11% (11/96), fold to 3-bet 70% (14/20)
-- Flop c-bet 80% (40/50), fold to flop c-bet 35% (21/60)
+- 3-bet vs an open 11% (11/96). Facing a 3-bet: fold 70% (14/20)
+- Flop: C-bets 80% (40/50). Faced a bet: fold 35% (21/60)
 - Went to showdown 38% (52/137), won at showdown 48% (25/52)
+
+Keep the wording of these four lines exactly ("VPIP", "PFR", "3-bet vs an open", "C-bets", "Faced a bet: fold"): the side panel reads them.
 
 ## Preflop
 
@@ -42,9 +45,9 @@ What their sizes tend to mean, e.g. "small river bets are almost always thin val
 How often, in which spots, and with what kinds of hands, based on revealed cards.
 Mark anything with fewer than about 10 examples as low confidence.
 
-## Versus Jessup
+## Versus jes
 
-Anything they do differently against Jessup specifically.
+Anything they do differently against jes (me) specifically.
 
 ## Tilt and dynamics
 

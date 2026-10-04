@@ -722,10 +722,10 @@ def _draft_text(
         "Written by VAMOS! from one session, for you to review. It is not a profile: merge what",
         f"is useful into profiles/{profile.key if profile else '<name>'}.md yourself.",
         "",
-        "## Tonight's numbers",
+        "## This session's numbers",
     ]
     if read is None or read.hands == 0:
-        lines.append("- No hands dealt tonight.")
+        lines.append("- No hands dealt this session.")
     else:
         lines += [
             f"- Hands: {read.hands}",
@@ -742,8 +742,8 @@ def _draft_text(
         f"- Hand #{s.number}: {' '.join(s.cards)} on {_boards(s)}; {s.line}; "
         f"{_RESULT_TEXT[s.result]}"
         for s in shown
-    ] or ["- None tonight."]
-    lines += ["", "## Your notes tonight", notes.strip() or "None.", ""]
+    ] or ["- None this session."]
+    lines += ["", "## Your notes this session", notes.strip() or "None.", ""]
     return "\n".join(lines)
 
 
@@ -784,14 +784,17 @@ def _read_view(read: Read | None) -> Message | None:
 _SHOWN_META = ("hands", "sessions", "net", "last_updated")
 
 
-# Headline numbers read from a profile's text for the side panel, first mention of each,
-# e.g. "- 3-bet vs an open 6% (7/114)". Claude reads the whole profile, not these.
+# Headline numbers read from a profile's text for the side panel, first mention of each, in
+# the template's wording ("- 3-bet 11% (11/96)", "- Flop c-bet 80% (40/50); facing a flop
+# bet: fold 35% (33/94)") or the older one ("- 3-bet vs an open 6% (7/114)", "- C-bets 61%",
+# "- Faced a bet: fold 35%"). 3-bets are read from a stats line only, since prose like
+# "facing a 3-bet: call 82%" would otherwise be taken for one. Claude reads the whole profile.
 _PROFILE_STATS = (
     ("vpip", r"\bVPIP"),
     ("pfr", r"\bPFR"),
-    ("threeBet", r"\b3-bet vs an open"),
-    ("cbet", r"\bC-bets"),
-    ("foldToFlopBet", r"\bFaced a bet: fold"),
+    ("threeBet", r"(?m:^-\s*3-bet(?: vs an open)?)"),
+    ("cbet", r"\b(?i:flop c-bet|c-bets)"),
+    ("foldToFlopBet", r"\b(?i:faced a bet|facing a flop bet): fold"),
 )
 
 

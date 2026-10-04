@@ -379,7 +379,7 @@ const dollars = (amount: number) => `$${amount.toFixed(2)}`;
 
 function Spend({ costs }: { costs: Costs }) {
   const stats: [string, string, number][] = [
-    ["tonight", "Tonight", costs.session],
+    ["tonight", "This session", costs.session],
     ["month", "This month", costs.month],
     ["all", "All time", costs.allTime],
   ];
@@ -395,7 +395,7 @@ function Spend({ costs }: { costs: Costs }) {
         ))}
       </div>
       {costs.overCap && (
-        <p class="over small">Past tonight's {dollars(costs.softCap)} soft cap; advice keeps coming.</p>
+        <p class="over small">Past this session's {dollars(costs.softCap)} soft cap; advice keeps coming.</p>
       )}
     </section>
   );
@@ -460,7 +460,7 @@ function PlayerNotes({ player, gameId }: { player: PlayerInfo; gameId: string })
       value={value}
       onInput={change}
       onBlur={flush}
-      placeholder="Notes for tonight, e.g. very bluffy"
+      placeholder="Notes for this session, e.g. very bluffy"
       aria-label={`Notes on ${player.name}`}
     />
   );
@@ -491,7 +491,7 @@ function TonightStats({ t }: { t: TonightRead | null }) {
   return (
     <div class="group">
       <div class="group-head">
-        <span class="label">Tonight</span>
+        <span class="label">Current session</span>
         <span class="muted">{hands > 0 ? plural(hands, "hand") : "no hands yet"}</span>
       </div>
       {t && hands > 0 && (
@@ -593,7 +593,7 @@ function Identity({ player }: { player: PlayerInfo }) {
           Guest with no profile: <em>{player.name}</em> is not matched to anyone yet.
         </>
       )}{" "}
-      <span class="muted">Claude sees only tonight's numbers and your notes.</span>
+      <span class="muted">Claude sees only this session's numbers and your notes.</span>
     </p>
   );
 }
@@ -617,7 +617,7 @@ function PlayerRow(props: { player: PlayerInfo; profiles: Players["profiles"]; g
             <button
               type="button"
               class="mini"
-              title="Write tonight's read and your notes to data/drafts/ for you to review"
+              title="Write this session's read and your notes to data/drafts/ for you to review"
               onClick={() => send({ type: "save_draft", gameId, playerId: player.id })}
             >
               Save draft

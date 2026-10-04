@@ -69,6 +69,7 @@ After a rebuild, reload VAMOS in `chrome://extensions` and then reload the Poker
 ### Style
 - Match the surrounding code; comments only for non-obvious why.
 - No em dashes anywhere; use a plain dash.
+- In the UI and drafts, say "current session" or "this session", never "tonight" (games are not always at night).
 - In long Markdown files, one sentence per line.
 - Commit messages never include an AI co-author line. Prefer new commits over amending; check `git status` first.
 - Never force-push, hard-reset, or delete branches without the user's explicit approval.
