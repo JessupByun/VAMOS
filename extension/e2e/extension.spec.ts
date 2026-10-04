@@ -381,7 +381,9 @@ test("after the flop the card shows Claude's answer and the panel its reasoning"
   await expect(panel.locator(".hand-head .board .pcard.back")).toHaveCount(2);
   await expect(panel.locator(".hand-line")).toContainText("SB");
   // Players: the note on what is saved comes first; the hero sits at the table too.
-  await expect(panel.locator(".note-top")).toContainText("1 profile loaded from profiles/");
+  await expect(panel.locator(".note-top")).toHaveText(
+    "1 profile loaded from history · click Save draft to keep this game's read and notes for history",
+  );
   await expect(panel.locator(".players li.me .who")).toHaveText("TestHero");
   await expect(panel.locator(".players li.me .you")).toHaveText("You");
   await expect(panel.getByRole("textbox", { name: "Notes on alex" })).toBeVisible();

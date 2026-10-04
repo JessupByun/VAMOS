@@ -269,7 +269,8 @@ def test_shown_hands_say_how_they_ended():
     cy, al = r["cccccccccc"].showdowns, r["aaaaaaaaaa"].showdowns
     assert [s.result for s in cy] == ["folded", "split"]
     assert [s.result for s in al] == ["uncontested", "split"]
-    assert r["cccccccccc"].summary()["hands_shown"][0]["result"] == "folded"
+    # Claude gets the counts only; shown hands are for drafts.
+    assert "hands_shown" not in r["cccccccccc"].summary()
 
 
 def test_cards_shown_before_an_all_in_runs_out_wait_for_the_result():

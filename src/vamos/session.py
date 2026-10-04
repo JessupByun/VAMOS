@@ -112,7 +112,7 @@ class Read:
     showdowns: tuple[Showdown, ...]
 
     def summary(self) -> dict:
-        """The read as Claude gets it: exact counts, with the last few hands shown."""
+        """The read as Claude gets it: exact counts. Hands shown go only into drafts."""
         return {
             "hands": self.hands,
             "vpip": self.vpip,
@@ -122,16 +122,6 @@ class Read:
             "postflop_bets_and_raises": self.bets_raises,
             "postflop_calls": self.calls,
             "folds_to_postflop_bets": f"{self.folds_to_bets}/{self.faced_bets}",
-            "hands_shown": [
-                {
-                    "cards": list(s.cards),
-                    "board": list(s.board),
-                    **({"second_board": list(s.second_board)} if s.second_board else {}),
-                    "line": s.line,
-                    "result": s.result,
-                }
-                for s in self.showdowns[-5:]
-            ],
         }
 
 

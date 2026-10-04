@@ -636,8 +636,8 @@ function PlayersSection({ players }: { players: Players }) {
     <section class="card">
       <h2>Players</h2>
       <p class="muted small note-top">
-        {plural(players.profiles.length, "profile")} loaded from profiles/ (read only) · tonight's numbers and
-        notes stay in memory unless you Save draft
+        {plural(players.profiles.length, "profile")} loaded from history · click <span class="kbd">Save draft</span>{" "}
+        to keep this game's read and notes for history
       </p>
       {players.problems.length > 0 && (
         <ul class="problems">

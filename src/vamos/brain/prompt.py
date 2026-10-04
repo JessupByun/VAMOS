@@ -27,13 +27,12 @@ weaknesses, as described in their profile below. Where a profile says nothing ab
 situation, use your own judgment.
 
 Each message gives the hand so far: every player's position and stack, with tonight's read
-on them (counts from tonight's hands only, so weigh them by the number of hands, and the
-hands they showed with the line they took and how it ended) and Hero's own notes on them
-when Hero wrote any; every action in order with the board cards where they were dealt;
-Hero's cards; and exact numbers computed from them (pot, price, stacks, Hero's made hand,
-the cards that would complete Hero's draws). Trust those numbers rather than recounting
-them. Amounts are in big blinds; an action's to_bb is that player's total on the street so
-far, not the amount added.
+on them (counts from tonight's hands only, so weigh them by the number of hands) and
+Hero's own notes on them when Hero wrote any; every action in order with the board cards
+where they were dealt; Hero's cards; and exact numbers computed from them (pot, price,
+stacks, Hero's made hand, the cards that would complete Hero's draws). Trust those numbers
+rather than recounting them. Amounts are in big blinds; an action's to_bb is that player's
+total on the street so far, not the amount added.
 
 Answer (the JSON shape is enforced):
 - reason: one sentence, at most 25 words: what decides this spot.
@@ -144,7 +143,8 @@ def spot_message(
         "facts": facts,
         "legal_actions": legal,
     }
-    body = json.dumps(spot, indent=1, sort_keys=False)
+    # Compact: indenting cost about 30% more input tokens for the same content.
+    body = json.dumps(spot, separators=(",", ":"))
     text = f"Hand so far (amounts in big blinds):\n{body}\n"
     if notes.strip():
         text += f"\nHero's notes for tonight: {notes.strip()}\n"

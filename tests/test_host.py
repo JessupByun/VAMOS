@@ -358,9 +358,7 @@ def test_claude_answers_postflop_under_pseudonyms(tmp_path):
     sent_text = json.dumps(request.system) + json.dumps(request.messages)
     assert "alex" not in sent_text and "Qw3rTy7UiO" not in sent_text
     assert "Loose-passive." in sent_text and "Player A" in sent_text
-    assert (
-        '\\"legal_actions\\": [\\n  \\"check\\",\\n  \\"bet\\",\\n  \\"allin\\"\\n ]' in sent_text
-    )
+    assert '\\"legal_actions\\":[\\"check\\",\\"bet\\",\\"allin\\"]' in sent_text
 
     gate.set()
     update = sent.get(timeout=3)

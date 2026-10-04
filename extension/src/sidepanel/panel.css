@@ -490,9 +490,11 @@ ul {
   animation: deal 0.35s ease-out;
 }
 
+/* No letter-spacing: it is added after the last character too, which pushes a rank off
+   center. "10" fits the card at this size as is. */
 .pcard .rank {
   font-size: 14px;
-  letter-spacing: -0.06em;
+  font-variant-numeric: tabular-nums;
 }
 
 .pcard .suit {
@@ -550,6 +552,15 @@ ul {
 /* Players: who each one is, then tonight's numbers and the profile's, laid out to scan. */
 .note-top {
   margin: -2px 0 6px;
+}
+
+.kbd {
+  padding: 0 5px;
+  border-radius: 4px;
+  font-weight: 600;
+  color: var(--fg);
+  background: var(--soft);
+  border: 1px solid var(--border);
 }
 
 .players li.player {
