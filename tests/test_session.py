@@ -41,8 +41,8 @@ def test_vpip_counts_voluntary_preflop_money_only():
     session = GameSession("g")
     session.add_page(body(*HAND_1, *HAND_2))
     # Alice raised in hand 1 and only checked her big blind in hand 2; Bob folded his
-    # big blind in hand 1 and completed the small blind in hand 2.
-    assert session.counts() == {"aaaaaaaaaa": Counts(2, 1), "bbbbbbbbbb": Counts(2, 1)}
+    # big blind in hand 1 and completed the small blind in hand 2. Only Alice raised.
+    assert session.counts() == {"aaaaaaaaaa": Counts(2, 1, 1), "bbbbbbbbbb": Counts(2, 1, 0)}
 
 
 def test_a_hand_joined_midway_without_a_roster_is_not_counted():
@@ -91,4 +91,4 @@ def test_counts_follow_an_id_change():
             ],
         )
     )
-    assert session.counts() == {"aaaaaaaaaa": Counts(2, 1), "newbobid01": Counts(2, 1)}
+    assert session.counts() == {"aaaaaaaaaa": Counts(2, 1, 1), "newbobid01": Counts(2, 1, 0)}

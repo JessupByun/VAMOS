@@ -1,4 +1,5 @@
 import {
+  type BackendStatus,
   type ClaudeAdvice,
   type Facts,
   isClaude,
@@ -10,21 +11,7 @@ import type { SeatElement } from "../dom/seats";
 import { type Store, useStore } from "../store";
 import { chooseSpot, type Layout, slotStyle } from "./placement";
 
-function Pill({ store }: { store: Store }) {
-  const { status } = useStore(store);
-  const label =
-    status.state === "ready"
-      ? `backend ready (v${status.version})${status.recording ? " · recording" : ""}`
-      : status.state === "connecting"
-        ? "connecting..."
-        : `backend down: ${status.detail ?? "unknown"}`;
-  return (
-    <div class={`card ${status.state}`}>
-      <span class="brand">VAMOS</span>
-      <span class="status">{label}</span>
-    </div>
-  );
-}
+const BRAND = "VAMOS!";
 
 function factsLine(facts: SpotFacts, advised: boolean): string {
   const need = facts.need === null ? null : `need ${facts.need}%`;
@@ -43,46 +30,70 @@ function placed(layout: Layout | null): Record<string, string> {
   return slotStyle(chooseSpot(layout), layout);
 }
 
-/** Shown only while the hero is seated; the decision only on the hero's turn. */
+function statusText(status: BackendStatus): string {
+  if (status.state === "ready") {
+    return `ready (v${status.version})${status.recording ? " · recording" : ""}`;
+  }
+  if (status.state === "connecting") return "connecting...";
+  return `down: ${status.detail ?? "unknown"}`;
+}
+
+/**
+ * Everything VAMOS! shows on the table lives in one spot at the top of the table: the
+ * backend's status while there is nothing else to say, the hero's turn when there is.
+ */
 function ActionCard({ store }: { store: Store }) {
-  const { heroSeat, layout, turn, facts } = useStore(store);
-  if (!heroSeat) return null;
+  const { status, heroSeat, layout, turn, facts } = useStore(store);
+  const ready = status.state === "ready";
+  let body;
+  if (!ready || !heroSeat || turn === null) {
+    body = (
+      <div class={`action-card waiting ${status.state}`}>
+        <span class="brand">{BRAND}</span>
+        <span class="status">{statusText(status)}</span>
+        {ready && heroSeat && <span class="wait">· waiting for your turn</span>}
+      </div>
+    );
+  } else {
+    body = <CardBody turn={turn} facts={facts} />;
+  }
   return (
     <div class="card-slot" style={placed(layout)}>
-      <CardBody turn={turn} facts={facts} />
+      {body}
     </div>
   );
 }
 
-function CardBody({ turn, facts }: { turn: string | null; facts: Facts | null }) {
-  if (turn === null) {
-    return (
-      <div class="action-card waiting">
-        <span class="dot" />
-        waiting for your turn
-      </div>
-    );
-  }
+function CardBody({ turn, facts }: { turn: string; facts: Facts | null }) {
   // Facts computed for an earlier state of the table are never shown.
   const current = facts?.key === turn ? facts.facts : null;
   if (!current) {
     return (
-      <div class="action-card math">
-        <Source kind="math" label="Math" />
-        <div class="line syncing">syncing with the log...</div>
+      <div class="action-card neutral">
+        <Source kind="neutral" label={BRAND} />
+        <div class="line syncing">reading the hand...</div>
       </div>
     );
   }
   const advice = current.advice;
   if (isClaude(advice)) return <ClaudeCard facts={current} advice={advice} />;
-  const chart = advice?.action ? advice : null;
+  if (advice === null) {
+    // After the flop before any answer source exists: the facts alone.
+    return (
+      <div class="action-card neutral">
+        <Source kind="neutral" label={BRAND} />
+        <Action text={current.madeHand} />
+        <div class="line facts">{factsLine(current, false)}</div>
+      </div>
+    );
+  }
   return (
-    <div class={`action-card ${chart ? "chart" : "math"}`}>
-      <Source kind={chart ? "chart" : "math"} label={chart ? "Chart" : "Math"} />
-      <Action text={chart?.action ?? current.madeHand} />
-      {chart?.mix && <Mix parts={chart.mix} />}
-      {advice && !advice.action && <div class="line note">no chart for this spot</div>}
-      <div class="line facts">{factsLine(current, chart !== null)}</div>
+    <div class="action-card chart">
+      <Source kind="chart" label="Preflop chart" />
+      {advice.action ? <Action text={advice.action} /> : <Action text={current.madeHand} />}
+      {advice.mix && <Mix parts={advice.mix} pick={advice.pick} deviation={advice.deviation} />}
+      {!advice.action && <div class="line note">no chart for this spot</div>}
+      <div class="line facts">{factsLine(current, advice.action !== null)}</div>
     </div>
   );
 }
@@ -114,31 +125,37 @@ function Action({ text, thinking = false }: { text: string; thinking?: boolean }
   );
 }
 
-function Mix({ parts }: { parts: string[] }) {
+/**
+ * Every option with its frequency; the one drawn is highlighted. A draw from a less
+ * frequent option than the top one is a deliberate deviation and says so.
+ */
+function Mix(props: { parts: string[]; pick: number | null; deviation: boolean }) {
+  const { parts, pick, deviation } = props;
   return (
     <div class="line mix">
-      {parts.map((part) => (
-        <span key={part} class="chip">
+      {parts.map((part, i) => (
+        <span key={part} class={i === pick ? "chip picked" : "chip"}>
           {part}
         </span>
       ))}
+      {deviation && <span class="chip deviation">deviation</span>}
     </div>
   );
 }
 
-function claudeLabel(model: string): string {
-  return `VAMOS AI (${model})`;
+function aiLabel(model: string): string {
+  return `${BRAND} AI (${model})`;
 }
 
 function ClaudeCard({ facts, advice }: { facts: SpotFacts; advice: ClaudeAdvice }) {
   if (advice.action === null) {
-    // No answer yet, or none coming: the math stays up, with the reason when there is one.
+    // No answer yet, or none coming: the facts stay up, with the reason when there is one.
     const failed = advice.state === "failed";
     return (
-      <div class={`action-card ${failed ? "math" : "claude"}`}>
-        <Source kind={failed ? "math" : "claude"} label={failed ? "Math" : claudeLabel(advice.asked)} />
+      <div class="action-card claude">
+        <Source kind="claude" label={aiLabel(advice.asked)} />
         {failed ? <Action text={facts.madeHand} /> : <Action text="" thinking />}
-        {failed && <div class="line note warn">VAMOS AI: {advice.reason}</div>}
+        {failed && <div class="line note warn">no answer: {advice.reason}</div>}
         <div class="line facts">{factsLine(facts, false)}</div>
       </div>
     );
@@ -146,9 +163,9 @@ function ClaudeCard({ facts, advice }: { facts: SpotFacts; advice: ClaudeAdvice 
   const upgrading = advice.asked !== advice.model;
   return (
     <div class="action-card claude">
-      <Source kind="claude" label={claudeLabel(advice.model)} />
+      <Source kind="claude" label={aiLabel(advice.model)} />
       <Action text={advice.action} />
-      {advice.mix && <Mix parts={advice.mix} />}
+      {advice.mix && <Mix parts={advice.mix} pick={advice.pick} deviation={advice.deviation} />}
       {upgrading && advice.state === "thinking" && (
         <div class="line note">asking {advice.asked}...</div>
       )}
@@ -162,10 +179,15 @@ function ClaudeCard({ facts, advice }: { facts: SpotFacts; advice: ClaudeAdvice 
   );
 }
 
+function pct(count: number, of: number): string {
+  return `${Math.round((100 * count) / of)}%`;
+}
+
+/** Tonight's numbers only, e.g. "VPIP 74% (14/19) · PFR 21%". */
 function tonight(info: PlayerInfo): string | null {
-  return info.tonight && info.tonight.hands > 0
-    ? `VPIP ${info.tonight.vpip}/${info.tonight.hands} tonight`
-    : null;
+  const t = info.tonight;
+  if (!t || t.hands === 0) return null;
+  return `VPIP ${pct(t.vpip, t.hands)} (${t.vpip}/${t.hands}) · PFR ${pct(t.pfr, t.hands)}`;
 }
 
 function WhoIsThis(props: {
@@ -201,14 +223,16 @@ function Badge(props: {
 }) {
   const { seat, info } = props;
   if (!info) return null;
-  // Badges sit just under their seat, in VAMOS's own layer; PokerNow's DOM is untouched.
+  // Badges sit just under their seat, in VAMOS!'s own layer; PokerNow's DOM is untouched.
   const rect = seat.element.getBoundingClientRect();
   const style = { left: `${rect.left}px`, top: `${rect.bottom + 2}px`, width: `${rect.width}px` };
   let body;
   if (info.status === "unknown") {
     body = <WhoIsThis info={info} profiles={props.profiles} onAssign={props.onAssign} />;
   } else {
-    const parts = [info.profile?.name ?? info.name, info.profile?.tag ?? "no profile", tonight(info)];
+    // The person (their profile's name when known) and tonight's numbers; the profile
+    // itself is in the side panel.
+    const parts = [info.profile?.name ?? info.name, tonight(info)];
     body = <span class="text">{parts.filter(Boolean).join(" · ")}</span>;
   }
   return (
@@ -226,7 +250,6 @@ export function Overlay(props: {
   const byId = new Map(players?.players.map((p) => [p.id, p]));
   return (
     <>
-      <Pill store={props.store} />
       <ActionCard store={props.store} />
       {seats.map((seat) => (
         <Badge

@@ -33,7 +33,7 @@ const pageCount = () => harness.recordedPages().length;
 async function openTable() {
   const page = await harness.context.newPage();
   await page.goto(`${ORIGIN}/games/${GAME_ID}`);
-  await expect(pillStatus(page)).toHaveText(/backend ready \(v\d+\.\d+\.\d+\)/);
+  await expect(pillStatus(page)).toHaveText(/^ready \(v\d+\.\d+\.\d+\)/);
   return page;
 }
 
@@ -58,7 +58,7 @@ test("game page reached by replaceState from start-game still gets the pill", as
   await page.click("#create");
 
   await expect(page).toHaveURL(`${ORIGIN}/games/${GAME_ID}`);
-  await expect(pillStatus(page)).toHaveText(/backend ready/);
+  await expect(pillStatus(page)).toHaveText(/^ready/);
 });
 
 test("the poller asks only for new rows and delivers each new row once", async () => {
@@ -101,7 +101,7 @@ test("a backend that crashes mid-session is relaunched and re-sent the newest ro
 
   await expect.poll(() => harness.hostStarts(), { timeout: 15_000 }).toBe(2);
   const page = harness.context.pages().find((p) => p.url().includes(GAME_ID));
-  await expect(pillStatus(page as Page)).toHaveText(/backend ready/);
+  await expect(pillStatus(page as Page)).toHaveText(/^ready/);
   // No rows arrived after the first page, so only the post-crash resync can explain this.
   await expect
     .poll(() => harness.recordedPages().some((p) => p.fetchedAt > killedAt && p.body.logs.length === 2))
@@ -119,7 +119,7 @@ test("pill and side panel recover when Chrome stops the service worker", async (
   await cdp.send("ServiceWorker.stopAllWorkers");
 
   await expect.poll(() => harness.hostStarts(), { timeout: 15_000 }).toBe(2);
-  await expect(pillStatus(game)).toHaveText(/backend ready/);
+  await expect(pillStatus(game)).toHaveText(/^ready/);
   // Stale "ready" text would pass a text check; only a live port completes the round trip.
   await expectPanelRoundTrip(panel);
 });
@@ -151,7 +151,7 @@ const badge = (page: Page, id: string) => page.locator(`#vamos-root .badge[data-
 
 test("seat badges show profiles, ask about strangers, and never badge the hero", async () => {
   const page = await openTable();
-  await expect(badge(page, KNOWN_ID)).toHaveText("alex · Calling station");
+  await expect(badge(page, KNOWN_ID)).toHaveText("alex");
   await expect(badge(page, STRANGER_ID).locator("select")).toBeVisible();
   await expect(badge(page, HERO_ID)).toHaveCount(0);
 });
@@ -159,14 +159,14 @@ test("seat badges show profiles, ask about strangers, and never badge the hero",
 test("answering who-is-this updates the badge and is remembered", async () => {
   const page = await openTable();
   await badge(page, STRANGER_ID).locator("select").selectOption({ label: "No profile" });
-  await expect(badge(page, STRANGER_ID)).toHaveText("new guy · no profile");
+  await expect(badge(page, STRANGER_ID)).toHaveText("new guy");
   const answers = JSON.parse(readFileSync(join(harness.dataDir, "identity.json"), "utf8"));
   expect(answers).toEqual({ [STRANGER_ID]: null });
 });
 
 test("tonight's VPIP appears once hands are played", async () => {
   const page = await openTable();
-  await expect(badge(page, KNOWN_ID)).toHaveText("alex · Calling station");
+  await expect(badge(page, KNOWN_ID)).toHaveText("alex");
   const [hero, alex, guy] = [
     `"TestHero @ ${HERO_ID}"`,
     `"alex @ ${KNOWN_ID}"`,
@@ -184,20 +184,21 @@ test("tonight's VPIP appears once hands are played", async () => {
     `${alex} collected 40 from pot`,
     "-- ending hand #1 --",
   ]);
-  await expect(badge(page, KNOWN_ID)).toHaveText("alex · Calling station · VPIP 1/1 tonight");
+  await expect(badge(page, KNOWN_ID)).toHaveText(/^alex · VPIP 100% \(1\/1\) · PFR \d+%$/);
   await expect(badge(page, STRANGER_ID)).toContainText("new guy");
 });
 
 test("an answer can be changed or cleared from the side panel", async () => {
   const page = await openTable();
   await badge(page, STRANGER_ID).locator("select").selectOption({ label: "No profile" });
-  await expect(badge(page, STRANGER_ID)).toHaveText("new guy · no profile");
+  await expect(badge(page, STRANGER_ID)).toHaveText("new guy");
 
   const panel = await harness.context.newPage();
   await panel.goto(PANEL_URL);
+  await panel.locator(".table summary", { hasText: "new guy" }).click();
   const change = panel.getByRole("combobox", { name: "Change who new guy is" });
   await change.selectOption({ label: "alex" });
-  await expect(badge(page, STRANGER_ID)).toHaveText("alex · Calling station");
+  await expect(badge(page, STRANGER_ID)).toHaveText("alex");
 
   await change.selectOption({ label: "Forget answer" });
   await expect(badge(page, STRANGER_ID).locator("select")).toBeVisible();
@@ -213,8 +214,8 @@ test("leaving the table and coming back with the back button restores VAMOS", as
     () => (performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming).type,
   );
   expect(restored).toBe("back_forward");
-  await expect(pillStatus(page)).toHaveText(/backend ready/);
-  await expect(badge(page, KNOWN_ID)).toHaveText(/alex · Calling station/);
+  await expect(pillStatus(page)).toHaveText(/^ready/);
+  await expect(badge(page, KNOWN_ID)).toHaveText(/^alex/);
 });
 
 const HAND_START = [
@@ -235,6 +236,10 @@ async function heroTurn(page: Page) {
         document.querySelector(`a[href="/players/${id}"]`)?.closest(".table-player") as Element;
       const heroSeat = seat(hero);
       heroSeat.classList.add("decision-current");
+      // PokerNow's "Your Turn", above the action buttons.
+      document
+        .querySelector(".game-decisions-ctn")
+        ?.insertAdjacentHTML("afterbegin", '<p class="action-signal">Your Turn</p>');
       heroSeat.insertAdjacentHTML(
         "beforeend",
         `<p class="table-player-bet-value">${chips("0.10")}</p>` +
@@ -261,16 +266,16 @@ async function heroTurn(page: Page) {
 test("the action card shows facts on the hero's turn only once the log has caught up", async () => {
   const page = await openTable();
   const card = page.locator("#vamos-root .action-card");
-  await expect(card).toHaveText("waiting for your turn");
+  await expect(card).toContainText("waiting for your turn");
 
   harness.addLogLines(HAND_START);
   await heroTurn(page);
   // The fold that made it the hero's turn is not in the log yet.
-  await expect(card).toContainText("syncing with the log");
+  await expect(card).toContainText("reading the hand");
 
   harness.addLogLines([`"new guy @ ${STRANGER_ID}" folds`]);
   // Preflop the chart decides; one facts line follows.
-  await expect(card.locator(".source")).toHaveText("Chart");
+  await expect(card.locator(".source")).toHaveText("Preflop chart");
   await expect(card.locator(".action")).toHaveText(
     /^(FOLD|CALL 0\.10 \(0\.5bb\)|RAISE TO \d+\.\d\d \(\d+(\.\d)?bb\)|ALL IN .*)$/,
   );
@@ -301,9 +306,26 @@ test("the action card shows facts on the hero's turn only once the log has caugh
     })
     .toBe(true);
   await page.evaluate(() => document.querySelector(".table-player-6")?.remove());
+  // Every option is shown, the one drawn marked.
+  await expect(card.locator(".chip.picked")).toHaveCount(1);
+
+  // Opening the bet-size panel removes "Your Turn" mid-decision: the card stays.
+  await page.evaluate(() => {
+    document.querySelector("p.action-signal")?.remove();
+    document
+      .querySelector(".game-decisions-ctn")
+      ?.insertAdjacentHTML("beforeend", '<form class="raise-controller-form"></form>');
+  });
+  await page.waitForTimeout(1200);
+  await expect(card.locator(".source")).toHaveText("Preflop chart");
+  // PokerNow dims its action area when it is not the hero's turn, even if the seat mark
+  // lags: the card goes back to waiting.
+  await page.evaluate(() => document.querySelector(".game-decisions-ctn")?.classList.add("low"));
+  await expect(card).toContainText("waiting for your turn");
+  await page.evaluate(() => document.querySelector(".game-decisions-ctn")?.classList.remove("low"));
 
   await page.evaluate(() => document.querySelector(".you-player")?.classList.remove("decision-current"));
-  await expect(card).toHaveText("waiting for your turn");
+  await expect(card).toContainText("waiting for your turn");
 });
 
 test("after the flop the card shows Claude's answer and the panel its reasoning", async () => {
@@ -327,7 +349,7 @@ test("after the flop the card shows Claude's answer and the panel its reasoning"
       .map((cls) => `<div class="card-container ${cls} flipped"></div>`)
       .join("");
   });
-  await expect(card.locator(".source")).toHaveText("VAMOS AI (Claude Sonnet 5.5)");
+  await expect(card.locator(".source")).toHaveText("VAMOS! AI (Claude Sonnet 5.5)");
   await expect(card.locator(".action")).toHaveText("BET 0.20 (1bb)");
   await expect(card.locator(".facts")).toHaveText(/^SB · pot 2bb · Ace high$/);
 
@@ -337,9 +359,27 @@ test("after the flop the card shows Claude's answer and the panel its reasoning"
   await expect(panel.locator(".stat.tonight .value")).toHaveText("$0.00");
 
   await page.evaluate(() => document.querySelector(".you-player")?.classList.remove("decision-current"));
-  await expect(card).toHaveText("waiting for your turn");
-  await expect(panel.locator(".advice h2")).toHaveText("Your last decision");
+  await expect(card).toContainText("waiting for your turn");
+  await expect(panel.locator(".decision.live")).toHaveCount(0);
   await expect(panel.getByRole("button", { name: "Ask Opus" })).toHaveCount(0);
+
+  // The turn: the flop's decision stays in the panel above the new one.
+  harness.addLogLines([
+    `"TestHero @ ${HERO_ID}" bets 0.20`,
+    `"alex @ ${KNOWN_ID}" calls 0.20`,
+    "Turn: K♠, 7♦, 2♣ [9♥]",
+  ]);
+  await page.evaluate(() => {
+    const pot = document.querySelector(".table-pot-size .normal-value");
+    if (pot) pot.textContent = "0.80";
+    document
+      .querySelector(".table-cards.run-1")
+      ?.insertAdjacentHTML("beforeend", '<div class="card-container card-h card-s-9 flipped"></div>');
+    document.querySelector(".you-player")?.classList.add("decision-current");
+  });
+  await expect(card.locator(".action")).toHaveText("BET 0.40 (2bb)");
+  await expect(panel.locator(".decision .street")).toHaveText(["Flop", "Turn"]);
+  await expect(panel.locator(".decision.live .street")).toHaveText("Turn");
 });
 
 // Not a check: screenshots of the card and side panel for reviewing the design by eye.
@@ -359,7 +399,7 @@ test("screenshots of the card and the side panel", async () => {
   harness.addLogLines(HAND_START);
   await heroTurn(page);
   harness.addLogLines([`"new guy @ ${STRANGER_ID}" folds`]);
-  await expect(card.locator(".source")).toHaveText("Chart");
+  await expect(card.locator(".source")).toHaveText("Preflop chart");
   await card.screenshot({ path: `${dir}/2-chart-card.png` });
   await page.screenshot({ path: `${dir}/2-chart-table.png` });
   harness.addLogLines([
@@ -377,10 +417,11 @@ test("screenshots of the card and the side panel", async () => {
   });
   await expect(card.locator(".action")).toHaveText("BET 0.20 (1bb)");
   await card.screenshot({ path: `${dir}/3-claude-card.png` });
+  await panel.locator(".table summary", { hasText: "alex" }).click();
   await panel.screenshot({ path: `${dir}/4-panel-dark.png`, fullPage: true });
   await panel.emulateMedia({ colorScheme: "light" });
   await panel.screenshot({ path: `${dir}/5-panel-light.png`, fullPage: true });
   await page.evaluate(() => document.querySelector(".you-player")?.classList.remove("decision-current"));
-  await expect(card).toHaveText("waiting for your turn");
+  await expect(card).toContainText("waiting for your turn");
   await page.screenshot({ path: `${dir}/6-waiting-table.png` });
 });

@@ -15,6 +15,7 @@ VOLUNTARY = {"call", "bet", "raise"}
 class Counts:
     hands: int  # hands this player was dealt into
     vpip: int  # of those, hands where they voluntarily put chips in preflop
+    pfr: int = 0  # of those, hands where they raised preflop
 
 
 class GameSession:
@@ -55,6 +56,7 @@ class GameSession:
     def counts(self) -> dict[str, Counts]:
         dealt: dict[str, int] = {}
         voluntary: dict[str, int] = {}
+        raised: dict[str, int] = {}
         log = self.log
         for hand in log.hands:
             # A hand seen from the middle (no roster yet) cannot say who was dealt in.
@@ -67,8 +69,14 @@ class GameSession:
                 for a in hand.actions
                 if a.street == Street.PREFLOP and a.kind in VOLUNTARY
             }
+            raisers = {
+                log.current_id(a.player)
+                for a in hand.actions
+                if a.street == Street.PREFLOP and a.kind == "raise"
+            }
             for seat in hand.seats:
                 pid = log.current_id(seat.player.id)
                 dealt[pid] = dealt.get(pid, 0) + 1
                 voluntary[pid] = voluntary.get(pid, 0) + (pid in put_in)
-        return {pid: Counts(dealt[pid], voluntary[pid]) for pid in dealt}
+                raised[pid] = raised.get(pid, 0) + (pid in raisers)
+        return {pid: Counts(dealt[pid], voluntary[pid], raised[pid]) for pid in dealt}

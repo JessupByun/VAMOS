@@ -9,7 +9,7 @@ const POKERNOW = ["https://*.pokernow.com/*", "https://*.pokernow.club/*"];
 
 export default defineManifest({
   manifest_version: 3,
-  name: "VAMOS",
+  name: "VAMOS!",
   description: "Real-time poker assistant for PokerNow",
   version: "0.1.0",
   key: KEY,
@@ -24,5 +24,5 @@ export default defineManifest({
     },
   ],
   side_panel: { default_path: "src/sidepanel/index.html" },
-  action: { default_title: "VAMOS" },
+  action: { default_title: "VAMOS!" },
 });

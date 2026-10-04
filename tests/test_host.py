@@ -82,7 +82,10 @@ def test_hello_reports_ready_with_settings_and_costs(backend):
     assert settings == {
         "type": "settings",
         "preset": "balanced",
-        "presets": ["balanced", "deep"],
+        "presets": [
+            {"name": "balanced", "label": "Sonnet 5.5", "effort": "medium", "seconds": "2-5"},
+            {"name": "deep", "label": "Opus 5.5", "effort": "medium", "seconds": "5-14"},
+        ],
     }
     assert (costs["type"], costs["session"], costs["overCap"]) == ("costs", 0, False)
 
@@ -91,7 +94,13 @@ def test_seated_players_resolve_to_profiles_or_ask(backend):
     [players] = backend.handle(SEATS)
     alex, stranger = players["players"]
     assert alex["status"] == "profile"
-    assert alex["profile"] == {"key": "alex", "name": "alex", "tag": "Calling station"}
+    assert alex["profile"] == {
+        "key": "alex",
+        "name": "alex",
+        "tag": "Calling station",
+        "meta": {},
+        "body": "Loose-passive.",
+    }
     assert (stranger["status"], stranger["profile"]) == ("unknown", None)
     assert players["profiles"] == [{"key": "alex", "name": "alex"}]
 
@@ -113,7 +122,10 @@ def test_log_pages_update_tonight_counts_without_saving_anything(backend, tmp_pa
     backend.handle(SEATS)
     [players] = backend.handle(page(*HAND))
     tonight = {p["id"]: p["tonight"] for p in players["players"]}
-    assert tonight == {"Qw3rTy7UiO": {"hands": 1, "vpip": 1}, "zzzzzzzzzz": {"hands": 1, "vpip": 0}}
+    assert tonight == {
+        "Qw3rTy7UiO": {"hands": 1, "vpip": 1, "pfr": 0},
+        "zzzzzzzzzz": {"hands": 1, "vpip": 0, "pfr": 0},
+    }
     # The same page again brings nothing new, so no badge update is sent.
     assert backend.handle(page(*HAND)) == []
     assert not (tmp_path / "data/recordings").exists()
@@ -182,7 +194,7 @@ def test_a_player_whose_id_changed_is_still_recognized(backend):
     )
     [alex] = players["players"]
     assert alex["profile"]["key"] == "alex"
-    assert alex["tonight"] == {"hands": 1, "vpip": 1}
+    assert alex["tonight"] == {"hands": 1, "vpip": 1, "pfr": 0}
 
 
 HERO_HAND = [

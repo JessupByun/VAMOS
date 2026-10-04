@@ -55,14 +55,25 @@ export interface ForgetIdentity {
   playerId: string;
 }
 
+export interface ProfileView {
+  key: string;
+  name: string;
+  tag: string | null;
+  /** A few frontmatter fields: hands, sessions (a count), net, last_updated. */
+  meta: Record<string, string | number>;
+  /** The profile's text, exactly as the user wrote it. */
+  body: string;
+}
+
 export interface PlayerInfo {
   id: string;
   name: string;
   status: "profile" | "none" | "unknown";
   /** A profile's player_id (fixed) or the user's own answer (changeable). */
   source: "player_id" | "answer" | null;
-  profile: { key: string; name: string; tag: string | null } | null;
-  tonight: { hands: number; vpip: number } | null;
+  profile: ProfileView | null;
+  /** Tonight only, never saved: hands dealt, and of those voluntarily played / raised preflop. */
+  tonight: { hands: number; vpip: number; pfr: number } | null;
 }
 
 export interface Players {
@@ -112,7 +123,13 @@ export interface ClaudeAdvice {
   source: "Claude" | "Math";
   /** e.g. "BET 1.20 (6bb)"; null until Claude answers. */
   action: string | null;
+  /** Every option Claude gave with its frequency, most frequent first. */
   mix: string[] | null;
+  /** Which entry of mix was drawn, and its frequency in percent. */
+  pick: number | null;
+  pickPct: number | null;
+  /** The draw came from a less frequent option than the top one. */
+  deviation: boolean;
   /** The one fact that decides the spot, with real names. */
   why: string | null;
   /** The next street, or the answer to a raise; null when nothing follows. */
@@ -132,10 +149,15 @@ export function isClaude(advice: SpotFacts["advice"]): advice is ClaudeAdvice {
 
 export interface PreflopAdvice {
   source: string;
-  /** e.g. "RAISE TO 0.60 (3bb)", sampled from the mix. */
+  /** e.g. "RAISE TO 0.60 (3bb)", drawn from the mix. */
   action: string | null;
-  /** e.g. ["raise 3bb 60%", "call 40%"]; null when one action is 90% or more. */
+  /** Every option with its frequency, most frequent first, e.g. ["raise 3bb 60%", "call 40%"]. */
   mix: string[] | null;
+  /** Which entry of mix was drawn, and its frequency in percent. */
+  pick: number | null;
+  pickPct: number | null;
+  /** The draw came from a less frequent option than the top one. */
+  deviation: boolean;
 }
 
 /** Facts for the hero's turn, or null while the log has not caught up with the table. */
@@ -155,10 +177,20 @@ export interface ClockReport {
 
 export type Preset = "balanced" | "deep";
 
+export interface PresetInfo {
+  name: Preset;
+  /** e.g. "Sonnet 5.5". */
+  label: string;
+  /** The model's thinking effort, e.g. "medium". */
+  effort: string | null;
+  /** Measured seconds to an answer, e.g. "2-5". */
+  seconds: string;
+}
+
 export interface Settings {
   type: "settings";
   preset: Preset;
-  presets: Preset[];
+  presets: PresetInfo[];
 }
 
 export interface Costs {

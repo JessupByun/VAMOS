@@ -28,7 +28,7 @@ from vamos.host.framing import read_message, write_message
 from vamos.identity import IdentityMap, Resolution
 from vamos.log.hands import Hand, Street
 from vamos.money import parse_chips
-from vamos.profiles import ProfileSet, load_profiles
+from vamos.profiles import Profile, ProfileSet, load_profiles
 from vamos.session import GameSession
 
 log = logging.getLogger("vamos.host")
@@ -167,7 +167,14 @@ class Backend:
         os.replace(tmp, self.settings_path)
 
     def _settings(self) -> Message:
-        return {"type": "settings", "preset": self.preset, "presets": list(PRESETS)}
+        return {
+            "type": "settings",
+            "preset": self.preset,
+            "presets": [
+                {"name": p.name, "label": p.label, "effort": p.effort, "seconds": p.seconds}
+                for p in PRESETS.values()
+            ],
+        }
 
     def _costs(self) -> Message:
         return {"type": "costs", **self.ledger.totals(datetime.now()), "softCap": SOFT_CAP}
@@ -358,12 +365,12 @@ class Backend:
                     "name": seated.get("name", ""),
                     "status": resolution.kind,
                     "source": resolution.source,
-                    "profile": (
-                        {"key": profile.key, "name": profile.name, "tag": profile.tag}
-                        if profile
+                    "profile": _profile_view(profile) if profile else None,
+                    "tonight": (
+                        {"hands": tonight.hands, "vpip": tonight.vpip, "pfr": tonight.pfr}
+                        if tonight
                         else None
                     ),
-                    "tonight": {"hands": tonight.hands, "vpip": tonight.vpip} if tonight else None,
                 }
             )
         return {
@@ -393,6 +400,26 @@ class Backend:
         path = game_dir / f"dom_{message['capturedAt']}.html"
         path.write_text(message["html"])
         return {"type": "ack", "what": "dom_snapshot", "detail": path.name}
+
+
+# Frontmatter fields shown in the side panel; names, aliases and IDs stay out of the UI.
+_SHOWN_META = ("hands", "sessions", "net", "last_updated")
+
+
+def _profile_view(profile: Profile) -> Message:
+    """What the side panel shows about a profile: the user's own file, read only."""
+    meta = {}
+    for key in _SHOWN_META:
+        value = profile.meta.get(key)
+        if value is not None:
+            meta[key] = len(value) if isinstance(value, list) and key == "sessions" else str(value)
+    return {
+        "key": profile.key,
+        "name": profile.name,
+        "tag": profile.tag,
+        "meta": meta,
+        "body": profile.body,
+    }
 
 
 def _read_json(path: Path) -> dict:

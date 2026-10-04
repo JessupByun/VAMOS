@@ -29,7 +29,6 @@ from typing import Any
 from vamos.brain.answer import Answer, BadAnswer, Choice, Spot, settle
 from vamos.brain.costs import Ledger, price
 from vamos.brain.provider import CallFailed, Provider, Request
-from vamos.engine.advice import MIX_SHOWN_BELOW
 from vamos.engine.facts import format_bb, format_chips
 
 log = logging.getLogger("vamos.brain")
@@ -173,6 +172,9 @@ class Advisor:
             "source": "Claude",
             "action": None,
             "mix": None,
+            "pick": None,  # index into mix of the action drawn
+            "pickPct": None,
+            "deviation": False,  # drawn from a less frequent option than the top one
             "why": None,  # the answer's reason
             "plan": None,
             "model": MODEL_NAMES.get(asked, asked),  # who answered, once someone has
@@ -184,8 +186,10 @@ class Advisor:
             spot, answer = shown.job.spot, shown.answer
             out["model"] = MODEL_NAMES.get(shown.model, shown.model)
             out["action"] = describe(answer.chosen, spot)
-            if answer.mix[0].freq < MIX_SHOWN_BELOW:
-                out["mix"] = [f"{_short(c, spot)} {round(100 * c.freq)}%" for c in answer.mix]
+            out["mix"] = [f"{_short(c, spot)} {round(100 * c.freq)}%" for c in answer.mix]
+            out["pick"] = answer.mix.index(answer.chosen)
+            out["pickPct"] = round(100 * answer.chosen.freq)
+            out["deviation"] = answer.chosen.freq < answer.mix[0].freq - 1e-9
             out["why"], out["plan"] = answer.reason, answer.plan or None
         elif state == "failed":
             out["source"] = "Math"

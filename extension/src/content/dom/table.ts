@@ -86,8 +86,11 @@ export function readLayout(root: ParentNode): Layout {
 export function readHeroTurn(root: ParentNode): TableView | null {
   const hero = root.querySelector(".table-player.you-player");
   // PokerNow leaves the action buttons up between turns (as pre-actions), so whose turn it
-  // is comes only from the seat marked as deciding.
+  // is comes from the seat marked as deciding, and from the action area, which PokerNow
+  // dims (class "low") whenever the hero is not the one to act. "Your Turn" is not used:
+  // it goes away while the hero has the bet-size panel open, mid-decision.
   if (!hero?.classList.contains("decision-current")) return null;
+  if (root.querySelector(".game-decisions-ctn.low")) return null;
   const heroId = playerId(hero);
   if (!heroId) return null;
   return {

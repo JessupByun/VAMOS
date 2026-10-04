@@ -27,14 +27,16 @@ class Preset:
     model: str
     # Adaptive thinking is on by default on both models; effort sets how much they may use.
     effort: str | None = None
+    label: str = ""  # for the side panel
+    seconds: str = ""  # measured time to an answer, for the side panel
 
 
-# Measured on the logged spots (2026-10-03): Sonnet at medium answers in about 3s and never
-# took over 5s; at high, hard spots took 12-20s. Haiku 4.5 was dropped after it misread
-# hands in 3 of 5 live answers.
+# Measured live (2026-10-03, 42 decisions): Sonnet at medium 2.5-4.3s, Opus at medium
+# 4.7-13.8s; Sonnet at high took 12-20s on hard spots. Haiku 4.5 was dropped after it
+# misread hands in 3 of 5 live answers.
 PRESETS = {
-    "balanced": Preset("balanced", "claude-sonnet-5-5", effort="medium"),
-    "deep": Preset("deep", "claude-opus-5-5", effort="medium"),
+    "balanced": Preset("balanced", "claude-sonnet-5-5", "medium", "Sonnet 5.5", "2-5"),
+    "deep": Preset("deep", "claude-opus-5-5", "medium", "Opus 5.5", "5-14"),
 }
 MAX_TOKENS = 16_000  # room for thinking as well as the answer
 REQUEST_TIMEOUT = 60.0  # seconds; the advisor's deadline is usually much shorter

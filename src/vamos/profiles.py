@@ -7,7 +7,7 @@ or a list of them). Files whose name starts with "_" (template, prompt) are skip
 """
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
@@ -23,6 +23,8 @@ class Profile:
     aliases: tuple[str, ...]
     player_ids: tuple[str, ...]
     text: str
+    # Every frontmatter field, for showing the user what the profile says (hands, net, ...).
+    meta: dict = field(default_factory=dict, compare=False)
 
     @property
     def body(self) -> str:
@@ -59,6 +61,7 @@ def parse_profile(key: str, text: str) -> Profile:
         aliases=_strings(meta.get("aliases"), "aliases"),
         player_ids=_strings(meta.get("player_id"), "player_id"),
         text=text,
+        meta=meta,
     )
 
 

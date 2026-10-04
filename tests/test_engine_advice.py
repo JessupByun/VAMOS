@@ -46,13 +46,16 @@ def spot_after(lines, hero=HERO, stacks=(1000, 1000)):
 BLINDS = [f"{P['A']} posts a small blind of 10", f"{P['B']} posts a big blind of 20"]
 
 
-def test_a_clear_raise_shows_no_mix_line():
+def test_a_clear_raise_shows_its_one_option():
     hand, spot = spot_after(["Your hand is A♠, A♦", *BLINDS])
     advice = preflop_advice(hand, spot, HERO, tables())
     assert advice == {
         "source": "Chart",
         "action": "RAISE TO 60 (3bb)",
-        "mix": None,
+        "mix": ["raise 3bb 100%"],
+        "pick": 0,
+        "pickPct": 100,
+        "deviation": False,
     }
 
 
@@ -61,6 +64,8 @@ def test_a_mixed_hand_shows_its_mix():
     advice = preflop_advice(hand, spot, HERO, tables())
     assert advice["mix"] == ["raise 3bb 60%", "call 40%"]
     assert advice["action"] in ("RAISE TO 60 (3bb)", "CALL 10 (0.5bb)")
+    # Which option was drawn, so the card can mark a 40% pick as a deviation.
+    assert (advice["pick"], advice["pickPct"]) in ((0, 60), (1, 40))
 
 
 def test_a_three_bet_is_scaled_to_the_live_open():
@@ -92,3 +97,21 @@ def test_no_advice_after_the_flop_or_off_the_tree():
         ["Your hand is A♠, A♦", *BLINDS, f"{P['A']} raises to 1000 and go all in"], hero=VILLAIN
     )
     assert preflop_advice(hand, spot, VILLAIN, tables())["action"] is None
+
+
+def test_options_that_read_the_same_are_one_option(monkeypatch):
+    # Two raises that both reach a short stack are one "all in" option on the card, so
+    # drawing the smaller of them is not a deviation.
+    from vamos.preflop import lookup
+
+    fake = lookup.Advice(
+        mix=(("raise 4", 0.5), ("raise 3", 0.3), ("call", 0.2)),
+        action="raise 3",
+        depths=(50.0,),
+        faced=1.0,
+    )
+    monkeypatch.setattr(lookup, "advise", lambda *args, **kwargs: fake)
+    hand, spot = spot_after(["Your hand is A♠, A♦", *BLINDS], stacks=(60, 1000))
+    advice = preflop_advice(hand, spot, HERO, tables())
+    assert advice["mix"] == ["all in 80%", "call 20%"]
+    assert (advice["pick"], advice["pickPct"], advice["deviation"]) == (0, 80, False)

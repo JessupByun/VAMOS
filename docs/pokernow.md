@@ -70,7 +70,8 @@ Your hand is 4♠, 10♠
 - Cards: a face-up card is `.card-container.card-<suit>.card-s-<rank>`, with the rank written `T` for ten in the class (the visible text says `10`); face-down cards carry neither class.
   The hero's cards are in the `you-player` seat's `.table-player-cards`; the board is `.table-cards.run-1` (`run-2` for a second run).
 - Action buttons: `.game-decisions-ctn .action-button.{call,raise,check,fold}`; inapplicable ones are rendered but `disabled`, and `call` only exists when calling is legal.
-  "Your Turn" is `p.action-signal`.
+  "Your Turn" is `p.action-signal`; it is drawn only on the buttons screen, so it disappears while the hero has the bet-size panel open (`.raise-controller-form`), mid-decision.
+  The container carries the class `low` whenever the hero is not the one to act (on every screen), which makes `.game-decisions-ctn.low` the reliable "not your turn" mark.
   The buttons stay up between turns as pre-actions (with a "Check or Fold" button), so they do not mean it is the hero's turn; `decision-current` on the `you-player` seat does.
 - Decision timer: `.decision-current .time-to-talk` holds `.normal-time` and `.time-bank` bars whose inline `width` is the percentage left; it redraws every 100ms.
   Seconds are not in the DOM; derive them from how fast the bar shrinks.

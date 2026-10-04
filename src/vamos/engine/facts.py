@@ -50,7 +50,7 @@ def format_chips(cents: Cents, big_blind: Cents) -> str:
 
 
 def format_bb(cents: Cents, big_blind: Cents) -> str:
-    return f"{cents / big_blind:.1f}".removesuffix(".0") + "bb"
+    return f"{cents / big_blind:.2f}".rstrip("0").rstrip(".") + "bb"
 
 
 def facts(spot: Decision) -> dict:

@@ -10,7 +10,6 @@ import {
   type PanelToWorker,
   type PlayerInfo,
   type Players,
-  type Preset,
   type Settings,
   type WorkerToPanel,
 } from "../shared/protocol";
@@ -18,6 +17,8 @@ import "./panel.css";
 
 const RECONNECT_MIN_MS = 1000;
 const RECONNECT_MAX_MS = 10000;
+const BRAND = "VAMOS!";
+const STREETS = ["Preflop", "Flop", "Turn", "River"];
 
 let port: chrome.runtime.Port | null = null;
 let status: BackendStatus = { type: "backend", state: "connecting" };
@@ -25,19 +26,41 @@ let acks: HostAck[] = [];
 let players: Players | null = null;
 let settings: Settings | null = null;
 let costs: Costs | null = null;
-// Claude's latest answer, and whether its decision is still on the table.
-interface LatestClaude {
-  gameId: string;
+
+// Claude's answers for the current hand, in order, so earlier streets stay readable. A node
+// is "<hand>:<street>:<actions so far>"; a new hand starts a new list.
+interface Decision {
+  node: string;
+  street: string;
   advice: ClaudeAdvice;
-  live: boolean;
 }
-let claude: LatestClaude | null = null;
+interface Hand {
+  gameId: string;
+  key: string;
+  decisions: Decision[];
+  live: string | null;
+}
+let hand: Hand | null = null;
 let retryDelay = RECONNECT_MIN_MS;
 const subscribers = new Set<() => void>();
 
 const notifyAll = () => {
   for (const notify of subscribers) notify();
 };
+
+function onFacts(gameId: string, node: string | null, advice: unknown) {
+  if (node === null || !isClaude(advice as ClaudeAdvice | null)) {
+    // The decision passed (or a preflop chart is up): nothing on the table is live.
+    if (hand) hand = { ...hand, live: null };
+    return;
+  }
+  const [key = "", street = ""] = node.split(":");
+  const entry = { node, street: STREETS[Number(street)] ?? "", advice: advice as ClaudeAdvice };
+  const same = hand && hand.gameId === gameId && hand.key === key;
+  const kept = same && hand ? hand.decisions.filter((d) => d.node !== node) : [];
+  const decisions = [...kept, entry].sort((a, b) => a.node.localeCompare(b.node, "en", { numeric: true }));
+  hand = { gameId, key, decisions, live: node };
+}
 
 // The worker replies the moment the port connects, so the listener is attached here,
 // synchronously, not later in a component effect, or the first status is dropped. The
@@ -53,9 +76,7 @@ function connect() {
     else if (message.type === "settings") settings = message;
     else if (message.type === "costs") costs = message;
     else if (message.type === "facts") {
-      const advice = message.facts?.advice ?? null;
-      if (isClaude(advice)) claude = { gameId: message.gameId, advice, live: true };
-      else if (claude) claude = { ...claude, live: false };
+      onFacts(message.gameId, message.facts?.node ?? null, message.facts?.advice ?? null);
     } else acks = [message, ...acks].slice(0, 20);
     notifyAll();
   });
@@ -83,15 +104,10 @@ function useWorkerState() {
       subscribers.delete(notify);
     };
   }, []);
-  return { status, acks, players, settings, costs, claude };
+  return { status, acks, players, settings, costs, hand };
 }
 
 const send = (message: PanelToWorker) => port?.postMessage(message);
-
-const PRESETS: Record<Preset, { model: string; detail: string }> = {
-  balanced: { model: "Sonnet 5.5", detail: "about 3 seconds" },
-  deep: { model: "Opus 5.5", detail: "about 10 seconds" },
-};
 
 /** "BET 0.20 (1bb)": the move large, its size in big blinds a step quieter. */
 function Pick({ text }: { text: string }) {
@@ -104,26 +120,38 @@ function Pick({ text }: { text: string }) {
   );
 }
 
-function Advice({ claude }: { claude: LatestClaude }) {
-  const { advice, live, gameId } = claude;
+function Options({ advice }: { advice: ClaudeAdvice }) {
+  if (!advice.mix) return null;
+  return (
+    <div class="chips">
+      {advice.mix.map((part, i) => (
+        <span key={part} class={i === advice.pick ? "chip picked" : "chip"}>
+          {part}
+        </span>
+      ))}
+      {advice.deviation && <span class="chip deviation">deviation: drew the {advice.pickPct}% option</span>}
+    </div>
+  );
+}
+
+function DecisionView(props: { decision: Decision; live: boolean; gameId: string }) {
+  const { decision, live, gameId } = props;
+  const { advice } = decision;
   const answered = advice.action !== null;
   const upgrading = answered && advice.asked !== advice.model;
   return (
-    <section class={live ? "card advice" : "card advice past"}>
-      <h2>{live ? "This decision" : "Your last decision"}</h2>
-      <p class="source">VAMOS AI ({answered ? advice.model : advice.asked})</p>
+    <div class={live ? "decision live" : "decision"}>
+      <div class="head">
+        <span class="street">{decision.street}</span>
+        <span class="source">
+          {BRAND} AI ({answered ? advice.model : advice.asked})
+        </span>
+        {live && <span class="now">now</span>}
+      </div>
       {answered ? (
         <>
           <Pick text={advice.action ?? ""} />
-          {advice.mix && (
-            <div class="chips">
-              {advice.mix.map((part) => (
-                <span key={part} class="chip">
-                  {part}
-                </span>
-              ))}
-            </div>
-          )}
+          <Options advice={advice} />
           {advice.why && <p class="why">{advice.why}</p>}
           {advice.plan && (
             <p class="plan">
@@ -151,6 +179,18 @@ function Advice({ claude }: { claude: LatestClaude }) {
           Ask Opus
         </button>
       )}
+    </div>
+  );
+}
+
+function Decisions({ hand }: { hand: Hand }) {
+  const live = hand.live !== null;
+  return (
+    <section class={live ? "card advice" : "card advice past"}>
+      <h2>This hand's decisions</h2>
+      {hand.decisions.map((d) => (
+        <DecisionView key={d.node} decision={d} live={d.node === hand.live} gameId={hand.gameId} />
+      ))}
     </section>
   );
 }
@@ -161,15 +201,18 @@ function Dial({ settings }: { settings: Settings }) {
       <h2>Model after the flop</h2>
       <div class="segmented" role="radiogroup" aria-label="Model after the flop">
         {settings.presets.map((preset) => (
-          <label key={preset} class={settings.preset === preset ? "on" : ""}>
+          <label key={preset.name} class={settings.preset === preset.name ? "on" : ""}>
             <input
               type="radio"
               name="preset"
-              checked={settings.preset === preset}
-              onChange={() => send({ type: "settings", preset })}
+              checked={settings.preset === preset.name}
+              onChange={() => send({ type: "settings", preset: preset.name })}
             />
-            <span class="model">{PRESETS[preset]?.model ?? preset}</span>
-            <span class="detail">{PRESETS[preset]?.detail}</span>
+            <span class="model">{preset.label}</span>
+            <span class="detail">
+              {preset.effort ? `${preset.effort} thinking · ` : ""}
+              {preset.seconds} s
+            </span>
           </label>
         ))}
       </div>
@@ -188,7 +231,7 @@ function Spend({ costs }: { costs: Costs }) {
   ];
   return (
     <section class="card">
-      <h2>Claude costs</h2>
+      <h2>API costs</h2>
       <div class="stats">
         {stats.map(([key, label, amount]) => (
           <div key={key} class={`stat ${key}`}>
@@ -218,63 +261,134 @@ function Notes() {
     <section class="card">
       <h2>Notes for tonight</h2>
       <textarea rows={3} value={text} onInput={change} placeholder="e.g. alex is tilted after losing a big pot" />
-      <p class="muted small">Sent with every Claude call tonight; never saved.</p>
+      <p class="muted small">Sent with every AI call tonight; never saved.</p>
     </section>
   );
 }
 
 const NO_PROFILE = "__none__";
 const ASK_AGAIN = "__ask__";
+const META_LABELS: Record<string, string> = {
+  hands: "hands in profile",
+  sessions: "sessions",
+  net: "net",
+  last_updated: "updated",
+};
 
-function TableRow({ player, profiles }: { player: PlayerInfo; profiles: Players["profiles"] }) {
-  const detail = player.profile
-    ? (player.profile.tag ?? "no tag")
-    : player.status === "none"
-      ? "no profile"
-      : "unknown, answer on the table";
-  // Answers recognized through a profile's player_id are changed in that file, not here.
-  if (player.source !== "answer") {
-    return (
-      <li>
-        <span class="who">{player.name}</span>
-        <span class="what">
-          {player.profile ? `${player.profile.name} · ${detail}` : detail}
-        </span>
-      </li>
-    );
-  }
+function pct(count: number, of: number): string {
+  return `${Math.round((100 * count) / of)}%`;
+}
+
+function TonightStats({ player }: { player: PlayerInfo }) {
+  const t = player.tonight;
+  if (!t || t.hands === 0) return <span class="muted">no hands yet tonight</span>;
+  return (
+    <span class="tonight">
+      VPIP {pct(t.vpip, t.hands)} <span class="muted">({t.vpip}/{t.hands})</span> · PFR {pct(t.pfr, t.hands)}{" "}
+      <span class="muted">({t.pfr}/{t.hands})</span>
+    </span>
+  );
+}
+
+function IdentityPicker({ player, profiles }: { player: PlayerInfo; profiles: Players["profiles"] }) {
   const change = (event: Event) => {
     const value = (event.currentTarget as HTMLSelectElement).value;
+    if (!value) return;
     if (value === ASK_AGAIN) {
       send({ type: "forget_identity", playerId: player.id });
     } else {
       send({ type: "assign_identity", playerId: player.id, profile: value === NO_PROFILE ? null : value });
     }
   };
+  const current = player.profile?.key ?? (player.status === "none" ? NO_PROFILE : "");
+  return (
+    <select aria-label={`Change who ${player.name} is`} value={current} onChange={change}>
+      {player.status === "unknown" && <option value="">who is this?</option>}
+      {profiles.map((p) => (
+        <option key={p.key} value={p.key}>
+          {p.name}
+        </option>
+      ))}
+      <option value={NO_PROFILE}>No profile</option>
+      {player.status !== "unknown" && <option value={ASK_AGAIN}>Forget answer</option>}
+    </select>
+  );
+}
+
+function TableRow({ player, profiles }: { player: PlayerInfo; profiles: Players["profiles"] }) {
+  const profile = player.profile;
+  const meta = profile ? Object.entries(profile.meta) : [];
   return (
     <li>
-      <span class="who">{player.name}</span>
-      <select aria-label={`Change who ${player.name} is`} value={player.profile?.key ?? NO_PROFILE} onChange={change}>
-        {profiles.map((p) => (
-          <option key={p.key} value={p.key}>
-            {p.name}
-          </option>
-        ))}
-        <option value={NO_PROFILE}>No profile</option>
-        <option value={ASK_AGAIN}>Forget answer</option>
-      </select>
+      <details>
+        <summary>
+          <span class="who">{profile?.name ?? player.name}</span>
+          {profile && profile.name !== player.name && <span class="muted"> ({player.name})</span>}
+          <span class="what">
+            <TonightStats player={player} />
+          </span>
+        </summary>
+        <div class="profile">
+          {profile ? (
+            <>
+              <p>
+                <span class="tag">{profile.tag ?? "no tag"}</span>
+                {meta.map(([key, value]) => (
+                  <span key={key} class="meta">
+                    {META_LABELS[key] ?? key}: {String(value)}
+                  </span>
+                ))}
+              </p>
+              <pre class="body">{profile.body}</pre>
+            </>
+          ) : (
+            <p class="muted">
+              {player.status === "none" ? "No profile: Claude plays them on judgment alone." : "Not identified yet."}
+            </p>
+          )}
+          {/* A profile's player_id is changed in that file, not here. */}
+          {player.source !== "player_id" && <IdentityPicker player={player} profiles={profiles} />}
+        </div>
+      </details>
     </li>
   );
 }
 
+function Table({ players }: { players: Players }) {
+  return (
+    <section class="card">
+      <h2>Table</h2>
+      {players.players.length > 0 ? (
+        <ul class="table">
+          {players.players.map((p) => (
+            <TableRow key={p.id} player={p} profiles={players.profiles} />
+          ))}
+        </ul>
+      ) : (
+        <p class="muted small">Nobody seated yet.</p>
+      )}
+      <p class="muted small">
+        {players.profiles.length} profiles loaded from profiles/ · tonight's numbers are never saved
+      </p>
+      {players.problems.length > 0 && (
+        <ul class="problems">
+          {players.problems.map((problem) => (
+            <li key={problem}>{problem}</li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 function Panel() {
-  const { status, acks, players, settings, costs, claude } = useWorkerState();
+  const { status, acks, players, settings, costs, hand } = useWorkerState();
   const requestSnapshot = () => send({ type: "snapshot_request" });
 
   return (
     <main>
       <header class="top">
-        <span class="wordmark">VAMOS</span>
+        <span class="wordmark">{BRAND}</span>
         <span class={`state ${status.state}`}>
           {status.state}
           {status.version ? ` · v${status.version}` : ""}
@@ -282,32 +396,11 @@ function Panel() {
           {status.detail ? ` · ${status.detail}` : ""}
         </span>
       </header>
-      {claude && <Advice claude={claude} />}
-      {settings && <Dial settings={settings} />}
+      {players && <Table players={players} />}
+      {hand && <Decisions hand={hand} />}
       <Notes />
+      {settings && <Dial settings={settings} />}
       {costs && <Spend costs={costs} />}
-      {players && (
-        <section class="card">
-          <h2>Table</h2>
-          {players.players.length > 0 ? (
-            <ul class="table">
-              {players.players.map((p) => (
-                <TableRow key={p.id} player={p} profiles={players.profiles} />
-              ))}
-            </ul>
-          ) : (
-            <p class="muted small">Nobody seated yet.</p>
-          )}
-          <p class="muted small">{players.profiles.length} profiles loaded from profiles/</p>
-          {players.problems.length > 0 && (
-            <ul class="problems">
-              {players.problems.map((problem) => (
-                <li key={problem}>{problem}</li>
-              ))}
-            </ul>
-          )}
-        </section>
-      )}
       {status.recording && (
         <section class="card">
           <h2>Recording</h2>

@@ -91,3 +91,24 @@ def test_raising_closed_drops_raises_and_turns_all_in_into_a_call():
     )
     a = settle(answer(("raise", 75, 0.5), ("allin", 0, 0.5)), closed, seed="n")
     assert a.mix == (Choice("call", 40, 1.0),)
+
+
+def test_sizes_round_to_five_cents():
+    # 40% of a 1.20 pot is 0.48; at 0.10/0.20 sizes step by a quarter big blind (0.05).
+    assert settle(answer(("bet", 40, 1)), CHECKED, seed="n").chosen.to == 50  # 48 -> 50
+    a = settle(answer(("raise", 37, 1)), FACING, seed="n")
+    assert a.chosen.to % 5 == 0 and a.chosen.to >= FACING.price + FACING.min_raise
+
+
+def test_sizes_sit_on_a_quarter_big_blind_at_any_stakes():
+    from vamos.brain.answer import snap
+
+    assert snap(48, 20) == 50 and snap(47, 20) == 45  # 0.10/0.20: 5 cents
+    assert snap(24, 10) == 25 and snap(26, 10) == 25  # 0.05/0.10: 2.5 cents, whole cents
+    assert snap(120, 50) == 125 and snap(118, 50) == 113  # 0.25/0.50: 12.5 cents, whole cents
+    assert snap(101, 20, up=True) == 105  # never below a minimum
+
+
+def test_options_under_half_a_percent_are_dropped():
+    a = settle(answer(("fold", 0, 0), ("call", 0, 1)), FACING, seed="n")
+    assert a.mix == (Choice("call", 40, 1.0),)

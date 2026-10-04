@@ -45,6 +45,17 @@ SCHEMA = {
 ALL_IN_WITHIN = 0.10  # a size within 10% of the stack is played as all in
 
 
+def snap(cents: Cents, big_blind: Cents, up: bool = False) -> Cents:
+    """
+    A size on the quarter-big-blind grid (5 cents at 0.10/0.20), in whole cents: to the
+    nearest quarter, half up, or the next one up when it must not go below `cents`.
+    """
+    if big_blind <= 0:
+        return cents
+    quarters = -(-cents * 4 // big_blind) if up else (cents * 8 + big_blind) // (2 * big_blind)
+    return -(-quarters * big_blind // 4) if up else (quarters * big_blind * 2 + 4) // 8
+
+
 @dataclass(frozen=True)
 class Spot:
     """The betting state at the hero's decision, in cents."""
@@ -111,7 +122,7 @@ def _legal(spot: Spot, action: str, pct: float) -> Choice | None:
             return None
         lowest = spot.price + spot.min_raise
         to = spot.price + round(share * (spot.pot + spot.to_call))
-    to = max(to, lowest)
+    to = max(snap(to, spot.big_blind), snap(lowest, spot.big_blind, up=True))
     if to >= all_in * (1 - ALL_IN_WITHIN):
         return Choice("allin", all_in, 0)
     return Choice(action, to, 0)
@@ -139,6 +150,9 @@ def settle(text: str, spot: Spot, seed: str, reveal=lambda s: s) -> Answer:
     total = sum(merged.values())
     if total <= 0:
         raise BadAnswer("no legal action in the answer")
+    # Options under half a percent are noise ("fold 0%"): dropped before the draw.
+    merged = {key: f for key, f in merged.items() if f / total >= 0.005}
+    total = sum(merged.values())
     mix = tuple(
         sorted(
             (Choice(action, to, f / total) for (action, to), f in merged.items()),

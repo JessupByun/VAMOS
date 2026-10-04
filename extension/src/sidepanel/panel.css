@@ -43,8 +43,8 @@ main {
 
 .top {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  gap: 10px;
+  align-items: baseline;
   padding: 2px 4px 4px;
 }
 
@@ -55,9 +55,7 @@ main {
 }
 
 .state {
-  max-width: 70%;
   font-size: 11.5px;
-  text-align: right;
 }
 
 .state::before {
@@ -112,20 +110,57 @@ p {
   font-size: 11.5px;
 }
 
-/* The decision. */
-.advice {
-  border-left: 3px solid var(--accent);
+/* The hand's decisions, oldest first; the one on the table now stands out. */
+.decision {
+  padding: 10px 0 2px 12px;
+  border-left: 3px solid var(--border);
 }
 
-.advice.past {
-  opacity: 0.55;
-  border-left-color: var(--border);
+.decision + .decision {
+  margin-top: 10px;
+  border-top: 1px solid var(--border);
 }
 
-.advice .source {
+.decision.live {
+  border-left-color: var(--accent);
+}
+
+.advice.past .decision,
+.decision:not(.live) {
+  opacity: 0.7;
+}
+
+.decision.live {
+  opacity: 1;
+}
+
+.decision .head {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.decision .street {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.decision .source {
   font-size: 11.5px;
   font-weight: 600;
   color: var(--accent);
+}
+
+.decision .now {
+  margin-left: auto;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--bg);
+  background: var(--accent);
 }
 
 .advice .pick {
@@ -159,8 +194,19 @@ p {
   border-radius: 999px;
   font-size: 12px;
   font-weight: 600;
+  color: var(--muted);
   background: var(--soft);
   border: 1px solid var(--border);
+}
+
+.chip.picked {
+  color: var(--fg);
+  border-color: var(--accent);
+}
+
+.chip.deviation {
+  color: var(--warn);
+  border-color: var(--warn);
 }
 
 .advice .why {
@@ -302,11 +348,7 @@ ul {
 }
 
 .table li {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  align-items: center;
-  padding: 6px 0;
+  padding: 7px 0;
   border-bottom: 1px solid var(--border);
 }
 
@@ -314,13 +356,69 @@ ul {
   border-bottom: none;
 }
 
+.table summary {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  cursor: pointer;
+  list-style: none;
+}
+
+.table summary::-webkit-details-marker {
+  display: none;
+}
+
+.table summary::before {
+  content: "\25B8";
+  color: var(--muted);
+  transition: transform 0.15s;
+}
+
+.table details[open] summary::before {
+  transform: rotate(90deg);
+}
+
 .table .who {
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .table .what {
-  color: var(--muted);
+  margin-left: auto;
+  font-size: 12px;
   text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.profile {
+  margin: 8px 0 2px 14px;
+}
+
+.profile .tag {
+  display: inline-block;
+  margin: 0 8px 4px 0;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--soft);
+}
+
+.profile .meta {
+  margin-right: 10px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.profile .body {
+  max-height: 220px;
+  overflow: auto;
+  margin: 6px 0 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font: 11.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+  background: var(--soft);
 }
 
 .problems {

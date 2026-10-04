@@ -69,7 +69,7 @@ def test_an_answer_reaches_the_card_with_real_names(rig):
     view = r.advisor.view("g", "h1:1:8")
     assert view["source"] == "Claude" and view["state"] == "done"
     assert view["action"] == "BET 0.90 (4.5bb)"
-    assert view["mix"] is None
+    assert (view["mix"], view["pick"], view["pickPct"]) == (["bet 4.5bb 100%"], 0, 100)
     assert (view["why"], view["plan"]) == ("alex calls too much", "Bet again on blanks.")
     assert view["model"] == "Claude Sonnet 5.5"
     assert r.ledger.totals(datetime(2026, 10, 2, 14))["session"] > 0
