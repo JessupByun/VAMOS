@@ -630,6 +630,12 @@ def test_a_profile_net_result_is_split_by_session_for_the_panel():
     ):
         assert _net({"net": text}) == {"total": text, "sessions": []}, text
     assert _net({"net": "-1.00 (Z -1.00)", "sessions": ["A 2026-09-30"]})["sessions"] == []
+    # A single session named alone carries the whole net.
+    one = {"net": "+8.25 (D)", "sessions": ["D 2026-10-04"]}
+    assert _net(one) == {
+        "total": "+8.25",
+        "sessions": [{"label": "D", "amount": "+8.25", "date": "2026-10-04"}],
+    }
     assert _net({}) is None
 
 
@@ -692,3 +698,13 @@ def test_notes_on_a_player_are_saved_with_the_game_and_back_after_a_restart(tmp_
     # Clearing a note removes it from the file too.
     second.handle({"type": "notes", "gameId": GAME, "playerId": "Qw3rTy7UiO", "text": ""})
     assert json.loads((tmp_path / f"data/games/{GAME}.notes.json").read_text()) == {}
+
+
+def test_profile_stats_allow_a_few_words_before_the_number():
+    from vamos.host.server import _profile_view
+    from vamos.profiles import parse_profile
+
+    body = "---\nname: x\n---\n- C-bets only 20% (1/5)\n- VPIP 49% (23/47)\n- VPIP by seat 10%\n"
+    stats = _profile_view(parse_profile("x", body))["stats"]
+    assert stats["cbet"] == {"pct": "20", "count": "1/5"}
+    assert stats["vpip"] == {"pct": "49", "count": "23/47"}

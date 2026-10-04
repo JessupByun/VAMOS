@@ -812,7 +812,9 @@ def _profile_view(profile: Profile) -> Message:
         "stats": {
             name: {"pct": m.group(1), "count": m.group(2)}
             for name, pattern in _PROFILE_STATS
-            if (m := re.search(rf"{pattern}\D{{0,3}}(\d+)%(?:\s*\((\d+/\d+))?", profile.body))
+            if (
+                m := re.search(rf"{pattern}[^\d\n%]{{0,12}}(\d+)%(?:\s*\((\d+/\d+))?", profile.body)
+            )
         },
         "body": profile.body,
     }
@@ -845,8 +847,15 @@ def _net(meta: dict) -> Message | None:
         label, _, date = str(entry).strip().rpartition(" ")
         if label:
             dates[label] = date
+    parts = [p.strip() for p in (m.group(2) or "").split(",") if p.strip()]
+    # One session named alone, as in "+8.25 (D)": the whole net is that session's.
+    if len(parts) == 1 and parts[0] in dates:
+        return {
+            "total": m.group(1),
+            "sessions": [{"label": parts[0], "amount": m.group(1), "date": dates[parts[0]]}],
+        }
     sessions = []
-    for part in filter(None, (p.strip() for p in (m.group(2) or "").split(","))):
+    for part in parts:
         # Split only by the sessions the profile lists, so prose is never read as a session.
         label, _, amount = part.rpartition(" ")
         if label not in dates or not re.fullmatch(_AMOUNT, amount):
