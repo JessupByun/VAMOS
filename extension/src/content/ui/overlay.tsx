@@ -266,13 +266,13 @@ function Badge(props: {
   if (info.status === "unknown") {
     body = <WhoIsThis info={info} profiles={props.profiles} onAssign={props.onAssign} />;
   } else {
-    // The person (their profile's name when known) and tonight's numbers; the profile
-    // itself is in the side panel.
-    const parts = [info.profile?.name ?? info.name, tonight(info)];
+    // The person (their profile's name when known, or "You") and tonight's numbers; the
+    // profile itself is in the side panel.
+    const parts = [info.hero ? "You" : (info.profile?.name ?? info.name), tonight(info)];
     body = <span class="text">{parts.filter(Boolean).join(" · ")}</span>;
   }
   return (
-    <div class={`badge ${info.status}`} style={style} data-player={info.id}>
+    <div class={`badge ${info.hero ? "me" : info.status}`} style={style} data-player={info.id}>
       {body}
     </div>
   );
@@ -282,11 +282,22 @@ export function Overlay(props: {
   store: Store;
   onAssign: (playerId: string, profile: string | null) => void;
 }) {
-  const { seats, players } = useStore(props.store);
+  const { seats, players, heroSeat } = useStore(props.store);
   const byId = new Map(players?.players.map((p) => [p.id, p]));
+  // The hero's own numbers tonight, under the hero's seat like everyone else's.
+  const hero = players?.players.find((p) => p.hero);
   return (
     <>
       <ActionCard store={props.store} />
+      {heroSeat && hero && (
+        <Badge
+          key={`hero-${hero.id}`}
+          seat={{ id: hero.id, name: hero.name, element: heroSeat }}
+          info={hero}
+          profiles={players?.profiles ?? []}
+          onAssign={props.onAssign}
+        />
+      )}
       {seats.map((seat) => (
         <Badge
           key={seat.id}

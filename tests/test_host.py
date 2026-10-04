@@ -651,8 +651,12 @@ def test_turning_claude_off_stops_calls_and_keeps_the_facts(tmp_path):
     found = reply["facts"]
     assert (found["advice"], found["aiOff"]) == (None, True) and found["madeHand"]
     assert fake.requests == []
+    # Everything but Claude keeps running: the log is read, saved, and tonight's counts move.
+    [players, *_] = backend.handle(SEATS)
+    alex = next(p for p in players["players"] if p["id"] == "Qw3rTy7UiO")
+    assert (alex["tonight"]["hands"], alex["tonight"]["vpip"]) == (1, 1)
+    assert (tmp_path / f"data/games/{GAME}.jsonl").exists()
     # Remembered across restarts, and back on when asked.
-    assert json.loads((tmp_path / "data/settings.json").read_text())["aiOn"] is False
     again, _ = claude_backend_with_data(tmp_path)
     assert again.ai_on is False
 

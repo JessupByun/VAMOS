@@ -164,11 +164,16 @@ test("endpoints under a game URL are not treated as a table page", async () => {
 
 const badge = (page: Page, id: string) => page.locator(`#vamos-root .badge[data-player="${id}"]`);
 
-test("seat badges show profiles, ask about strangers, and never badge the hero", async () => {
+test("seat badges show profiles, ask about strangers, and show the hero's own numbers", async () => {
   const page = await openTable();
   await expect(badge(page, KNOWN_ID)).toHaveText("alex");
   await expect(badge(page, STRANGER_ID).locator("select")).toBeVisible();
-  await expect(badge(page, HERO_ID)).toHaveCount(0);
+  // The hero's badge says "You", never asks who this is, and sits under the hero's seat.
+  await expect(badge(page, HERO_ID)).toHaveText("You");
+  await expect(badge(page, HERO_ID)).toHaveClass(/\bme\b/);
+  const seat = await page.locator(".you-player").boundingBox();
+  const mine = await badge(page, HERO_ID).boundingBox();
+  expect(seat && mine && Math.abs(mine.y - (seat.y + seat.height + 2)) < 2).toBe(true);
 });
 
 test("matching a profile from the badge updates it and is remembered", async () => {
@@ -200,6 +205,8 @@ test("tonight's VPIP appears once hands are played", async () => {
     "-- ending hand #1 --",
   ]);
   await expect(badge(page, KNOWN_ID)).toHaveText(/^alex · VPIP 100% \(1\/1\) · PFR \d+%$/);
+  // The hero folded: dealt in, put nothing in.
+  await expect(badge(page, HERO_ID)).toHaveText("You · VPIP 0% (0/1) · PFR 0%");
   await expect(badge(page, STRANGER_ID)).toContainText("new guy");
 });
 

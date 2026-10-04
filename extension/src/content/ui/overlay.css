@@ -44,6 +44,10 @@
   border: 1px dashed rgba(255, 255, 255, 0.45);
 }
 
+.badge.me {
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
 .badge.none {
   color: var(--vamos-muted);
 }
