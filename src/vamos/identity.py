@@ -2,8 +2,9 @@
 Who is behind each PokerNow player ID.
 
 A profile's `player_id` is authoritative. IDs no profile lists (a friend on a new device,
-a stranger) are mapped once through the "who is this?" prompt and remembered in VAMOS's
-own data/identity.json, never in the user's profiles. Only the answers are stored.
+a stranger) are matched once through the "Match existing player profile" menu and
+remembered in VAMOS's own data/identity.json, never in the user's profiles. Only the
+answers are stored.
 """
 
 import json
@@ -22,7 +23,7 @@ class Resolution:
     kind: Literal["profile", "none", "unknown"]
     profile: str | None = None
     # Where the answer came from: a profile's player_id (authoritative, not editable in
-    # VAMOS) or the user's answer to "who is this?".
+    # VAMOS) or the user's own match from that menu.
     source: Literal["player_id", "answer"] | None = None
 
 

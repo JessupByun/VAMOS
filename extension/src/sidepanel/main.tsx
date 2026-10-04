@@ -1,9 +1,11 @@
 import { render } from "preact";
 import { useEffect, useState } from "preact/hooks";
 
+import { actionClass } from "../shared/actions";
 import {
   type BackendStatus,
   type ClaudeAdvice,
+  type ClaudeAnswer,
   type Costs,
   type HandInfo,
   type HostAck,
@@ -11,9 +13,9 @@ import {
   type PanelToWorker,
   type PlayerInfo,
   type Players,
-  type ShownHand,
-  type TonightRead,
+  type ProfileView,
   type Settings,
+  type TonightRead,
   type WorkerToPanel,
 } from "../shared/protocol";
 import "./panel.css";
@@ -165,73 +167,89 @@ function useWorkerState() {
 
 const send = (message: PanelToWorker) => port?.postMessage(message);
 
-/** "BET 0.20 (1bb)": the move large, its size in big blinds a step quieter. */
+/** "BET 0.20 (1bb)": the move large in its action's color, its size in big blinds quieter. */
 function Pick({ text }: { text: string }) {
   const split = text.match(/^(.*?)( \([^)]*\))$/);
   return (
-    <p class="pick">
+    <p class={`pick ${actionClass(text)}`}>
       {split ? split[1] : text}
       {split && <span class="bb">{split[2]}</span>}
     </p>
   );
 }
 
-function Options({ advice }: { advice: ClaudeAdvice }) {
-  if (!advice.mix) return null;
+function Options({ answer }: { answer: ClaudeAnswer }) {
+  if (!answer.mix) return null;
   return (
     <div class="chips">
-      {advice.mix.map((part, i) => (
-        <span key={part} class={i === advice.pick ? "chip picked" : "chip"}>
+      {answer.mix.map((part, i) => (
+        <span key={part} class={`chip ${actionClass(part)}${i === answer.pick ? " picked" : ""}`}>
           {part}
         </span>
       ))}
-      {advice.deviation && <span class="chip deviation">deviation: drew the {advice.pickPct}% option</span>}
+      {answer.deviation && <span class="chip deviation">deviation: drew the {answer.pickPct}% option</span>}
     </div>
   );
 }
 
-function DecisionView(props: { decision: Decision; live: boolean; gameId: string }) {
-  const { decision, live, gameId } = props;
-  const { advice } = decision;
-  const answered = advice.action !== null;
-  const upgrading = answered && advice.asked !== advice.model;
+function waiting(answer: ClaudeAnswer, live: boolean, later: boolean): string {
+  if (answer.state === "failed") return `No answer: ${answer.reason}`;
+  if (answer.state === "cancelled" && later) return "Stopped when you asked deeper.";
+  return live && answer.state === "thinking" ? "Thinking..." : "No answer before you acted.";
+}
+
+/** One call's answer; a deeper one is added under the first, never in its place. */
+function AnswerView(props: { answer: ClaudeAnswer; deeper: boolean; live: boolean; later: boolean }) {
+  const { answer, deeper, live, later } = props;
   return (
-    <div class={live ? "decision live" : "decision"}>
-      <div class="head">
-        <span class="street">{decision.street}</span>
-        <span class="source">
-          {BRAND} AI ({answered ? advice.model : advice.asked})
-        </span>
-        {live && <span class="now">now</span>}
+    <div class={`answer ${answer.preset}${deeper ? " deeper" : ""}`}>
+      {deeper && <p class="asked">Asked deeper</p>}
+      <div class="source">
+        <span class="dot" />
+        {BRAND} AI ({answer.model})
       </div>
-      {answered ? (
+      {answer.action ? (
         <>
-          <Pick text={advice.action ?? ""} />
-          <Options advice={advice} />
-          {advice.why && <p class="why">{advice.why}</p>}
-          {advice.plan && (
+          <Pick text={answer.action} />
+          <Options answer={answer} />
+          {answer.why && <p class="why">{answer.why}</p>}
+          {answer.plan && (
             <p class="plan">
-              <span class="label">Next:</span> {advice.plan}
+              <span class="label">Next:</span> {answer.plan}
             </p>
           )}
         </>
       ) : (
-        <p class="muted waiting">
-          {advice.state !== "thinking"
-            ? `No answer: ${advice.reason}`
-            : live
-              ? "Thinking..."
-              : "No answer before you acted."}
-        </p>
+        <p class="muted waiting">{waiting(answer, live, later)}</p>
       )}
-      {live && upgrading && advice.state === "thinking" && <p class="muted">Asking {advice.asked}...</p>}
-      {upgrading && advice.state === "failed" && (
-        <p class="muted">
-          {advice.asked}: {advice.reason}
-        </p>
-      )}
-      {live && advice.preset !== "deep" && advice.askedPreset !== "deep" && (
-        <button type="button" class="secondary" onClick={() => send({ type: "ask", gameId, preset: "deep" })}>
+    </div>
+  );
+}
+
+function answersOf(advice: ClaudeAdvice): ClaudeAnswer[] {
+  if (advice.answers?.length) return advice.answers;
+  const { model, preset, state, reason, action, mix, pick, pickPct, deviation, why, plan } = advice;
+  return [{ model, preset, state, reason, action, mix, pick, pickPct, deviation, why, plan }];
+}
+
+function DecisionView(props: { decision: Decision; live: boolean; gameId: string }) {
+  const { decision, live, gameId } = props;
+  const answers = answersOf(decision.advice);
+  return (
+    <div class={live ? "decision live" : "decision"}>
+      <div class="head">
+        <span class="street">{decision.street}</span>
+        {live && <span class="now">now</span>}
+      </div>
+      {answers.map((answer, i) => (
+        <AnswerView key={i} answer={answer} deeper={i > 0} live={live} later={i < answers.length - 1} />
+      ))}
+      {live && !answers.some((a) => a.preset === "deep") && (
+        <button
+          type="button"
+          class="secondary ask-deeper"
+          onClick={() => send({ type: "ask", gameId, preset: "deep" })}
+        >
           Ask deeper
         </button>
       )}
@@ -239,17 +257,41 @@ function DecisionView(props: { decision: Decision; live: boolean; gameId: string
   );
 }
 
-const SUITS: Record<string, string> = { s: "\u2660", h: "\u2665", d: "\u2666", c: "\u2663" };
+const SUITS: Record<string, string> = { s: "♠", h: "♥", d: "♦", c: "♣" };
 
-/** A playing card drawn small: "Ah" as A with a red heart. */
+const SUIT_NAMES: Record<string, string> = { s: "spades", h: "hearts", d: "diamonds", c: "clubs" };
+const RANK_NAMES: Record<string, string> = { A: "ace", K: "king", Q: "queen", J: "jack", T: "10" };
+
+/** A playing card drawn small, every card the same size: "Ah" as A over a red heart. */
 function Card({ card }: { card: string }) {
   const rank = card[0] === "T" ? "10" : (card[0] ?? "");
   const suit = card[1] ?? "";
+  const name = `${RANK_NAMES[card[0] ?? ""] ?? rank} of ${SUIT_NAMES[suit] ?? suit}`;
   return (
-    <span class={`pcard ${suit === "h" || suit === "d" ? "red" : "black"}`}>
-      {rank}
-      <span class="suit">{SUITS[suit]}</span>
+    <span class={`pcard ${suit === "h" || suit === "d" ? "red" : "black"}`} role="img" aria-label={name}>
+      <span class="rank" aria-hidden="true">
+        {rank}
+      </span>
+      <span class="suit" aria-hidden="true">
+        {SUITS[suit]}
+      </span>
     </span>
+  );
+}
+
+/** `count` card spots: the cards dealt so far face up, the rest face down until dealt. */
+function Cards({ cards, count }: { cards: string[]; count: number }) {
+  return (
+    <>
+      {Array.from({ length: Math.max(count, cards.length) }, (_, i) => {
+        const card = cards[i];
+        return card ? (
+          <Card key={card} card={card} />
+        ) : (
+          <span key={`back-${i}`} class="pcard back" role="img" aria-label="not dealt yet" />
+        );
+      })}
+    </>
   );
 }
 
@@ -264,21 +306,16 @@ function HandHeader({ info }: { info: HandInfo }) {
         : info.resultBb < 0
           ? `lost ${-info.resultBb}bb`
           : "even";
+  const tone = info.resultBb === null ? "" : info.resultBb > 0 ? "won" : info.resultBb < 0 ? "lost" : "";
   return (
     <div class="hand-head">
       <div class="cards">
         <span class="mine">
-          {info.heroCards.map((c) => (
-            <Card key={c} card={c} />
-          ))}
+          <Cards cards={info.heroCards} count={2} />
         </span>
-        {info.board.length > 0 && (
-          <span class="board">
-            {info.board.map((c) => (
-              <Card key={c} card={c} />
-            ))}
-          </span>
-        )}
+        <span class="board">
+          <Cards cards={info.board} count={5} />
+        </span>
         {info.secondBoard.length > 0 && (
           <span class="board second" title="second run">
             {info.secondBoard.map((c) => (
@@ -291,7 +328,7 @@ function HandHeader({ info }: { info: HandInfo }) {
         <span class="strong">{info.madeHand ?? "no cards yet"}</span>
         {info.position && <span class="muted"> · {info.position}</span>}
         <span class="muted"> · hand #{info.number}</span>
-        {result && <span class={`result ${info.resultBb && info.resultBb > 0 ? "won" : ""}`}> · {result}</span>}
+        {result && <span class={`result ${tone}`}> · {result}</span>}
       </p>
     </div>
   );
@@ -319,7 +356,7 @@ function Dial({ settings }: { settings: Settings }) {
       <h2>Model (currently used only postflop)</h2>
       <div class="segmented" role="radiogroup" aria-label="Model">
         {settings.presets.map((preset) => (
-          <label key={preset.name} class={settings.preset === preset.name ? "on" : ""}>
+          <label key={preset.name} class={`${preset.name}${settings.preset === preset.name ? " on" : ""}`}>
             <input
               type="radio"
               name="preset"
@@ -364,6 +401,7 @@ function Spend({ costs }: { costs: Costs }) {
 
 const NO_PROFILE = "__none__";
 const ASK_AGAIN = "__ask__";
+const MATCH = "Match existing player profile";
 
 function pct(count: number, of: number): string {
   return `${Math.round((100 * count) / of)}%`;
@@ -381,19 +419,18 @@ function IdentityPicker({ player, profiles }: { player: PlayerInfo; profiles: Pl
   };
   const current = player.profile?.key ?? (player.status === "none" ? NO_PROFILE : "");
   return (
-    <select aria-label={`Change who ${player.name} is`} value={current} onChange={change}>
-      {player.status === "unknown" && <option value="">who is this?</option>}
+    <select aria-label={`Match a profile for ${player.name}`} value={current} onChange={change}>
+      {player.status === "unknown" && <option value="">{MATCH}</option>}
       {profiles.map((p) => (
         <option key={p.key} value={p.key}>
           {p.name}
         </option>
       ))}
       <option value={NO_PROFILE}>No profile</option>
-      {player.status !== "unknown" && <option value={ASK_AGAIN}>Forget answer</option>}
+      {player.status !== "unknown" && <option value={ASK_AGAIN}>Unmatch (ask again)</option>}
     </select>
   );
 }
-
 
 function PlayerNotes({ player }: { player: PlayerInfo }) {
   const [, rerender] = useState(0);
@@ -426,108 +463,167 @@ function PlayerNotes({ player }: { player: PlayerInfo }) {
   );
 }
 
-function TonightLine({ t }: { t: TonightRead | null }) {
-  if (!t || t.hands === 0) return <>no hands yet</>;
-  const parts = [
-    `VPIP ${pct(t.vpip, t.hands)}`,
-    `PFR ${pct(t.pfr, t.hands)}`,
-    t.threeBetChances > 0 && `3-bet ${t.threeBets}/${t.threeBetChances}`,
-    t.cbetChances > 0 && `c-bet ${t.cbets}/${t.cbetChances}`,
-    `bets ${t.betsRaises} : calls ${t.calls}`,
-    t.facedBets > 0 && `folds to bets ${t.foldsToBets}/${t.facedBets}`,
-  ].filter(Boolean);
+/** One number in a player's grid: a small label, the value, and its count when it has one. */
+function Stat(props: { label: string; value: string; count?: string | null; tone?: string }) {
   return (
-    <>
-      {parts.join(" · ")} <span class="muted">({t.hands} hand{t.hands === 1 ? "" : "s"})</span>
-    </>
+    <div class="st">
+      <span class="k">{props.label}</span>
+      <span class={`v ${props.tone ?? ""}`}>{props.value}</span>
+      {props.count && <span class="n">{props.count}</span>}
+    </div>
   );
 }
 
-const RESULT_TEXT: Record<ShownHand["result"], string> = {
-  won: "won",
-  lost: "lost",
-  split: "won part",
-  folded: "shown after folding",
-  uncontested: "shown, no call",
-};
+/** A rate with its count, or a dash when there was no chance yet. */
+function rate(count: number, of: number): { value: string; count: string | null } {
+  return of > 0 ? { value: pct(count, of), count: `${count}/${of}` } : { value: "-", count: null };
+}
 
-function Showdowns({ t }: { t: TonightRead | null }) {
-  if (!t || t.showdowns.length === 0) return null;
+function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? "" : "s"}`;
+}
+
+function TonightStats({ t }: { t: TonightRead | null }) {
+  const hands = t?.hands ?? 0;
   return (
-    <ul class="shown">
-      {t.showdowns.map((s) => (
-        <li key={s.number}>
-          <span class="cards">
-            {s.cards.map((c) => (
-              <Card key={c} card={c} />
-            ))}
-          </span>
-          <span class="line">
-            {s.line}
-            <span class={s.result}> · {RESULT_TEXT[s.result]}</span>
-          </span>
-        </li>
-      ))}
-    </ul>
+    <div class="group">
+      <div class="group-head">
+        <span class="label">Tonight</span>
+        <span class="muted">{hands > 0 ? plural(hands, "hand") : "no hands yet"}</span>
+      </div>
+      {t && hands > 0 && (
+        <div class="statgrid">
+          <Stat label="VPIP" {...rate(t.vpip, t.hands)} />
+          <Stat label="PFR" {...rate(t.pfr, t.hands)} />
+          <Stat label="3-bet" {...rate(t.threeBets, t.threeBetChances)} />
+          <Stat label="C-bet" {...rate(t.cbets, t.cbetChances)} />
+          <Stat label="Bet : call" value={`${t.betsRaises} : ${t.calls}`} count="postflop" />
+          <Stat label="Fold to bet" {...rate(t.foldsToBets, t.facedBets)} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function tone(amount: string): string {
+  const value = Number.parseFloat(amount);
+  return Number.isNaN(value) || value === 0 ? "" : value > 0 ? "pos" : "neg";
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** "2026-09-30" as "Sep 30"; anything else as written. */
+function shortDate(date: string): string {
+  const m = date.match(/^\d{4}-(\d{2})-(\d{2})$/);
+  const month = m ? MONTHS[Number(m[1]) - 1] : undefined;
+  return m && month ? `${month} ${Number(m[2])}` : date;
+}
+
+function ProfileStats({ profile }: { profile: ProfileView }) {
+  const { meta, stats, net } = profile;
+  const head = [
+    meta.hands !== undefined && `${meta.hands} hands`,
+    typeof meta.sessions === "number" && plural(meta.sessions, "session"),
+    meta.last_updated !== undefined && `updated ${shortDate(String(meta.last_updated))}`,
+  ].filter(Boolean);
+  const any = stats.vpip || stats.pfr || net;
+  if (!any && head.length === 0) return null;
+  return (
+    <div class="group">
+      <div class="group-head">
+        <span class="label">Profile</span>
+        <span class="muted">{head.join(" · ")}</span>
+      </div>
+      {any && (
+        <div class="statgrid">
+          {stats.vpip && <Stat label="VPIP" value={`${stats.vpip}%`} />}
+          {stats.pfr && <Stat label="PFR" value={`${stats.pfr}%`} />}
+          {net && <Stat label="Net" value={net.total} tone={tone(net.total)} />}
+        </div>
+      )}
+      {net && net.sessions.length > 0 && (
+        <div class="sessions" aria-label="Net by session">
+          {net.sessions.map((s) => (
+            <span key={s.label} class="session">
+              <span class="name">{s.label}</span>
+              {s.date && <span class="date">{shortDate(s.date)}</span>}
+              <span class={`amount ${tone(s.amount)}`}>{s.amount}</span>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Who the player is to VAMOS!: their profile and how it was matched, or an unmapped guest. */
+function Identity({ player }: { player: PlayerInfo }) {
+  if (player.profile) {
+    return (
+      <p class="alias">
+        current in-game alias: <em>{player.name}</em>
+        <span class="muted">
+          {" "}
+          · {player.source === "player_id" ? "matched by the PokerNow ID in the profile" : "matched by you"}
+        </span>
+      </p>
+    );
+  }
+  return (
+    <p class="alias">
+      {player.status === "none" ? (
+        <>
+          You marked <em>{player.name}</em> as having no profile.
+        </>
+      ) : (
+        <>
+          Guest with no profile: <em>{player.name}</em> is not matched to anyone yet.
+        </>
+      )}{" "}
+      <span class="muted">Claude sees only tonight's numbers and your notes.</span>
+    </p>
   );
 }
 
 function PlayerRow(props: { player: PlayerInfo; profiles: Players["profiles"]; gameId: string }) {
   const { player, profiles, gameId } = props;
   const profile = player.profile;
-  const lifetime = profile
-    ? [
-        profile.stats.vpip && `VPIP ${profile.stats.vpip}%`,
-        profile.stats.pfr && `PFR ${profile.stats.pfr}%`,
-        profile.meta.hands && `${profile.meta.hands} hands`,
-        profile.meta.net && `net ${profile.meta.net}`,
-      ].filter(Boolean)
-    : [];
   const saved = savedDrafts.get(player.id);
+  const kind = player.hero ? "me" : profile ? "mapped" : "guest";
   return (
-    <li class={player.hero ? "player me" : "player"}>
-      <div class="row1">
-        <span class="who">{player.hero ? `${player.name} (You)` : (profile?.name ?? player.name)}</span>
-        {profile && profile.name !== player.name && <span class="muted nick">{player.name}</span>}
+    <li class={`player ${kind}`}>
+      <div class="ident">
+        <span class="who">{player.hero ? player.name : (profile?.name ?? player.name)}</span>
+        {player.hero && <span class="you">You</span>}
         {profile?.tag && <span class="tag">{profile.tag}</span>}
-        {!player.hero && (
-          <button
-            type="button"
-            class="mini"
-            title="Write tonight's read and your notes to data/drafts/ for you to review"
-            onClick={() => send({ type: "save_draft", gameId, playerId: player.id })}
-          >
-            Save draft
-          </button>
+        {!player.hero && !profile && (
+          <span class="tag guest">{player.status === "none" ? "No profile" : "Unmapped guest"}</span>
         )}
-        {!player.hero && player.source !== "player_id" && (
-          <span class="picker">
-            <IdentityPicker player={player} profiles={profiles} />
+        {!player.hero && (
+          <span class="tools">
+            <button
+              type="button"
+              class="mini"
+              title="Write tonight's read and your notes to data/drafts/ for you to review"
+              onClick={() => send({ type: "save_draft", gameId, playerId: player.id })}
+            >
+              Save draft
+            </button>
+            {player.source !== "player_id" && <IdentityPicker player={player} profiles={profiles} />}
           </span>
         )}
       </div>
+      {!player.hero && <Identity player={player} />}
       {profile?.summary && <p class="summary">{profile.summary}</p>}
-      <p class="numbers">
-        <span class="label">Tonight</span> <TonightLine t={player.tonight} />
-        {lifetime.length > 0 && (
-          <>
-            <br />
-            <span class="label">Profile</span> {lifetime.join(" · ")}
-          </>
-        )}
-        {!player.hero && !profile && (
-          <>
-            <br />
-            <span class="muted">{player.status === "unknown" ? "Not identified yet" : "No profile"}</span>
-          </>
-        )}
-      </p>
-      <Showdowns t={player.tonight} />
+      <TonightStats t={player.tonight} />
+      {profile && <ProfileStats profile={profile} />}
       {!player.hero && <PlayerNotes player={player} />}
       {saved && <p class="muted small saved">Draft saved to {saved}</p>}
       {profile && (
-        <details>
-          <summary>Profile file</summary>
+        <details class="file">
+          <summary>
+            Profile file <span class="path">profiles/{profile.key}.md</span>
+          </summary>
           <pre class="body">{profile.body}</pre>
         </details>
       )}
@@ -539,6 +635,17 @@ function PlayersSection({ players }: { players: Players }) {
   return (
     <section class="card">
       <h2>Players</h2>
+      <p class="muted small note-top">
+        {plural(players.profiles.length, "profile")} loaded from profiles/ (read only) · tonight's numbers and
+        notes stay in memory unless you Save draft
+      </p>
+      {players.problems.length > 0 && (
+        <ul class="problems">
+          {players.problems.map((problem) => (
+            <li key={problem}>{problem}</li>
+          ))}
+        </ul>
+      )}
       {players.players.length > 0 ? (
         <ul class="players">
           {players.players.map((p) => (
@@ -547,16 +654,6 @@ function PlayersSection({ players }: { players: Players }) {
         </ul>
       ) : (
         <p class="muted small">Nobody seated yet.</p>
-      )}
-      <p class="muted small">
-        {players.profiles.length} profiles loaded from profiles/ · tonight's numbers and notes are never saved
-      </p>
-      {players.problems.length > 0 && (
-        <ul class="problems">
-          {players.problems.map((problem) => (
-            <li key={problem}>{problem}</li>
-          ))}
-        </ul>
       )}
     </section>
   );

@@ -43,14 +43,14 @@ export interface SeatsReport {
   hero: SeatedPlayer | null;
 }
 
-/** The user's answer to "who is this?": a profile key, or null for "no profile". */
+/** The user's match for a player: a profile key, or null for "no profile". */
 export interface AssignIdentity {
   type: "assign_identity";
   playerId: string;
   profile: string | null;
 }
 
-/** Drop an answer so the table asks "who is this?" again. */
+/** Drop a match so the table asks again. */
 export interface ForgetIdentity {
   type: "forget_identity";
   playerId: string;
@@ -62,6 +62,8 @@ export interface ProfileView {
   tag: string | null;
   /** A few frontmatter fields: hands, sessions (a count), net, last_updated. */
   meta: Record<string, string | number>;
+  /** The net result, split by session when the frontmatter reads like "-5.10 (A -3.00, B -2.10)". */
+  net: { total: string; sessions: { label: string; amount: string; date: string | null }[] } | null;
   /** The first sentence of the profile's "Summary" section. */
   summary: string | null;
   /** Headline numbers found in the profile's text, in percent, e.g. {vpip: "51", pfr: "23"}. */
@@ -102,19 +104,6 @@ export interface TonightRead {
   /** Postflop folds when facing a bet, out of decisions facing one. */
   foldsToBets: number;
   facedBets: number;
-  /** The last few hands they showed. */
-  showdowns: ShownHand[];
-}
-
-export interface ShownHand {
-  number: number;
-  cards: string[];
-  board: string[];
-  /** Run it twice: the second runout, else empty. */
-  secondBoard: string[];
-  line: string;
-  /** "split" is part of the pot: a chop, one run of two, or a side pot. */
-  result: "won" | "lost" | "split" | "folded" | "uncontested";
 }
 
 /** A draft profile was written for the user to review. */
@@ -186,9 +175,25 @@ export interface SpotFacts {
   advice: PreflopAdvice | ClaudeAdvice | null;
 }
 
+/** One call's answer about a decision; a decision has a second one after "Ask deeper". */
+export interface ClaudeAnswer {
+  /** e.g. "Claude Opus 5.5 · low". */
+  model: string;
+  preset: Preset;
+  state: "thinking" | "done" | "failed" | "cancelled";
+  /** Why this call gave no answer, e.g. "timed out". */
+  reason: string | null;
+  action: string | null;
+  mix: string[] | null;
+  pick: number | null;
+  pickPct: number | null;
+  deviation: boolean;
+  why: string | null;
+  plan: string | null;
+}
+
 export interface ClaudeAdvice {
-  /** "Math" once a call failed with no earlier answer to show. */
-  source: "Claude" | "Math";
+  source: "Claude";
   /** e.g. "BET 1.20 (6bb)"; null until Claude answers. */
   action: string | null;
   /** Every option Claude gave with its frequency, most frequent first. */
@@ -212,6 +217,8 @@ export interface ClaudeAdvice {
   state: "thinking" | "done" | "failed" | "cancelled";
   /** Why the latest call gave no answer, e.g. "timed out". */
   reason: string | null;
+  /** Every call about this decision in the order asked: the first answer, then a deeper one. */
+  answers: ClaudeAnswer[];
 }
 
 export function isClaude(advice: SpotFacts["advice"]): advice is ClaudeAdvice {
@@ -229,6 +236,8 @@ export interface PreflopAdvice {
   pickPct: number | null;
   /** The draw came from a less frequent option than the top one. */
   deviation: boolean;
+  /** Set when the chart failed on this spot, e.g. "chart error (logged)". */
+  error?: string;
 }
 
 /** Facts for the hero's turn, or null while the log has not caught up with the table. */
@@ -237,6 +246,8 @@ export interface Facts {
   gameId: string;
   key: string;
   facts: SpotFacts | null;
+  /** Set when the backend failed on this spot, so the card says so instead of waiting. */
+  error?: string;
 }
 
 /** Seconds left on the hero's decision clock, estimated from how fast its bar shrinks. */

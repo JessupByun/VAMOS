@@ -111,6 +111,7 @@ def test_seated_players_resolve_to_profiles_or_ask(backend):
         "name": "alex",
         "tag": "Calling station",
         "meta": {},
+        "net": None,
         "summary": "Loose-passive.",
         "stats": {},
         "body": "Loose-passive.",
@@ -260,6 +261,52 @@ def test_turn_facts_wait_for_the_log_then_follow_it(backend):
     assert backend.handle(page(*HERO_HAND, (205, '"Hero @ heroid0001" calls 20'))) == []
 
 
+def test_an_error_on_a_spot_tells_the_card_instead_of_reading_forever(backend, monkeypatch, caplog):
+    import vamos.host.server as server
+
+    def broken(*args, **kwargs):
+        raise ZeroDivisionError("float division by zero")
+
+    # Reading whose turn it is fails too, not only the facts.
+    monkeypatch.setattr(server, "current_spot", broken)
+    backend.handle(page(*HERO_HAND))
+    [reply] = backend.handle(TURN)
+    assert (reply["facts"], reply["error"]) == (None, server.SPOT_ERROR)
+    monkeypatch.undo()
+    caplog.clear()
+    monkeypatch.setattr(server, "facts", broken)
+    [reply] = backend.handle({**TURN, "key": "k2"})
+    assert reply["key"] == "k2"
+    assert reply["facts"] is None
+    assert (
+        reply["error"]
+        == server.SPOT_ERROR
+        == ("VAMOS! hit an error on this spot (logged in data/logs/host.log)")
+    )
+    # Recomputed on every log page while the spot is up, but logged once.
+    [again] = backend.handle({**TURN, "key": "k2"})
+    assert again["error"] == reply["error"]
+    assert len([r for r in caplog.records if r.levelname == "ERROR"]) == 1
+    # Fixed, the same spot gets its facts.
+    monkeypatch.undo()
+    [reply] = backend.handle(TURN)
+    assert reply["facts"]["advice"]["action"] is not None and "error" not in reply
+
+
+def test_a_broken_chart_keeps_the_facts_and_says_why(backend, monkeypatch):
+    import vamos.host.server as server
+
+    def broken(*args, **kwargs):
+        raise ZeroDivisionError("float division by zero")
+
+    monkeypatch.setattr(server, "preflop_advice", broken)
+    backend.handle(page(*HERO_HAND))
+    [reply] = backend.handle(TURN)
+    found = reply["facts"]
+    assert (found["pot"], found["toCall"]) == ("1.5bb", "10 (0.5bb)")
+    assert (found["advice"]["action"], found["advice"]["error"]) == (None, "chart error (logged)")
+
+
 FLOP_HAND = [
     *HERO_HAND,
     (205, '"Hero @ heroid0001" raises to 60'),
@@ -336,6 +383,30 @@ def test_claude_answers_postflop_under_pseudonyms(tmp_path):
     fake.script.append(Reply(BET_HALF, "end_turn", {}))
     backend.handle({"type": "ask", "gameId": GAME, "preset": "deep"})
     assert [r.preset.name for r in fake.requests] == ["standard", "deep"]
+
+
+def test_a_failure_building_claudes_prompt_keeps_the_facts_and_says_why(tmp_path, monkeypatch):
+    import vamos.host.server as server
+
+    def broken(*args, **kwargs):
+        raise KeyError("player")
+
+    backend, fake, _ = claude_backend(tmp_path, [])
+    monkeypatch.setattr(server, "claude_facts", broken)
+    backend.handle(page(*FLOP_HAND))
+    [reply] = backend.handle(FLOP_TURN)
+    found = reply["facts"]
+    assert found["pot"] and found["madeHand"]
+    advice = found["advice"]
+    assert (advice["state"], advice["reason"], advice["action"]) == (
+        "failed",
+        "internal error (logged)",
+        None,
+    )
+    assert [a["state"] for a in advice["answers"]] == ["failed"]
+    # Recorded once for the decision: later pages neither retry nor pile up failures.
+    again = backend.handle({**FLOP_TURN, "key": "k3"})[0]
+    assert len(again["facts"]["advice"]["answers"]) == 1 and fake.requests == []
 
 
 def test_the_turn_ending_stops_claude(tmp_path):
@@ -506,3 +577,55 @@ def test_a_draft_frontmatter_stays_valid_for_any_nickname():
         # Moved into profiles/ as is, the draft parses, with the nickname as one alias.
         profile = parse_profile("al", text)
         assert profile.aliases == (nickname,) and profile.player_ids == ("aaaaaaaaaa",)
+
+
+def test_a_profile_net_result_is_split_by_session_for_the_panel():
+    from datetime import date
+
+    from vamos.host.server import _net
+
+    meta = {
+        "net": "-41.30 (HU -15.00, A -25.00, B +6.20, C -7.50)",
+        "sessions": ["HU 2026-09-30", "A 2026-09-30", "B 2026-10-01", "C 2026-10-01"],
+    }
+    assert _net(meta) == {
+        "total": "-41.30",
+        "sessions": [
+            {"label": "HU", "amount": "-15.00", "date": "2026-09-30"},
+            {"label": "A", "amount": "-25.00", "date": "2026-09-30"},
+            {"label": "B", "amount": "+6.20", "date": "2026-10-01"},
+            {"label": "C", "amount": "-7.50", "date": "2026-10-01"},
+        ],
+    }
+    # A label of several words keeps its date.
+    spaced = {"net": "-5.00 (Home game -5.00)", "sessions": ["Home game 2026-09-30"]}
+    assert _net(spaced)["sessions"] == [
+        {"label": "Home game", "amount": "-5.00", "date": "2026-09-30"}
+    ]
+    # YAML reads a bare amount as a number: shown as money, sign included.
+    assert _net({"net": -41.3}) == {"total": "-41.30", "sessions": []}
+    assert _net({"net": 3.0}) == {"total": "+3.00", "sessions": []}
+    # Sessions given as a count or a single date never break the panel.
+    assert _net({"net": "-12.50", "sessions": 3}) == {"total": "-12.50", "sessions": []}
+    odd = {"net": "+1.00 (A +1.00)", "sessions": date(2026, 9, 30)}
+    assert _net(odd) == {"total": "+1.00 (A +1.00)", "sessions": []}
+    # Anything that does not read as sessions is shown as written.
+    for text in (
+        "up a bit (mostly HU)",
+        "+3 (A +4, B ?)",
+        "-41.30 (HU -15.00; A -26.30)",
+        "-41.30 (approx 41)",
+    ):
+        assert _net({"net": text}) == {"total": text, "sessions": []}, text
+    assert _net({"net": "-1.00 (Z -1.00)", "sessions": ["A 2026-09-30"]})["sessions"] == []
+    assert _net({}) is None
+
+
+def test_a_profile_with_odd_frontmatter_still_lists_the_players(tmp_path):
+    backend, _, _ = claude_backend(tmp_path, [])
+    (tmp_path / "profiles" / "alex.md").write_text(
+        "---\nname: alex\nplayer_id: Qw3rTy7UiO\nnet: -12.50\nsessions: 3\n---\n# alex\n"
+    )
+    [players, *_] = backend.handle(SEATS)
+    alex = next(p for p in players["players"] if p["id"] == "Qw3rTy7UiO")
+    assert alex["profile"]["net"] == {"total": "-12.50", "sessions": []}

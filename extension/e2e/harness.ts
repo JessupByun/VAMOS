@@ -36,7 +36,26 @@ const CLAUDE_ANSWER = JSON.stringify({
   plan: "Check behind if Player A calls and the turn is a club.",
 });
 
-const PROFILE = `---\nname: alex\ntag: Calling station\nplayer_id: ${KNOWN_ID}\n---\n# alex\n`;
+// Made-up numbers, in the shape of a real profile's frontmatter and stats.
+const PROFILE = `---
+name: alex
+tag: Calling station
+player_id: ${KNOWN_ID}
+hands: 120
+sessions: [A 2026-09-01, B 2026-09-08]
+net: +12.40 (A +20.00, B -7.60)
+last_updated: 2026-09-09
+---
+# alex
+
+## Summary
+
+Calls too much and rarely folds a pair. Bluff less, value bet thinner.
+
+## Key stats
+
+- VPIP 48% (58/120), PFR 12% (14/120)
+`;
 
 // PokerNow's start-game page swaps to the table with replaceState, not a page load.
 const START_HTML = `<button id="create">Create game</button>
@@ -76,6 +95,8 @@ export interface Harness {
   hostStarts: () => number;
   latestHostPid: () => number | null;
   recordedPages: () => RecordedPage[];
+  /** Claude's canned answer from the next call on, e.g. a mixed strategy. */
+  setClaudeAnswer: (answer: object) => void;
 }
 
 export async function launch(): Promise<Harness> {
@@ -159,6 +180,7 @@ export async function launch(): Promise<Harness> {
   const hostLog = () => (existsSync(hostLogPath) ? readFileSync(hostLogPath, "utf8") : "");
   return {
     context,
+    setClaudeAnswer: (answer) => writeFileSync(canned, JSON.stringify(answer)),
     addLogRows,
     addLogLines,
     dataDir,

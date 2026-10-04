@@ -15,6 +15,7 @@ import contextlib
 import os
 import threading
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Protocol
 
 from vamos.brain.answer import SCHEMA
@@ -205,13 +206,16 @@ def _failure(error: Exception, usage: dict[str, Any]) -> CallFailed:
 
 
 class CannedProvider:
-    """End-to-end tests: the same answer to every call, so they never reach the API."""
+    """
+    End-to-end tests: every call answers with the file's text, so they never reach the API.
+    The file is read on each call, so a test can change the answer between decisions.
+    """
 
-    def __init__(self, text: str):
-        self.text = text
+    def __init__(self, path: Path):
+        self.path = path
 
     def run(self, request: Request, cancelled: threading.Event) -> Reply:
-        return Reply(self.text, "end_turn", {})
+        return Reply(self.path.read_text(), "end_turn", {})
 
 
 class FakeProvider:

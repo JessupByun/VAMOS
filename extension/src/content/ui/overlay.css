@@ -1,14 +1,21 @@
-/* VAMOS's own layer over the table. Dark glass that reads on PokerNow's dark grey and green;
-   each source has its own accent so where a suggestion came from shows at a glance. */
+/* VAMOS's own layer over the table. Dark glass that reads on PokerNow's dark grey and green.
+   Two advice color families, never mixed: where advice came from (blue chart, cyan Claude
+   low, purple Claude medium) and what it says (red fold, green check or call, amber bet or
+   raise, pink all in). Status (connecting, warnings, errors) keeps its own soft yellow and
+   red. The side panel uses the same ones. */
 :host {
   --vamos-font: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
   --vamos-bg: rgba(18, 20, 24, 0.9);
   --vamos-border: rgba(255, 255, 255, 0.09);
   --vamos-text: #f4f5f7;
   --vamos-muted: #a2a8b3;
-  --vamos-chart: #7cc4e8;
-  --vamos-math: #b9a5e8;
-  --vamos-claude: #f0a46c;
+  --vamos-chart: #58a6ff;
+  --vamos-ai: #39c5cf;
+  --vamos-ai-deep: #bc8cff;
+  --vamos-fold: #ff7b72;
+  --vamos-pass: #56d364;
+  --vamos-bet: #e3b341;
+  --vamos-allin: #f778ba;
   --vamos-ok: #7ad38f;
   --vamos-warn: #e8c46a;
   --vamos-bad: #f08a7e;
@@ -34,8 +41,9 @@
   text-overflow: ellipsis;
 }
 
+/* Still to be matched: a dashed edge, a shape rather than one of the advice colors. */
 .badge.unknown {
-  border-color: rgba(232, 196, 106, 0.6);
+  border: 1px dashed rgba(255, 255, 255, 0.45);
 }
 
 .badge.none {
@@ -49,6 +57,7 @@
 }
 
 .badge select {
+  max-width: 100%;
   font: inherit;
   color: inherit;
   background: #2a2e35;
@@ -88,12 +97,16 @@
   --accent: var(--vamos-chart);
 }
 
-.action-card.math {
-  --accent: var(--vamos-math);
+.action-card.claude {
+  --accent: var(--vamos-ai);
 }
 
-.action-card.claude {
-  --accent: var(--vamos-claude);
+.action-card.claude.deep {
+  --accent: var(--vamos-ai-deep);
+}
+
+.action-card.error {
+  --accent: var(--vamos-bad);
 }
 
 .action-card.neutral {
@@ -176,6 +189,24 @@
   line-height: 1.15;
 }
 
+.action-card .act-fold {
+  color: var(--vamos-fold);
+}
+
+.action-card .act-check,
+.action-card .act-call {
+  color: var(--vamos-pass);
+}
+
+.action-card .act-bet,
+.action-card .act-raise {
+  color: var(--vamos-bet);
+}
+
+.action-card .act-allin {
+  color: var(--vamos-allin);
+}
+
 .action-card .action .bb {
   font-size: 18px;
   font-weight: 600;
@@ -210,22 +241,32 @@
   border-radius: 999px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--vamos-muted);
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-/* The option drawn for this decision. */
-.action-card .chip.picked {
-  color: var(--vamos-text);
-  background: rgba(255, 255, 255, 0.1);
-  border-color: var(--accent);
+.action-card .chip:not([class*="act-"]) {
+  color: var(--vamos-muted);
 }
 
+/* Every option in its action's color, quieter; the one drawn for this decision stands out. */
+.action-card .chip[class*="act-"] {
+  opacity: 0.72;
+}
+
+.action-card .chip.picked {
+  opacity: 1;
+  font-weight: 800;
+  background: color-mix(in srgb, currentColor 16%, transparent);
+  border: 1.5px solid currentColor;
+}
+
+/* A shape, not a color: drawn from a less frequent option than the top one. */
 .action-card .chip.deviation {
-  color: var(--vamos-warn);
-  background: rgba(232, 196, 106, 0.1);
-  border-color: rgba(232, 196, 106, 0.45);
+  font-style: italic;
+  color: var(--vamos-text);
+  background: transparent;
+  border: 1px dashed var(--vamos-muted);
 }
 
 .action-card .note,

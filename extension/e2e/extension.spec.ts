@@ -156,7 +156,7 @@ test("seat badges show profiles, ask about strangers, and never badge the hero",
   await expect(badge(page, HERO_ID)).toHaveCount(0);
 });
 
-test("answering who-is-this updates the badge and is remembered", async () => {
+test("matching a profile from the badge updates it and is remembered", async () => {
   const page = await openTable();
   await badge(page, STRANGER_ID).locator("select").selectOption({ label: "No profile" });
   await expect(badge(page, STRANGER_ID)).toHaveText("new guy");
@@ -195,14 +195,16 @@ test("an answer can be changed or cleared from the side panel", async () => {
 
   const panel = await harness.context.newPage();
   await panel.goto(PANEL_URL);
-  const change = panel.getByRole("combobox", { name: "Change who new guy is" });
+  const change = panel.getByRole("combobox", { name: "Match a profile for new guy" });
   await change.selectOption({ label: "alex" });
   await expect(badge(page, STRANGER_ID)).toHaveText("alex");
 
-  await change.selectOption({ label: "Forget answer" });
+  await change.selectOption({ label: "Unmatch (ask again)" });
   await expect(badge(page, STRANGER_ID).locator("select")).toBeVisible();
+  await expect(badge(page, STRANGER_ID).locator("select option").first()).toHaveText("Match profile");
+  await expect(badge(page, STRANGER_ID).locator("select")).toHaveAttribute("title", "Match existing player profile");
   // Recognized through a profile's player_id, so not changeable in VAMOS.
-  await expect(panel.getByRole("combobox", { name: "Change who alex is" })).toHaveCount(0);
+  await expect(panel.getByRole("combobox", { name: "Match a profile for alex" })).toHaveCount(0);
 });
 
 test("leaving the table and coming back with the back button restores VAMOS", async () => {
@@ -364,23 +366,53 @@ test("after the flop the card shows Claude's answer and the panel its reasoning"
   });
   await expect(card.locator(".source")).toHaveText("VAMOS! AI (Claude Opus 5.5 · low)");
   await expect(card.locator(".action")).toHaveText("BET 0.20 (1bb)");
+  // Colored by what it says (a bet) and by who said it (Claude at low effort).
+  await expect(card.locator(".action")).toHaveClass(/act-bet/);
+  await expect(card).toHaveClass(/standard/);
   await expect(card.locator(".facts")).toHaveText(/^SB · pot 2bb · Ace high$/);
 
   await expect(panel.locator(".advice .why")).toHaveText("alex folds to small bets.");
   await expect(panel.locator(".advice .plan")).toHaveText("Next: Check behind if alex calls and the turn is a club.");
   await expect(panel.getByRole("button", { name: "Ask deeper" })).toBeVisible();
   await expect(panel.locator(".stat.tonight .value")).toHaveText("$0.00");
-  // The current hand: the hero's cards and the flop drawn as cards, and the hero's position.
+  // The current hand: the hero's cards, the flop face up and the turn and river face down.
   await expect(panel.locator(".hand-head .mine .pcard")).toHaveText(["A♠", "10♦"]);
-  await expect(panel.locator(".hand-head .board .pcard")).toHaveCount(3);
+  await expect(panel.locator(".hand-head .board .pcard:not(.back)")).toHaveCount(3);
+  await expect(panel.locator(".hand-head .board .pcard.back")).toHaveCount(2);
   await expect(panel.locator(".hand-line")).toContainText("SB");
-  // The hero sits at the table too; every other player has a notes box.
-  await expect(panel.locator(".players li.me .who")).toHaveText("TestHero (You)");
+  // Players: the note on what is saved comes first; the hero sits at the table too.
+  await expect(panel.locator(".note-top")).toContainText("1 profile loaded from profiles/");
+  await expect(panel.locator(".players li.me .who")).toHaveText("TestHero");
+  await expect(panel.locator(".players li.me .you")).toHaveText("You");
   await expect(panel.getByRole("textbox", { name: "Notes on alex" })).toBeVisible();
+  // A profile's name comes first, the name at the table second; a stranger reads as a guest.
+  const alexAlias = panel.locator(".players li.mapped .alias");
+  await expect(alexAlias).toContainText("current in-game alias: alex");
+  await expect(alexAlias).toContainText("matched by the PokerNow ID in the profile");
+  await expect(panel.locator(".players li.guest .tag.guest")).toHaveText("Unmapped guest");
+  await expect(panel.locator(".players li.mapped details.file summary")).toContainText("profiles/alex.md");
+  // The profile's numbers, its net result split by session with dates.
+  await expect(panel.locator(".players li.mapped .group").nth(1).locator(".st .v")).toHaveText(["48%", "12%", "+12.40"]);
+  await expect(panel.locator(".players li.mapped .session")).toHaveText(["ASep 1+20.00", "BSep 8-7.60"]);
+  await expect(panel.locator(".players li.mapped .session .amount")).toHaveClass([/pos/, /neg/]);
   // A draft of tonight's read goes to data/drafts/, never to profiles/.
   const alexRow = panel.locator(".players li.player", { has: panel.locator(".who", { hasText: /^alex$/ }) });
   await alexRow.getByRole("button", { name: "Save draft" }).click();
   await expect(panel.locator(".players .saved")).toHaveText(/^Draft saved to data\/drafts\/alex-\d{4}-\d{2}-\d{2}-e2etest-known00001\.md$/);
+
+  // Asking deeper adds the deeper answer under the first one; it never replaces it.
+  await panel.getByRole("button", { name: "Ask deeper" }).click();
+  const answers = panel.locator(".decision.live .answer");
+  await expect(answers).toHaveCount(2);
+  await expect(answers.nth(0).locator(".source")).toHaveText("VAMOS! AI (Claude Opus 5.5 · low)");
+  await expect(answers.nth(0).locator(".pick")).toHaveText("BET 0.20 (1bb)");
+  await expect(answers.nth(1)).toHaveClass(/deeper/);
+  await expect(answers.nth(1).locator(".asked")).toHaveText("Asked deeper");
+  await expect(answers.nth(1).locator(".source")).toHaveText("VAMOS! AI (Claude Opus 5.5 · medium)");
+  await expect(answers.nth(1).locator(".pick")).toHaveText("BET 0.20 (1bb)");
+  await expect(panel.getByRole("button", { name: "Ask deeper" })).toHaveCount(0);
+  await expect(card.locator(".source")).toHaveText("VAMOS! AI (Claude Opus 5.5 · medium)");
+  await expect(card).toHaveClass(/deep/);
 
   await page.evaluate(() => document.querySelector(".you-player")?.classList.remove("decision-current"));
   await expect(card).toContainText("waiting for your turn");
@@ -420,6 +452,16 @@ test("screenshots of the card and the side panel", async () => {
   await panel.goto(PANEL_URL);
   const card = page.locator("#vamos-root .action-card");
   await page.screenshot({ path: `${dir}/1-waiting.png` });
+  // A mixed answer, to show every option's color.
+  harness.setClaudeAnswer({
+    reason: "Player A folds to small bets.",
+    strategy: [
+      { action: "bet", size_pct_pot: 50, freq: 0.6 },
+      { action: "check", size_pct_pot: 0, freq: 0.3 },
+      { action: "allin", size_pct_pot: 0, freq: 0.1 },
+    ],
+    plan: "Check behind if Player A calls and the turn is a club.",
+  });
   harness.addLogLines(HAND_START);
   await heroTurn(page);
   harness.addLogLines([`"new guy @ ${STRANGER_ID}" folds`]);
@@ -439,10 +481,15 @@ test("screenshots of the card and the side panel", async () => {
       .map((cls) => `<div class="card-container ${cls} flipped"></div>`)
       .join("");
   });
-  await expect(card.locator(".action")).toHaveText("BET 0.20 (1bb)");
+  await expect(card.locator(".source")).toContainText("low");
   await card.screenshot({ path: `${dir}/3-claude-card.png` });
-  await panel.locator(".players details summary").first().click();
+  await badge(page, STRANGER_ID).screenshot({ path: `${dir}/3-match-badge.png` });
   await panel.screenshot({ path: `${dir}/4-panel-dark.png`, fullPage: true });
+  await panel.getByRole("button", { name: "Ask deeper" }).click();
+  await expect(panel.locator(".decision.live .answer")).toHaveCount(2);
+  await expect(card.locator(".source")).toContainText("medium");
+  await card.screenshot({ path: `${dir}/3-claude-card-deeper.png` });
+  await panel.screenshot({ path: `${dir}/4-panel-dark-deeper.png`, fullPage: true });
   await panel.emulateMedia({ colorScheme: "light" });
   await panel.screenshot({ path: `${dir}/5-panel-light.png`, fullPage: true });
   await page.evaluate(() => document.querySelector(".you-player")?.classList.remove("decision-current"));

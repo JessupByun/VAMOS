@@ -87,6 +87,25 @@ def describe(choice: Choice, spot: Spot) -> str:
     return f"{verb} {format_chips(choice.to, bb)} ({format_bb(choice.to, bb)})"
 
 
+def _answer_fields(call: "Call | None") -> dict[str, Any]:
+    """What the card and the panel show of one call's answer; empty while it has none."""
+    if call is None or call.answer is None:
+        return dict.fromkeys(("action", "mix", "pick", "pickPct", "why", "plan")) | {
+            "deviation": False
+        }
+    spot, answer = call.job.spot, call.answer
+    return {
+        "action": describe(answer.chosen, spot),
+        "mix": [f"{_short(c, spot)} {round(100 * c.freq)}%" for c in answer.mix],
+        "pick": answer.mix.index(answer.chosen),  # index into mix of the action drawn
+        "pickPct": round(100 * answer.chosen.freq),
+        # Drawn from a less frequent option than the top one.
+        "deviation": answer.chosen.freq < answer.mix[0].freq - 1e-9,
+        "why": answer.reason,
+        "plan": answer.plan or None,
+    }
+
+
 def _short(choice: Choice, spot: Spot) -> str:
     if choice.action in ("bet", "raise"):
         return f"{choice.action} {format_bb(choice.to, spot.big_blind)}"
@@ -117,6 +136,9 @@ class Advisor:
         # Per game, the latest call that answered: an earlier answer for the same node stays
         # on the card while a deeper model is asked.
         self._answered: dict[str, Call] = {}
+        # Per game, every call about the latest call's node in the order asked, so a deeper
+        # answer is shown under the first one rather than in its place.
+        self._node_calls: dict[str, list[Call]] = {}
 
     def asked(self, game_id: str, node: str, preset: str | None = None) -> bool:
         """Whether Claude was asked about `node` (with `preset`, if given)."""
@@ -133,15 +155,17 @@ class Advisor:
         """
         with self._lock:
             current = self._calls.get(game_id)
-            if current is not None and current.job.node == job.node:
-                if current.job.request.preset == job.request.preset:
-                    return False
-            else:
+            same_node = current is not None and current.job.node == job.node
+            if same_node and current.job.request.preset == job.request.preset:
+                return False
+            if not same_node:
                 self._answered.pop(game_id, None)
+                self._node_calls.pop(game_id, None)
             if current is not None:
                 self._cancel(current)
             call = Call(job, deadline, self._clock())
             self._calls[game_id] = call
+            self._node_calls.setdefault(game_id, []).append(call)
             if refuse is None and deadline - self._clock() < MIN_SECONDS:
                 refuse = "not enough time on the clock"
             if refuse is not None:
@@ -163,6 +187,7 @@ class Advisor:
         with self._lock:
             call = self._calls.pop(game_id, None)
             self._answered.pop(game_id, None)
+            self._node_calls.pop(game_id, None)
             if call is not None:
                 self._cancel(call)
 
@@ -173,35 +198,28 @@ class Advisor:
             if call is None or call.job.node != node:
                 return None
             shown = self._answered.get(game_id)
-            state, reason, asked = call.state, call.reason, _label(call)
-        out: dict[str, Any] = {
-            "source": "Claude",
-            "action": None,
-            "mix": None,
-            "pick": None,  # index into mix of the action drawn
-            "pickPct": None,
-            "deviation": False,  # drawn from a less frequent option than the top one
-            "why": None,  # the answer's reason
-            "plan": None,
-            "model": asked,  # who answered, once someone has, e.g. "Claude Opus 5.5 · low"
-            "asked": asked,  # the latest call's model and effort
-            "preset": call.job.request.preset.name,  # the preset of the answer shown
-            "askedPreset": call.job.request.preset.name,
-            "state": state,
-            "reason": reason,
-        }
-        if shown is not None and shown.answer is not None:
-            spot, answer = shown.job.spot, shown.answer
-            out["model"] = _label(shown)
-            out["preset"] = shown.job.request.preset.name
-            out["action"] = describe(answer.chosen, spot)
-            out["mix"] = [f"{_short(c, spot)} {round(100 * c.freq)}%" for c in answer.mix]
-            out["pick"] = answer.mix.index(answer.chosen)
-            out["pickPct"] = round(100 * answer.chosen.freq)
-            out["deviation"] = answer.chosen.freq < answer.mix[0].freq - 1e-9
-            out["why"], out["plan"] = answer.reason, answer.plan or None
-        elif state == "failed":
-            out["source"] = "Math"
+            asked = _label(call)
+            out: dict[str, Any] = {
+                "source": "Claude",
+                **_answer_fields(shown),  # the answer on the card: the latest one given
+                "model": _label(shown) if shown else asked,  # e.g. "Claude Opus 5.5 · low"
+                "asked": asked,  # the latest call's model and effort
+                "preset": (shown or call).job.request.preset.name,
+                "askedPreset": call.job.request.preset.name,
+                "state": call.state,
+                "reason": call.reason,
+                # Every call about this node in the order asked, each with its own answer.
+                "answers": [
+                    {
+                        "model": _label(c),
+                        "preset": c.job.request.preset.name,
+                        "state": c.state,
+                        "reason": c.reason,
+                        **_answer_fields(c),
+                    }
+                    for c in self._node_calls.get(game_id, [call])
+                ],
+            }
         return out
 
     def _cancel(self, call: Call) -> None:

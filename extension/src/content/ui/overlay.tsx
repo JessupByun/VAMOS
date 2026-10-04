@@ -7,6 +7,7 @@ import {
   type Players,
   type SpotFacts,
 } from "../../shared/protocol";
+import { actionClass } from "../../shared/actions";
 import type { SeatElement } from "../dom/seats";
 import { type Store, useStore } from "../store";
 import { chooseSpot, type Layout, slotStyle } from "./placement";
@@ -64,9 +65,31 @@ function ActionCard({ store }: { store: Store }) {
   );
 }
 
+/**
+ * What the card shows for the hero's turn `turn`: the backend's error on it, its facts, or
+ * nothing yet. Anything computed for an earlier state of the table is never shown.
+ */
+export function forTurn(
+  turn: string,
+  facts: Facts | null,
+): { error: string } | { facts: SpotFacts } | null {
+  if (facts?.key !== turn) return null;
+  if (facts.error) return { error: facts.error };
+  return facts.facts ? { facts: facts.facts } : null;
+}
+
 function CardBody({ turn, facts }: { turn: string; facts: Facts | null }) {
-  // Facts computed for an earlier state of the table are never shown.
-  const current = facts?.key === turn ? facts.facts : null;
+  const shown = forTurn(turn, facts);
+  if (shown && "error" in shown) {
+    return (
+      <div class="action-card error">
+        <Source kind="error" label={BRAND} />
+        <Action text="No advice" />
+        <div class="line note warn">{shown.error}</div>
+      </div>
+    );
+  }
+  const current = shown?.facts ?? null;
   if (!current) {
     return (
       <div class="action-card neutral">
@@ -92,7 +115,12 @@ function CardBody({ turn, facts }: { turn: string; facts: Facts | null }) {
       <Source kind="chart" label="Preflop chart" />
       {advice.action ? <Action text={advice.action} /> : <Action text={current.madeHand} />}
       {advice.mix && <Mix parts={advice.mix} pick={advice.pick} deviation={advice.deviation} />}
-      {!advice.action && <div class="line note">no chart for this spot</div>}
+      {!advice.action &&
+        (advice.error ? (
+          <div class="line note warn">no chart: {advice.error}</div>
+        ) : (
+          <div class="line note">no chart for this spot</div>
+        ))}
       <div class="line facts">{factsLine(current, advice.action !== null)}</div>
     </div>
   );
@@ -118,7 +146,7 @@ function Action({ text, thinking = false }: { text: string; thinking?: boolean }
   }
   const split = text.match(/^(.*?)( \([^)]*\))$/);
   return (
-    <div class="action">
+    <div class={`action ${actionClass(text)}`}>
       {split ? split[1] : text}
       {split && <span class="bb">{split[2]}</span>}
     </div>
@@ -134,7 +162,7 @@ function Mix(props: { parts: string[]; pick: number | null; deviation: boolean }
   return (
     <div class="line mix">
       {parts.map((part, i) => (
-        <span key={part} class={i === pick ? "chip picked" : "chip"}>
+        <span key={part} class={`chip ${actionClass(part)}${i === pick ? " picked" : ""}`}>
           {part}
         </span>
       ))}
@@ -152,7 +180,7 @@ function ClaudeCard({ facts, advice }: { facts: SpotFacts; advice: ClaudeAdvice 
     // No answer yet, or none coming: the facts stay up, with the reason when there is one.
     const failed = advice.state === "failed";
     return (
-      <div class="action-card claude">
+      <div class={`action-card claude ${advice.askedPreset}`}>
         <Source kind="claude" label={aiLabel(advice.asked)} />
         {failed ? <Action text={facts.madeHand} /> : <Action text="" thinking />}
         {failed && <div class="line note warn">no answer: {advice.reason}</div>}
@@ -162,7 +190,7 @@ function ClaudeCard({ facts, advice }: { facts: SpotFacts; advice: ClaudeAdvice 
   }
   const upgrading = advice.asked !== advice.model;
   return (
-    <div class="action-card claude">
+    <div class={`action-card claude ${advice.preset}`}>
       <Source kind="claude" label={aiLabel(advice.model)} />
       <Action text={advice.action} />
       {advice.mix && <Mix parts={advice.mix} pick={advice.pick} deviation={advice.deviation} />}
@@ -202,8 +230,13 @@ function WhoIsThis(props: {
   return (
     <span class="who">
       <span class="name">{props.info.name}</span>
-      <select aria-label={`Who is ${props.info.name}?`} onChange={choose}>
-        <option value="">who is this?</option>
+      {/* The seat is narrow: the menu says "Match profile"; its full name is for the reader. */}
+      <select
+        aria-label={`Match a profile for ${props.info.name}`}
+        title="Match existing player profile"
+        onChange={choose}
+      >
+        <option value="">Match profile</option>
         {props.profiles.map((p) => (
           <option key={p.key} value={p.key}>
             {p.name}
@@ -223,7 +256,8 @@ function Badge(props: {
 }) {
   const { seat, info } = props;
   if (!info) return null;
-  // Badges sit just under their seat, in VAMOS!'s own layer; PokerNow's DOM is untouched.
+  // Badges sit just under their seat, as wide as it, in VAMOS!'s own layer; PokerNow's DOM
+  // is untouched.
   const rect = seat.element.getBoundingClientRect();
   const style = { left: `${rect.left}px`, top: `${rect.bottom + 2}px`, width: `${rect.width}px` };
   let body;

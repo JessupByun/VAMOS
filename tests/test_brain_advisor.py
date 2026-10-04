@@ -91,14 +91,14 @@ def test_one_call_per_node_and_preset(rig):
     assert len(r.provider.requests) == 1
 
 
-def test_a_missed_deadline_falls_back_to_the_math(rig):
+def test_a_missed_deadline_says_why(rig):
     gate = threading.Event()
     r = rig([(gate, BET)])
     r.advisor.start("g", r.job(), r.clock.t + 10)
     r.clock.t += 11
     r.updated()
     view = r.advisor.view("g", "h1:1:8")
-    assert (view["source"], view["state"], view["reason"]) == ("Math", "failed", "timed out")
+    assert (view["action"], view["state"], view["reason"]) == (None, "failed", "timed out")
     gate.set()  # the late answer is dropped
     with pytest.raises(queue.Empty):
         r.updates.get(timeout=0.5)
@@ -109,7 +109,7 @@ def test_too_little_time_skips_the_call(rig):
     r = rig([])
     r.advisor.start("g", r.job(), r.clock.t + 2)
     view = r.advisor.view("g", "h1:1:8")
-    assert (view["source"], view["reason"]) == ("Math", "not enough time on the clock")
+    assert (view["action"], view["reason"]) == (None, "not enough time on the clock")
     assert r.provider.requests == []
 
 
@@ -175,6 +175,21 @@ def test_asking_opus_keeps_the_first_answer_up_meanwhile(rig):
         "Claude Opus 5.5 · medium",
         "alex traps",
     )
+    # The panel keeps both: the first answer, then the deeper one under it.
+    assert [(a["preset"], a["model"], a["action"]) for a in view["answers"]] == [
+        ("standard", "Claude Opus 5.5 · low", "BET 0.90 (4.5bb)"),
+        ("deep", "Claude Opus 5.5 · medium", "CHECK"),
+    ]
+    assert view["answers"][1]["why"] == "alex traps"
+
+
+def test_a_new_decision_starts_a_fresh_list_of_answers(rig):
+    r = rig([BET, BET])
+    r.advisor.start("g", r.job(), r.clock.t + 20)
+    r.updated()
+    r.advisor.start("g", r.job(node="h1:2:10"), r.clock.t + 20)
+    r.updated()
+    assert [a["state"] for a in r.advisor.view("g", "h1:2:10")["answers"]] == ["done"]
 
 
 def test_a_refused_call_is_never_sent(rig):

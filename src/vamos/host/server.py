@@ -37,12 +37,14 @@ from vamos.engine.madehand import describe
 from vamos.engine.state import Decision, positions
 from vamos.host.framing import read_message, write_message
 from vamos.identity import IdentityMap, Resolution
-from vamos.log.hands import Hand, Street
+from vamos.log.hands import Hand, HandLog, Street
 from vamos.money import parse_chips
 from vamos.profiles import Profile, ProfileSet, load_profiles
 from vamos.session import GameSession, Read, Showdown, reads
 
 log = logging.getLogger("vamos.host")
+
+SPOT_ERROR = "VAMOS! hit an error on this spot (logged in data/logs/host.log)"
 
 type Message = dict[str, Any]
 
@@ -69,6 +71,7 @@ class Backend:
         # computed for it, keyed by decision node.
         self.turns: dict[str, Message] = {}
         self._facts: dict[str, tuple[str, Message]] = {}
+        self._failed_node: dict[str, str] = {}  # per game, the spot last logged as failing
         self._profiles = ProfileSet({}, ())
         self._profiles_stamp: tuple | None = None
         # Claude's calls finish on their own threads; their updates take this lock, and so
@@ -354,24 +357,60 @@ class Backend:
 
     def _spot_facts(self, game_id: str, ask: str | None = None) -> Message:
         turn = self.turns[game_id]
-        view = _table_view(turn["table"])
-        log = self._session(game_id).log
-        spot = current_spot(log, view) if view else None
         payload = None
-        if spot is not None and view is not None:
-            hand = log.hands[-1]
-            hero = log.current_id(view.hero_id)
-            cached = self._facts.get(game_id)
-            if cached is None or cached[0] != spot.node:
-                found = facts(spot)
-                found["advice"] = preflop_advice(hand, spot, hero)
-                cached = (spot.node, found)
-                self._facts[game_id] = cached
-            payload = cached[1]
-            if spot.street != Street.PREFLOP:
-                self._advise(game_id, hand, hero, spot, payload, ask)
-                payload = {**payload, "advice": self.advisor.view(game_id, spot.node)}
+        try:
+            view = _table_view(turn["table"])
+            game_log = self._session(game_id).log
+            spot = current_spot(game_log, view) if view else None
+            if spot is not None and view is not None:
+                payload = self._spot_payload(game_id, game_log, view, spot, ask)
+        except Exception:
+            # The card says so rather than reading the hand forever.
+            self._log_failure(game_id, turn["key"], "the spot")
+            return {
+                "type": "facts",
+                "gameId": game_id,
+                "key": turn["key"],
+                "facts": None,
+                "error": SPOT_ERROR,
+            }
         return {"type": "facts", "gameId": game_id, "key": turn["key"], "facts": payload}
+
+    def _spot_payload(
+        self, game_id: str, game_log: HandLog, view: TableView, spot: Decision, ask: str | None
+    ) -> Message:
+        hand = game_log.hands[-1]
+        hero = game_log.current_id(view.hero_id)
+        cached = self._facts.get(game_id)
+        if cached is None or cached[0] != spot.node:
+            found = facts(spot)
+            try:
+                found["advice"] = preflop_advice(hand, spot, hero)
+            except Exception:
+                # The facts stay up; the chart says why it has nothing.
+                self._log_failure(game_id, spot.node, "the preflop chart")
+                found["advice"] = {**_NO_CHART, "error": "chart error (logged)"}
+            cached = (spot.node, found)
+            self._facts[game_id] = cached
+        payload = cached[1]
+        if spot.street != Street.PREFLOP:
+            try:
+                self._advise(game_id, hand, hero, spot, payload, ask)
+            except Exception:
+                # Recorded as a failed call, so the card and the panel say why and it is
+                # not tried again for this decision and preset.
+                self._log_failure(game_id, spot.node, "Claude's prompt")
+                preset = ask or self._preset_for(game_id, hand)
+                stub = Job(spot.node, Request(PRESETS[preset], [], []), None)  # type: ignore[arg-type]
+                self.advisor.start(game_id, stub, 0.0, refuse="internal error (logged)")
+            payload = {**payload, "advice": self.advisor.view(game_id, spot.node)}
+        return payload
+
+    def _log_failure(self, game_id: str, node: str, what: str) -> None:
+        # Once per spot: the same spot is recomputed on every log page while it is up.
+        if self._failed_node.get(game_id) != node:
+            self._failed_node[game_id] = node
+            log.exception("[VAMOS] could not compute %s at %s", what, node)
 
     def _preset_for(self, game_id: str, hand: Hand) -> str:
         """The dial's preset, locked for the whole hand (Claude's cache is per model)."""
@@ -643,17 +682,6 @@ def _read_view(read: Read | None) -> Message | None:
         "calls": read.calls,
         "foldsToBets": read.folds_to_bets,
         "facedBets": read.faced_bets,
-        "showdowns": [
-            {
-                "number": s.number,
-                "cards": list(s.cards),
-                "board": list(s.board),
-                "secondBoard": list(s.second_board),
-                "line": s.line,
-                "result": s.result,
-            }
-            for s in read.showdowns[-5:]
-        ],
     }
 
 
@@ -673,6 +701,7 @@ def _profile_view(profile: Profile) -> Message:
         "name": profile.name,
         "tag": profile.tag,
         "meta": meta,
+        "net": _net(profile.meta),
         "summary": _summary(profile.body),
         "stats": {
             name: m.group(1)
@@ -681,6 +710,54 @@ def _profile_view(profile: Profile) -> Message:
         },
         "body": profile.body,
     }
+
+
+_AMOUNT = r"[+-]?\d+(?:\.\d+)?"
+
+
+def _net(meta: dict) -> Message | None:
+    """
+    The profile's net result with its per-session parts, from frontmatter such as
+    `net: -41.30 (HU -15.00, A -26.30)` and `sessions: [HU 2026-09-30, A 2026-09-30]`.
+    Anything else, or parts naming no listed session, is shown as written.
+    """
+    value = meta.get("net")
+    if value is None:
+        return None
+    # YAML reads a bare `net: -41.30` as a number; show it as money, as it was written.
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return {"total": f"{value:+.2f}", "sessions": []}
+    text = str(value).strip()
+    as_written = {"total": text, "sessions": []}
+    m = re.fullmatch(rf"({_AMOUNT})\s*(?:\((.*)\))?", text)
+    if not m:
+        return as_written
+    listed = meta.get("sessions")
+    dates = {}
+    for entry in listed if isinstance(listed, list) else []:
+        # The date is the last word: "Home game 2026-09-30".
+        label, _, date = str(entry).strip().rpartition(" ")
+        if label:
+            dates[label] = date
+    sessions = []
+    for part in filter(None, (p.strip() for p in (m.group(2) or "").split(","))):
+        # Split only by the sessions the profile lists, so prose is never read as a session.
+        label, _, amount = part.rpartition(" ")
+        if label not in dates or not re.fullmatch(_AMOUNT, amount):
+            return as_written
+        sessions.append({"label": label, "amount": amount, "date": dates.get(label)})
+    return {"total": m.group(1), "sessions": sessions}
+
+
+# The chart's block when it has no answer for the spot.
+_NO_CHART = {
+    "source": "Chart",
+    "action": None,
+    "mix": None,
+    "pick": None,
+    "pickPct": None,
+    "deviation": False,
+}
 
 
 def _summary(body: str) -> str | None:
@@ -757,7 +834,7 @@ def main() -> None:
     started = time.monotonic()
     record = os.environ.get("VAMOS_RECORD") == "1"
     canned = os.environ.get("VAMOS_CANNED_CLAUDE")  # end-to-end tests only
-    provider = CannedProvider(Path(canned).read_text()) if canned else None
+    provider = CannedProvider(Path(canned)) if canned else None
     try:
         serve(sys.stdin.buffer, stdout, Backend(DATA_DIR, PROFILES_DIR, record, provider))
     except Exception:
