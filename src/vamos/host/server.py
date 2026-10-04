@@ -60,11 +60,14 @@ class Backend:
     ):
         self.data_dir = data_dir
         self.profiles_dir = profiles_dir
-        # Raw log pages are only written to disk when explicitly asked (fixture recording
-        # at test tables); normal play keeps tonight's rows in memory.
+        # Raw log pages, as fetched, are only written to disk when explicitly asked (fixture
+        # recording at test tables); the parsed rows of each game are saved below.
         self.record = record
         self.identity = IdentityMap(data_dir / "identity.json")
         self.sessions: dict[str, GameSession] = {}
+        # Each game's log rows, so a restarted backend picks the night up where it was.
+        self.games_dir = data_dir / "games"
+        _prune(self.games_dir, KEEP_GAMES_DAYS)
         # The players each table last reported as seated, for pushing updated badges.
         self.seated: dict[str, list[Message]] = {}
         # Per table, the hero's turn in progress (the last "turn" message) and the facts last
@@ -79,7 +82,7 @@ class Backend:
         self.lock = threading.RLock()
         self.emit: Callable[[Message], None] = lambda message: None
         self.clock = clock
-        self.ledger = Ledger(data_dir / "costs.jsonl", datetime.now())
+        self.ledger = Ledger(data_dir / "costs.jsonl")
         self.advisor = Advisor(
             provider or AnthropicProvider(),
             self.ledger,
@@ -93,6 +96,9 @@ class Backend:
         self.settings_path = data_dir / "settings.json"
         saved = _read_json(self.settings_path)
         self.preset = saved.get("preset") if saved.get("preset") in PRESETS else DEFAULT_PRESET
+        # The off switch for Claude: when off, no call is made and the card keeps the facts.
+        self.ai_on = saved.get("aiOn") is not False
+        self.show_card = saved.get("showCard") is not False  # the card on the table
         self.hero_names = [str(n) for n in saved.get("heroNames", []) if isinstance(n, str)]
         self.notes = ""  # tonight's quick notes, never saved
         self.player_notes: dict[str, str] = {}  # PokerNow ID -> tonight's notes on that player
@@ -170,8 +176,26 @@ class Backend:
         if kind == "settings":
             if message.get("preset") in PRESETS:
                 self.preset = message["preset"]
-                self._save_settings()
-            return [self._settings()]
+            if isinstance(message.get("showCard"), bool):
+                self.show_card = message["showCard"]
+            if isinstance(message.get("aiOn"), bool):
+                self.ai_on = message["aiOn"]
+                if not self.ai_on:
+                    # Anything in flight is stopped now; nothing new starts.
+                    for game_id in list(self.turns):
+                        self.advisor.stop(game_id)
+            self._save_settings()
+            return [self._settings(), *(self._spot_facts(game_id) for game_id in self.turns)]
+        if kind == "resume_request":
+            # Where a log poller starting over picks up: after the newest row held.
+            newest = self._session(message["gameId"]).newest
+            return [
+                {
+                    "type": "resume",
+                    "gameId": message["gameId"],
+                    "after": None if newest is None else str(newest),
+                }
+            ]
         if kind == "notes":
             text = str(message.get("text", ""))[:2000]
             if message.get("playerId"):
@@ -192,6 +216,8 @@ class Backend:
     def _save_settings(self) -> None:
         saved = _read_json(self.settings_path)
         saved["preset"] = self.preset
+        saved["aiOn"] = self.ai_on
+        saved["showCard"] = self.show_card
         self.settings_path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.settings_path.with_suffix(".tmp")
         tmp.write_text(json.dumps(saved, indent=2, sort_keys=True) + "\n")
@@ -206,6 +232,8 @@ class Backend:
                 for p in PRESETS.values()
             ],
             "deep": "deep",  # the preset "Ask deeper" uses
+            "aiOn": self.ai_on,
+            "showCard": self.show_card,
         }
 
     def _costs(self) -> Message:
@@ -247,7 +275,13 @@ class Backend:
         return [self._spot_facts(game_id, ask=preset)]
 
     def _session(self, game_id: str) -> GameSession:
-        return self.sessions.setdefault(game_id, GameSession(game_id))
+        session = self.sessions.get(game_id)
+        if session is None:
+            # Game IDs come from the page; only plain ones name a file.
+            safe = re.fullmatch(r"[A-Za-z0-9_-]{1,64}", game_id)
+            store = self.games_dir / f"{game_id}.jsonl" if safe else None
+            session = self.sessions[game_id] = GameSession(game_id, store)
+        return session
 
     def _log_page(self, message: Message) -> list[Message]:
         game_id = message["gameId"]
@@ -393,6 +427,8 @@ class Backend:
             cached = (spot.node, found)
             self._facts[game_id] = cached
         payload = cached[1]
+        if spot.street != Street.PREFLOP and not self.ai_on:
+            return {**payload, "advice": None, "aiOff": True}
         if spot.street != Street.PREFLOP:
             try:
                 self._advise(game_id, hand, hero, spot, payload, ask)
@@ -595,6 +631,19 @@ class Backend:
         return {"type": "ack", "what": "dom_snapshot", "detail": path.name}
 
 
+KEEP_GAMES_DAYS = 3  # saved game logs older than this are deleted when the backend starts
+
+
+def _prune(directory: Path, days: int) -> None:
+    cutoff = time.time() - days * 86400
+    for path in directory.glob("*.jsonl") if directory.exists() else []:
+        try:
+            if path.stat().st_mtime < cutoff:
+                path.unlink()
+        except OSError:
+            log.exception("[VAMOS] could not prune %s", path)
+
+
 def _slug(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9_-]+", "-", name).strip("-").lower() or "player"
 
@@ -692,6 +741,17 @@ def _read_view(read: Read | None) -> Message | None:
 _SHOWN_META = ("hands", "sessions", "net", "last_updated")
 
 
+# Headline numbers read from a profile's text for the side panel, first mention of each,
+# e.g. "- 3-bet vs an open 6% (7/114)". Claude reads the whole profile, not these.
+_PROFILE_STATS = (
+    ("vpip", r"\bVPIP"),
+    ("pfr", r"\bPFR"),
+    ("threeBet", r"\b3-bet vs an open"),
+    ("cbet", r"\bC-bets"),
+    ("foldToFlopBet", r"\bFaced a bet: fold"),
+)
+
+
 def _profile_view(profile: Profile) -> Message:
     """What the side panel shows about a profile: the user's own file, read only."""
     meta = {}
@@ -707,9 +767,9 @@ def _profile_view(profile: Profile) -> Message:
         "net": _net(profile.meta),
         "summary": _summary(profile.body),
         "stats": {
-            name: m.group(1)
-            for name, pattern in (("vpip", r"\bVPIP\D{0,3}(\d+)%"), ("pfr", r"\bPFR\D{0,3}(\d+)%"))
-            if (m := re.search(pattern, profile.body))
+            name: {"pct": m.group(1), "count": m.group(2)}
+            for name, pattern in _PROFILE_STATS
+            if (m := re.search(rf"{pattern}\D{{0,3}}(\d+)%(?:\s*\((\d+/\d+))?", profile.body))
         },
         "body": profile.body,
     }

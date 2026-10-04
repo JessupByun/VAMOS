@@ -44,7 +44,8 @@ function statusText(status: BackendStatus): string {
  * backend's status while there is nothing else to say, the hero's turn when there is.
  */
 function ActionCard({ store }: { store: Store }) {
-  const { status, heroSeat, layout, turn, facts } = useStore(store);
+  const { status, heroSeat, layout, turn, facts, showCard } = useStore(store);
+  if (!showCard) return null;
   const ready = status.state === "ready";
   let body;
   if (!ready || !heroSeat || turn === null) {
@@ -101,11 +102,12 @@ function CardBody({ turn, facts }: { turn: string; facts: Facts | null }) {
   const advice = current.advice;
   if (isClaude(advice)) return <ClaudeCard facts={current} advice={advice} />;
   if (advice === null) {
-    // After the flop before any answer source exists: the facts alone.
+    // After the flop with no answer to show (Claude switched off): the facts alone.
     return (
       <div class="action-card neutral">
         <Source kind="neutral" label={BRAND} />
         <Action text={current.madeHand} />
+        {current.aiOff && <div class="line note">AI off: facts only</div>}
         <div class="line facts">{factsLine(current, false)}</div>
       </div>
     );

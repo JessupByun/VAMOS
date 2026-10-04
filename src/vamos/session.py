@@ -1,14 +1,20 @@
 """
 One PokerNow game as VAMOS sees it tonight: the live log rows received so far, the hands
-rebuilt from them, and per-player counts for the seat badges. Kept in memory only; nothing
-here is saved.
+rebuilt from them, and per-player counts for the seat badges. The rows are also appended
+to a file in data/games/, so a backend that restarts (a refreshed tab, a reload) picks the
+night up where it was instead of from the last page of the log.
 """
 
+import json
+import logging
 from dataclasses import dataclass
+from pathlib import Path
 
 from vamos.log.hands import HandLog, Street, build_hands
 
 VOLUNTARY = {"call", "bet", "raise"}
+
+log = logging.getLogger("vamos.session")
 
 
 @dataclass(frozen=True)
@@ -19,12 +25,48 @@ class Counts:
 
 
 class GameSession:
-    def __init__(self, game_id: str):
+    def __init__(self, game_id: str, store: Path | None = None):
         self.game_id = game_id
         self._rows: dict[int, str] = {}
         # Orders before which rows may be missing (see add_page).
         self._gaps: set[int] = set()
         self._log: HandLog | None = None
+        self._store = store
+        if store is not None:
+            self._load(store)
+
+    def _load(self, store: Path) -> None:
+        try:
+            lines = store.read_text().splitlines() if store.exists() else []
+        except OSError:
+            log.exception("[VAMOS] could not read %s", store)
+            return
+        for line in lines:
+            try:
+                entry = json.loads(line)
+                if "gap" in entry:
+                    self._gaps.add(int(entry["gap"]))
+                else:
+                    self._rows[int(entry["order"])] = str(entry["msg"])
+            except (TypeError, ValueError, KeyError):
+                continue  # a torn last line from a crash is skipped, not fatal
+
+    def _save(self, rows: dict[int, str], gap: int | None) -> None:
+        if self._store is None:
+            return
+        entries = [{"gap": gap}] if gap is not None else []
+        entries += [{"order": order, "msg": text} for order, text in sorted(rows.items())]
+        try:
+            self._store.parent.mkdir(parents=True, exist_ok=True)
+            with self._store.open("a") as f:
+                f.writelines(json.dumps(e) + "\n" for e in entries)
+        except OSError:
+            log.exception("[VAMOS] could not save rows to %s", self._store)
+
+    @property
+    def newest(self) -> int | None:
+        """The newest row held, where a log poller starting over should pick up."""
+        return max(self._rows) if self._rows else None
 
     def add_page(self, body: object, fresh: bool = False) -> bool:
         """
@@ -39,10 +81,14 @@ class GameSession:
                 page[int(row["created_at"])] = str(row["msg"])
             except (KeyError, TypeError, ValueError):
                 continue
+        gap = None
         if fresh and page and self._rows and min(page) > max(self._rows):
-            self._gaps.add(min(page))
+            gap = min(page)
+            self._gaps.add(gap)
         new = {order: text for order, text in page.items() if order not in self._rows}
         self._rows.update(new)
+        if new or gap is not None:
+            self._save(new, gap)
         if new:
             self._log = None
         return bool(new)

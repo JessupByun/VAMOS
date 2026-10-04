@@ -13,8 +13,11 @@ interface LogBody {
 
 export interface LogPoller {
   stop: () => void;
-  /** Forget the cursor so the next poll re-sends the newest rows (e.g. to a fresh backend). */
-  resync: () => void;
+  /**
+   * Start over from `after` (the newest row the backend already holds), or from the newest
+   * rows when it holds none: rows above it are walked back to it, so none are skipped.
+   */
+  resume: (after: string | null) => void;
   /** Poll as soon as the minimum gap allows, e.g. when the hero's turn starts. */
   soon: () => void;
 }
@@ -105,9 +108,9 @@ export function startLogPoller(gameId: string, deliver: (page: LogPage) => boole
       stopped = true;
       clearTimeout(timer);
     },
-    resync: () => {
+    resume: (after) => {
       generation += 1;
-      cursor = null;
+      cursor = after;
       backfill = null;
     },
     soon: () => {

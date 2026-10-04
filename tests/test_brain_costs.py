@@ -40,7 +40,7 @@ def test_sdk_style_usage_objects_work_too():
 
 
 def test_totals_by_session_month_and_all_time(tmp_path):
-    ledger = Ledger(tmp_path / "costs.jsonl", started=datetime(2026, 10, 2, 20, 0), soft_cap=0.5)
+    ledger = Ledger(tmp_path / "costs.jsonl", soft_cap=0.5)
     for when, output in (
         (datetime(2026, 9, 30, 22, 0), 50_000),  # last month: $1
         (datetime(2026, 10, 1, 22, 0), 10_000),  # this month, earlier session: $0.20
@@ -52,9 +52,23 @@ def test_totals_by_session_month_and_all_time(tmp_path):
     assert totals == {"session": 0.6, "month": 0.8, "allTime": 1.8, "overCap": True}
 
 
+def test_tonight_runs_back_to_the_last_long_pause_whatever_restarted_in_between(tmp_path):
+    ledger = Ledger(tmp_path / "costs.jsonl")
+    for when in (
+        datetime(2026, 10, 3, 14, 0),  # the afternoon: a separate session
+        datetime(2026, 10, 3, 20, 0),  # tonight starts
+        datetime(2026, 10, 3, 22, 30),  # a refresh restarted the backend in between
+        datetime(2026, 10, 4, 1, 15),  # past midnight, still tonight
+    ):
+        ledger.record(price("claude-opus-5-5", {"output_tokens": 10_000}, "advice", when))
+    assert ledger.totals(datetime(2026, 10, 4, 1, 30))["session"] == pytest.approx(0.6)
+    # After three hours with no call, tonight starts over.
+    assert ledger.totals(datetime(2026, 10, 4, 4, 30))["session"] == 0
+
+
 def test_a_torn_last_line_is_skipped(tmp_path):
     path = tmp_path / "costs.jsonl"
-    ledger = Ledger(path, started=AT)
+    ledger = Ledger(path)
     ledger.record(price("claude-opus-5-5", {"output_tokens": 50_000}, "advice", AT))
     with path.open("a") as f:
         f.write('{"at": "2026-10-')

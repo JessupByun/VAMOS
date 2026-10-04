@@ -31,12 +31,12 @@ After a rebuild, reload VAMOS in `chrome://extensions` and then reload the Poker
 - `src/vamos/log/` the log parser: `grammar.py` (line -> event) and `hands.py` (events -> hands with chip accounting).
 - `src/vamos/engine/` live decision facts: equity, decision state and turn order, made-hand text, the action card's facts.
 - `src/vamos/brain/` Claude's postflop advice: `pseudonyms.py` (names never reach the API), `prompt.py` (a short role plus the profiles as the cached prefix, then the hand as JSON; deliberately no strategy guide, Claude's own judgment does the rest), `provider.py` (streaming calls), `advisor.py` (background calls, deadline, stale-node cancel), `answer.py` (schema and legal sizing), `spot.py` (legal actions), `costs.py` (ledger in `data/costs.jsonl`).
-- `src/vamos/session.py` one game in memory: the live log rows, the hands rebuilt from them, and tonight's read per player (`reads()`), which goes to Claude with each player and to the side panel. Nothing in it is saved.
+- `src/vamos/session.py` one game: the live log rows, the hands rebuilt from them, and tonight's read per player (`reads()`), which goes to Claude with each opponent and to the side panel. The rows are appended to `data/games/<game>.jsonl` (pruned after 3 days), so a restarted backend picks the night up where it was; on (re)start the content script asks the backend where to resume (`resume_request`) and the poller walks back to that row.
 - `src/vamos/preflop/` the home-built preflop solver and its generated tables in `data/` (committed); `docs/preflop.md` lists every approximation with its measured size. Read it before changing the solver.
 - `docs/pokernow.md` verified facts about PokerNow's log endpoint, log lines and DOM; `docs/log-grammar.md` the full line grammar with evidence. Read both before touching parsing or DOM code.
 - `tests/` pytest suite, one test file per module.
 - `profiles/` the user's opponent profiles, gitignored except `_TEMPLATE.md` and `_PROMPT.md`.
-- `data/` VAMOS's own local state (identity map, advice log, cost ledger, logs, `settings.json` with the dial and the hero's own names to keep out of prompts, `drafts/` from the side panel's Save draft), gitignored.
+- `data/` VAMOS's own local state (identity map, advice log, cost ledger, logs, `settings.json` with the dial and the hero's own names to keep out of prompts, `drafts/` from the side panel's Save draft, `games/` with each game's log rows), gitignored. `settings.json` also holds the AI switch (`aiOn`: off makes no Claude calls) and the table card switch (`showCard`).
 
 ## Rules
 
@@ -44,7 +44,9 @@ After a rebuild, reload VAMOS in `chrome://extensions` and then reload the Poker
 - VAMOS only reads and displays. It never clicks, types into, or otherwise operates PokerNow.
 - Profiles belong to the user. VAMOS reads `profiles/*.md` (skipping files that start with `_`) and never writes them.
 - Save draft writes tonight's read and notes to `data/drafts/` only; it never creates or edits a profile, and nothing merges drafts automatically. Updating profiles from inside VAMOS stays off: the user merges by hand from full logs.
-- Tonight's read is counted in memory from the current game's log only; it is the one stats count in v1.
+- Tonight's read is counted from the current game's log only; it is the one stats count in v1. "Tonight" API cost runs back to the last 3-hour pause between calls, so restarts do not reset it.
+- The extension closes the backend 15 s after the last table tab goes away, so a refresh keeps the same backend.
+- The action card always sits at the top middle of the table, just above the pot, even over a seat.
 - No log ingestion, stats engine, or automatic learning in v1. Deferred features (AI preflop, range tables, HRC tables, review mode, training mode) are built only when the user asks.
 - Postflop runs on Claude Opus 5.5 only: effort low by default, medium as the deeper option. Sonnet 5.5 and Haiku 4.5 were dropped after blind comparisons on logged spots; never Claude Fable 5.1.
 - Ask the user before any non-trivial design choice the plan does not cover.

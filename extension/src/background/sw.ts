@@ -10,17 +10,20 @@ import {
 } from "../shared/protocol";
 import { HostRetry } from "./retry";
 
-// The native host lives exactly as long as at least one PokerNow table tab is open: it is
-// launched when the first content script connects and the port is closed when the last one
-// goes away, which ends the host process (its stdin closes). The open native port is also
-// what keeps this worker alive; without it Chrome stops the worker after 30s idle and every
-// content and panel port reconnects.
+// The native host lives as long as a PokerNow table tab is open: it is launched when the
+// first content script connects and the port is closed a short grace after the last one goes
+// away, which ends the host process (its stdin closes). The grace lets a refreshed tab find
+// the same backend, with tonight's state, instead of a fresh one. The open native port is
+// also what keeps this worker alive; without it Chrome stops the worker after 30s idle and
+// every content and panel port reconnects.
 const contentPorts = new Set<chrome.runtime.Port>();
 const panelPorts = new Set<chrome.runtime.Port>();
 let host: chrome.runtime.Port | null = null;
 let status: BackendStatus = { type: "backend", state: "down", detail: "no PokerNow table open" };
 const retry = new HostRetry();
 let retryTimer: ReturnType<typeof setTimeout> | undefined;
+const HOST_GRACE_MS = 15000;
+let closeTimer: ReturnType<typeof setTimeout> | undefined;
 // What a side panel needs when it opens, replayed to it: the latest settings and costs,
 // and per table the players, the current hand, and every message about that hand's
 // decisions (Claude's answers by node, then the latest, which says whether one is live).
@@ -99,10 +102,17 @@ function connectHost() {
       setStatus({ type: "backend", state: "down", detail: message.message });
     } else {
       remember(message);
-      // Each content script keeps only its own game's players and facts.
-      if (message.type === "players" || message.type === "facts") {
+      // Each content script keeps only its own game's players, facts and resume point; the
+      // settings say whether the card is shown.
+      if (
+        message.type === "players" ||
+        message.type === "facts" ||
+        message.type === "resume" ||
+        message.type === "settings"
+      ) {
         for (const content of contentPorts) content.postMessage(message satisfies WorkerToContent);
       }
+      if (message.type === "resume") return;
       for (const panel of panelPorts) panel.postMessage(message satisfies WorkerToPanel);
     }
   });
@@ -124,11 +134,31 @@ function connectHost() {
   port.postMessage({ type: "hello", extensionVersion: chrome.runtime.getManifest().version });
 }
 
+// The last table tab went away and none came back within the grace: stop the backend.
+function closeHost() {
+  closeTimer = undefined;
+  if (contentPorts.size > 0) return;
+  clearTimeout(retryTimer);
+  retryTimer = undefined;
+  retry.reset();
+  tables.clear();
+  if (host !== null) {
+    const closing = host;
+    host = null;
+    closing.disconnect();
+  }
+  setStatus({ type: "backend", state: "down", detail: "no PokerNow table open" });
+}
+
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name === "content") {
     contentPorts.add(port);
+    clearTimeout(closeTimer);
+    closeTimer = undefined;
     if (host === null && retryTimer === undefined) connectHost();
     port.postMessage(status satisfies WorkerToContent);
+    const settings = latest.get("settings");
+    if (settings?.type === "settings") port.postMessage(settings satisfies WorkerToContent);
     port.onMessage.addListener((message: ContentToWorker) => host?.postMessage(message));
     port.onDisconnect.addListener(() => {
       // Reading the reason marks it handled; Chrome reports it otherwise (e.g. "moved into
@@ -136,16 +166,8 @@ chrome.runtime.onConnect.addListener((port) => {
       void chrome.runtime.lastError;
       contentPorts.delete(port);
       if (contentPorts.size > 0) return;
-      clearTimeout(retryTimer);
-      retryTimer = undefined;
-      retry.reset();
-      tables.clear();
-      if (host !== null) {
-        const closing = host;
-        host = null;
-        closing.disconnect();
-      }
-      setStatus({ type: "backend", state: "down", detail: "no PokerNow table open" });
+      clearTimeout(closeTimer);
+      closeTimer = setTimeout(closeHost, HOST_GRACE_MS);
     });
   } else if (port.name === "panel") {
     panelPorts.add(port);

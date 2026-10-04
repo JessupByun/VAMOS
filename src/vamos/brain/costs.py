@@ -8,7 +8,7 @@ session's soft cap only warns.
 
 import json
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -78,10 +78,28 @@ def price(model: str, usage: Any, kind: str, at: datetime) -> CallCost:
     )
 
 
+BREAK = timedelta(hours=3)  # a pause this long between calls ends "tonight"
+
+
+def _tonight(calls: list[CallCost], now: datetime) -> list[CallCost]:
+    """
+    The calls of the current session: back from now to the first pause of BREAK or more, so
+    a restarted backend (a refreshed tab) keeps counting the same night.
+    """
+    out: list[CallCost] = []
+    later = now
+    for call in sorted(calls, key=lambda c: c.at, reverse=True):
+        at = datetime.fromisoformat(call.at)
+        if later - at >= BREAK:
+            break
+        out.append(call)
+        later = at
+    return out
+
+
 class Ledger:
-    def __init__(self, path: Path, started: datetime, soft_cap: float = SOFT_CAP):
+    def __init__(self, path: Path, soft_cap: float = SOFT_CAP):
         self.path = path
-        self.started = started
         self.soft_cap = soft_cap
 
     def record(self, cost: CallCost) -> None:
@@ -102,9 +120,8 @@ class Ledger:
 
     def totals(self, now: datetime) -> dict[str, float | bool]:
         calls = self._all()
-        start = self.started.isoformat(timespec="seconds")
         month = now.strftime("%Y-%m")
-        session = sum(c.dollars for c in calls if c.at >= start)
+        session = sum(c.dollars for c in _tonight(calls, now))
         return {
             "session": round(session, 4),
             "month": round(sum(c.dollars for c in calls if c.at.startswith(month)), 4),

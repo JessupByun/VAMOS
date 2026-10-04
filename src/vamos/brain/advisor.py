@@ -264,7 +264,10 @@ class Advisor:
             self._record(call, reply.usage)
             call.raw = reply.text
             try:
-                answer = settle(reply.text, call.job.spot, call.job.node, call.job.reveal)
+                # Each preset draws its own roll, so a deeper answer is a fresh draw from its
+                # own mix rather than one tied to the first answer's.
+                seed = f"{call.job.node}:{call.job.request.preset.name}"
+                answer = settle(reply.text, call.job.spot, seed, call.job.reveal)
             except BadAnswer as error:
                 log.warning("[VAMOS] unusable answer: %s", error)
                 if self._again(call, attempt, "unreadable answer"):

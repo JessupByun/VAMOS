@@ -66,8 +66,11 @@ export interface ProfileView {
   net: { total: string; sessions: { label: string; amount: string; date: string | null }[] } | null;
   /** The first sentence of the profile's "Summary" section. */
   summary: string | null;
-  /** Headline numbers found in the profile's text, in percent, e.g. {vpip: "51", pfr: "23"}. */
-  stats: Record<string, string>;
+  /**
+   * Headline numbers found in the profile's text: vpip, pfr, threeBet, cbet, foldToFlopBet,
+   * each a percent with its count when the profile gives one, e.g. {pct: "6", count: "7/114"}.
+   */
+  stats: Record<string, { pct: string; count: string | null }>;
   /** The profile's text, exactly as the user wrote it. */
   body: string;
 }
@@ -173,6 +176,8 @@ export interface SpotFacts {
   madeHand: string;
   /** Preflop: the charts' action. Postflop: Claude's answer, or why there is none. */
   advice: PreflopAdvice | ClaudeAdvice | null;
+  /** Set when Claude is switched off: postflop, the card shows the facts only. */
+  aiOff?: boolean;
 }
 
 /** One call's answer about a decision; a decision has a second one after "Ask deeper". */
@@ -275,6 +280,23 @@ export interface Settings {
   presets: PresetInfo[];
   /** The preset "Ask deeper" uses. */
   deep: Preset;
+  /** Claude's advice on or off; off makes no API calls at all. */
+  aiOn: boolean;
+  /** The action card on the table shown or hidden. */
+  showCard: boolean;
+}
+
+/** Content script to backend, when it starts polling a game's log (again). */
+export interface ResumeRequest {
+  type: "resume_request";
+  gameId: string;
+}
+
+/** Where to pick the log up: after the newest row the backend already holds, else from scratch. */
+export interface Resume {
+  type: "resume";
+  gameId: string;
+  after: string | null;
 }
 
 export interface Costs {
@@ -303,13 +325,14 @@ export type ContentToWorker =
   | SeatsReport
   | AssignIdentity
   | HeroTurn
-  | ClockReport;
-export type WorkerToContent = BackendStatus | SnapshotRequest | Players | Facts;
+  | ClockReport
+  | ResumeRequest;
+export type WorkerToContent = BackendStatus | SnapshotRequest | Players | Facts | Settings | Resume;
 export type PanelToWorker =
   | SnapshotRequest
   | AssignIdentity
   | ForgetIdentity
-  | { type: "settings"; preset: Preset }
+  | { type: "settings"; preset?: Preset; aiOn?: boolean; showCard?: boolean }
   | { type: "settings_request" }
   /** Notes for tonight's prompts, on one player or the whole table; kept in memory only. */
   | { type: "notes"; text: string; playerId?: string }
@@ -335,4 +358,5 @@ export type HostToWorker =
   | Costs
   | HandInfo
   | DraftSaved
+  | Resume
   | { type: "error"; message: string };

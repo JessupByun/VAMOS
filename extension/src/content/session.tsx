@@ -26,14 +26,18 @@ export function startSession(gameId: string): () => void {
     layout: null,
     turn: null,
     facts: null,
+    showCard: true,
   });
   let port: chrome.runtime.Port | null = null;
   let stopped = false;
   let retryDelay = RECONNECT_MIN_MS;
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
   // Set when the backend went away; the next "ready" is then a fresh backend that has none
-  // of this game's rows or seats, so both are sent again.
+  // of this game's seats, so they are sent again.
   let backendLost = false;
+  // Log pages go out only once the backend has said where to pick the log up (the rows it
+  // already holds for this game, from before a refresh or restart).
+  let resumed = false;
   let reportedSeats: string | null = null;
   // The turn key the backend last heard about; undefined until it has heard anything.
   let reportedTurn: string | null | undefined;
@@ -49,9 +53,9 @@ export function startSession(gameId: string): () => void {
     port.postMessage(message);
     return true;
   };
-  // Pages go out only to a ready backend, so the cursor never advances past rows the
-  // worker had nowhere to deliver.
-  const poller = startLogPoller(gameId, (page) => status().state === "ready" && send(page));
+  // Pages go out only to a ready backend that has said where to resume, so the cursor never
+  // advances past rows the worker had nowhere to deliver.
+  const poller = startLogPoller(gameId, (page) => status().state === "ready" && resumed && send(page));
 
   function reportSeats(force = false) {
     const seats = store.get().seats;
@@ -125,16 +129,22 @@ export function startSession(gameId: string): () => void {
       if (message.type === "backend") {
         retryDelay = RECONNECT_MIN_MS;
         if (message.state === "down") backendLost = true;
+        if (message.state !== "ready") resumed = false;
         const becameReady = message.state === "ready" && status().state !== "ready";
         show(message);
-        if (message.state === "ready" && backendLost) {
-          backendLost = false;
-          poller.resync();
-        }
+        if (message.state === "ready" && backendLost) backendLost = false;
+        if (message.state === "ready" && !resumed) send({ type: "resume_request", gameId });
         if (becameReady) {
           reportSeats(true);
           reportTurn(true);
         }
+      } else if (message.type === "resume") {
+        if (message.gameId === gameId) {
+          poller.resume(message.after);
+          resumed = true;
+        }
+      } else if (message.type === "settings") {
+        store.set({ showCard: message.showCard !== false });
       } else if (message.type === "players") {
         if (message.gameId === gameId) store.set({ players: message });
       } else if (message.type === "facts") {
@@ -157,6 +167,7 @@ export function startSession(gameId: string): () => void {
       if (!chrome.runtime?.id) return retire();
       // The worker stopping also closed the native port, so the backend restarts too.
       backendLost = true;
+      resumed = false;
       show({ type: "backend", state: "connecting" });
       retryTimer = setTimeout(connect, retryDelay);
       retryDelay = Math.min(retryDelay * 2, RECONNECT_MAX_MS);

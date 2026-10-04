@@ -98,6 +98,8 @@ def test_hello_reports_ready_with_settings_and_costs(backend):
             },
         ],
         "deep": "deep",
+        "aiOn": True,
+        "showCard": True,
     }
     assert (costs["type"], costs["session"], costs["overCap"]) == ("costs", 0, False)
 
@@ -343,6 +345,12 @@ def claude_backend(tmp_path, script):
     return backend, fake, sent
 
 
+def claude_backend_with_data(tmp_path, script=()):
+    """Another backend on the same data and profiles, as after a restart."""
+    fake = FakeProvider(list(script))
+    return Backend(tmp_path / "data", tmp_path / "profiles", provider=fake), fake
+
+
 def test_claude_answers_postflop_under_pseudonyms(tmp_path):
     gate = threading.Event()
     backend, fake, sent = claude_backend(
@@ -445,7 +453,7 @@ def test_the_dial_and_the_heros_names_come_from_settings(tmp_path):
     backend, fake, _ = claude_backend(tmp_path, [Reply(BET_HALF, "end_turn", {})])
     backend.handle({"type": "settings", "preset": "deep"})
     saved = json.loads((tmp_path / "data/settings.json").read_text())
-    assert saved == {"preset": "deep"}
+    assert saved == {"preset": "deep", "aiOn": True, "showCard": True}
     saved["heroNames"] = ["Jessica Q"]
     (tmp_path / "data/settings.json").write_text(json.dumps(saved))
     (tmp_path / "profiles/alex.md").write_text(ALEX + "Hates it when Jessica Q check-raises.\n")
@@ -632,3 +640,34 @@ def test_a_profile_with_odd_frontmatter_still_lists_the_players(tmp_path):
     [players, *_] = backend.handle(SEATS)
     alex = next(p for p in players["players"] if p["id"] == "Qw3rTy7UiO")
     assert alex["profile"]["net"] == {"total": "-12.50", "sessions": []}
+
+
+def test_turning_claude_off_stops_calls_and_keeps_the_facts(tmp_path):
+    backend, fake, _ = claude_backend(tmp_path, [])
+    backend.handle(page(*FLOP_HAND))
+    [settings] = backend.handle({"type": "settings", "aiOn": False})
+    assert settings["aiOn"] is False
+    [reply] = backend.handle(FLOP_TURN)
+    found = reply["facts"]
+    assert (found["advice"], found["aiOff"]) == (None, True) and found["madeHand"]
+    assert fake.requests == []
+    # Remembered across restarts, and back on when asked.
+    assert json.loads((tmp_path / "data/settings.json").read_text())["aiOn"] is False
+    again, _ = claude_backend_with_data(tmp_path)
+    assert again.ai_on is False
+
+
+def test_a_restarted_backend_keeps_tonights_rows_and_says_where_to_resume(tmp_path):
+    first, _, _ = claude_backend(tmp_path, [])
+    first.handle(page(*HERO_HAND))
+    [resume] = first.handle({"type": "resume_request", "gameId": GAME})
+    assert resume == {"type": "resume", "gameId": GAME, "after": "204"}
+    # A new backend on the same data folder (a refreshed tab) has the same night.
+    second, _ = claude_backend_with_data(tmp_path)
+    assert second._session(GAME).newest == 204
+    assert len(second._session(GAME).log.hands) == 1
+    [resume] = second.handle({"type": "resume_request", "gameId": GAME})
+    assert resume["after"] == "204"
+    # An unknown game has nothing to resume from, and odd game IDs never name a file.
+    assert second.handle({"type": "resume_request", "gameId": "other"})[0]["after"] is None
+    assert second._session("../x")._store is None

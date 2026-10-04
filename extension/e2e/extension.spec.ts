@@ -84,27 +84,42 @@ test("side panel shows the backend status of an open table", async () => {
   await expectPanelRoundTrip(panel);
 });
 
-test("host exits once the last table tab closes", async () => {
+test("host exits once the last table tab closes, after a short grace", async () => {
   const page = await openTable();
   await page.close();
-  await expect.poll(() => harness.hostLog(), { timeout: 10_000 }).toContain("host exiting");
+  await expect.poll(() => harness.hostLog(), { timeout: 30_000 }).toContain("host exiting");
 });
 
-test("a backend that crashes mid-session is relaunched and re-sent the newest rows", async () => {
+test("refreshing the table keeps the same backend, so tonight's state stays", async () => {
+  const page = await openTable();
+  await expect.poll(pageCount).toBe(1);
+  await page.reload();
+  await expect(pillStatus(page)).toHaveText(/^active/);
+  // Within the grace, the refreshed tab finds the backend still running.
+  await page.waitForTimeout(1500);
+  expect(harness.hostStarts()).toBe(1);
+});
+
+test("a backend that crashes mid-session is relaunched and picks the log up where it was", async () => {
   await openTable();
   await expect.poll(pageCount).toBe(1);
+  const newest = harness
+    .logRows()
+    .map((r) => BigInt(r.created_at))
+    .reduce((a, b) => (a > b ? a : b));
 
   const pid = harness.latestHostPid();
   expect(pid).not.toBeNull();
-  const killedAt = Date.now();
+  const before = harness.logRequests().length;
   process.kill(pid as number, "SIGKILL");
 
   await expect.poll(() => harness.hostStarts(), { timeout: 15_000 }).toBe(2);
   const page = harness.context.pages().find((p) => p.url().includes(GAME_ID));
   await expect(pillStatus(page as Page)).toHaveText(/^active/);
-  // No rows arrived after the first page, so only the post-crash resync can explain this.
+  // The new backend read tonight's rows back from disk, so polling resumes after the
+  // newest one instead of starting over from the last page.
   await expect
-    .poll(() => harness.recordedPages().some((p) => p.fetchedAt > killedAt && p.body.logs.length === 2))
+    .poll(() => harness.logRequests().slice(before).includes(`?after_at=${newest}`), { timeout: 15_000 })
     .toBe(true);
 });
 
@@ -281,30 +296,19 @@ test("the action card shows facts on the hero's turn only once the log has caugh
     /^(FOLD|CALL 0\.10 \(0\.5bb\)|RAISE TO \d+\.\d\d \(\d+(\.\d)?bb\)|ALL IN .*)$/,
   );
   await expect(card.locator(".facts")).toHaveText(/^SB · pot 1\.5bb · need 25% · ATo$/);
-  // The card sits at the top of the table, centered just above the pot, clear of every seat.
+  // The card sits at the top of the table, centered just above the pot.
   const pot = await page.locator(".table-pot-size").boundingBox();
-  let box = await card.boundingBox();
-  expect(pot && box && Math.abs(box.y + box.height - (pot.y - 10))).toBeLessThan(2);
-  expect(pot && box && Math.abs(box.x + box.width / 2 - (pot.x + pot.width / 2))).toBeLessThan(2);
-  for (const seat of await page.locator(".table-player").all()) {
-    const s = await seat.boundingBox();
-    expect(s && box && (s.y >= box.y + box.height || s.x >= box.x + box.width || s.x + s.width <= box.x)).toBe(true);
-  }
-  // An empty seat's placeholder at the top (PokerNow draws one for every free seat before a
-  // game fills up) is not a player: the card stays above the pot.
-  await page.evaluate(() =>
-    document
-      .querySelector(".table")
-      ?.insertAdjacentHTML(
-        "beforeend",
-        '<div class="table-player table-player-seat table-player-7" style="position:absolute;left:200px;top:20px;width:700px;height:130px"><button class="table-player-seat-button">Sit</button></div>',
-      ),
-  );
-  await page.waitForTimeout(800);
-  box = await card.boundingBox();
-  expect(pot && box && Math.abs(box.y + box.height - (pot.y - 10))).toBeLessThan(2);
-  await page.evaluate(() => document.querySelector(".table-player-seat")?.remove());
-  // A player sitting at the top sends it to the right, above PokerNow's buttons.
+  const abovePot = async () => {
+    const box = await card.boundingBox();
+    return Boolean(
+      pot &&
+        box &&
+        Math.abs(box.y + box.height - (pot.y - 10)) < 2 &&
+        Math.abs(box.x + box.width / 2 - (pot.x + pot.width / 2)) < 2,
+    );
+  };
+  expect(await abovePot()).toBe(true);
+  // A player sitting at the top does not move it: it stays above the pot, always.
   await page.evaluate(() =>
     document
       .querySelector(".table")
@@ -313,13 +317,8 @@ test("the action card shows facts on the hero's turn only once the log has caugh
         '<div class="table-player table-player-6" style="position:absolute;left:200px;top:20px;width:700px;height:130px"></div>',
       ),
   );
-  const buttons = await page.locator(".game-decisions-ctn").boundingBox();
-  await expect
-    .poll(async () => {
-      box = await card.boundingBox();
-      return Boolean(box && buttons && box.y + box.height <= buttons.y && box.x > 640);
-    })
-    .toBe(true);
+  await page.waitForTimeout(800);
+  expect(await abovePot()).toBe(true);
   await page.evaluate(() => document.querySelector(".table-player-6")?.remove());
   // Every option is shown, the one drawn marked.
   await expect(card.locator(".chip.picked")).toHaveCount(1);

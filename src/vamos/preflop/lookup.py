@@ -222,11 +222,15 @@ def advise(
         for action, freq in zip(actions, column, strict=True):
             mix[action] = mix.get(action, 0.0) + share * float(freq)
     used = [stack for stack, _, _, _ in found]
-    ordered = tuple(sorted(mix.items(), key=lambda m: -m[1]))
+    # Tables are stored rounded to 0.001, so a column can sum to 0.999 or 1.001: rescaled to
+    # exactly 1, so the draw follows the shown rates and never lands on a 0% action.
+    whole = sum(mix.values())
+    ordered = tuple(sorted(((a, f / whole) for a, f in mix.items()), key=lambda m: -m[1]))
     # Sampled once per decision, so the card does not flicker between refreshes.
     roll = random.Random(seed).random()
-    action = ordered[-1][0]
-    for candidate, freq in ordered:
+    playable = [(a, f) for a, f in ordered if f > 0]
+    action = playable[-1][0]
+    for candidate, freq in playable:
         roll -= freq
         if roll < 0:
             action = candidate

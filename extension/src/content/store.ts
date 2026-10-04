@@ -15,6 +15,8 @@ export interface ViewState {
   /** The key of the table at the hero's turn, or null when it is not the hero's turn. */
   turn: string | null;
   facts: Facts | null;
+  /** The action card shown on the table; switched in the side panel. */
+  showCard: boolean;
 }
 
 export interface Store {

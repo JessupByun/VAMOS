@@ -519,6 +519,15 @@ function shortDate(date: string): string {
   return m && month ? `${month} ${Number(m[2])}` : date;
 }
 
+// The profile's headline numbers, in the same order as tonight's where both have them.
+const PROFILE_STATS: [string, string][] = [
+  ["vpip", "VPIP"],
+  ["pfr", "PFR"],
+  ["threeBet", "3-bet"],
+  ["cbet", "C-bet"],
+  ["foldToFlopBet", "Fold to flop bet"],
+];
+
 function ProfileStats({ profile }: { profile: ProfileView }) {
   const { meta, stats, net } = profile;
   const head = [
@@ -526,18 +535,19 @@ function ProfileStats({ profile }: { profile: ProfileView }) {
     typeof meta.sessions === "number" && plural(meta.sessions, "session"),
     meta.last_updated !== undefined && `updated ${shortDate(String(meta.last_updated))}`,
   ].filter(Boolean);
-  const any = stats.vpip || stats.pfr || net;
-  if (!any && head.length === 0) return null;
+  const shown = PROFILE_STATS.filter(([key]) => stats[key]);
+  if (shown.length === 0 && !net && head.length === 0) return null;
   return (
     <div class="group">
       <div class="group-head">
         <span class="label">Profile</span>
         <span class="muted">{head.join(" · ")}</span>
       </div>
-      {any && (
+      {(shown.length > 0 || net) && (
         <div class="statgrid">
-          {stats.vpip && <Stat label="VPIP" value={`${stats.vpip}%`} />}
-          {stats.pfr && <Stat label="PFR" value={`${stats.pfr}%`} />}
+          {shown.map(([key, label]) => (
+            <Stat key={key} label={label} value={`${stats[key]?.pct}%`} count={stats[key]?.count} />
+          ))}
           {net && <Stat label="Net" value={net.total} tone={tone(net.total)} />}
         </div>
       )}
@@ -659,6 +669,43 @@ function PlayersSection({ players }: { players: Players }) {
   );
 }
 
+/** The wordmark's poker chip, edged along the action colors. */
+function Chip() {
+  return (
+    <svg class="chip-mark" viewBox="0 0 24 24" aria-hidden="true">
+      <defs>
+        <linearGradient id="ladder" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="var(--call)" />
+          <stop offset="0.4" stop-color="var(--bet)" />
+          <stop offset="0.7" stop-color="var(--raise)" />
+          <stop offset="1" stop-color="var(--allin)" />
+        </linearGradient>
+      </defs>
+      <circle cx="12" cy="12" r="10" fill="none" stroke="url(#ladder)" stroke-width="3" stroke-dasharray="4.2 3.65" />
+      <circle cx="12" cy="12" r="6" fill="none" stroke="url(#ladder)" stroke-width="1.5" />
+      <text x="12" y="15.6" text-anchor="middle" font-size="9" font-weight="900" fill="currentColor">
+        V
+      </text>
+    </svg>
+  );
+}
+
+/** An on/off switch with its current meaning spelled out under it. */
+function Switch(props: { label: string; on: boolean; hint: string; onChange: (on: boolean) => void }) {
+  const { label, on, hint, onChange } = props;
+  return (
+    <button type="button" class={on ? "switch on" : "switch"} role="switch" aria-checked={on} onClick={() => onChange(!on)}>
+      <span class="track">
+        <span class="knob" />
+      </span>
+      <span class="text">
+        <span class="name">{label}</span>
+        <span class="hint">{hint}</span>
+      </span>
+    </button>
+  );
+}
+
 function Panel() {
   const { status, acks, players, settings, costs, hand } = useWorkerState();
   const requestSnapshot = () => send({ type: "snapshot_request" });
@@ -667,13 +714,32 @@ function Panel() {
   return (
     <main>
       <header class="top">
-        <span class="wordmark">{BRAND}</span>
-        <span class={`state ${status.state}`}>
-          {state}
-          {status.version ? ` · v${status.version}` : ""}
-          {status.recording ? " · recording log pages" : ""}
-          {status.detail ? ` · ${status.detail}` : ""}
-        </span>
+        <div class="brandrow">
+          <Chip />
+          <span class="wordmark">{BRAND}</span>
+          <span class={`state ${status.state}`}>
+            {state}
+            {status.version ? ` · v${status.version}` : ""}
+            {status.recording ? " · recording log pages" : ""}
+            {status.detail ? ` · ${status.detail}` : ""}
+          </span>
+        </div>
+        {settings && (
+          <div class="switches">
+            <Switch
+              label="AI advice"
+              on={settings.aiOn}
+              hint={settings.aiOn ? "Claude answers postflop" : "off: no API calls, facts only"}
+              onChange={(on) => send({ type: "settings", aiOn: on })}
+            />
+            <Switch
+              label="Card on table"
+              on={settings.showCard}
+              hint={settings.showCard ? "shown on your turn" : "hidden"}
+              onChange={(on) => send({ type: "settings", showCard: on })}
+            />
+          </div>
+        )}
       </header>
       {settings && <Dial settings={settings} />}
       {costs && <Spend costs={costs} />}

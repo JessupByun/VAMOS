@@ -137,7 +137,7 @@ describe("log poller", () => {
     poller.stop();
   });
 
-  it("does not let a response to a request made before resync() move the cursor", async () => {
+  it("does not let a response to a request made before resume() move the cursor", async () => {
     server.add(2);
     const poller = startLogPoller("g1", deliver);
     await vi.advanceTimersByTimeAsync(0);
@@ -151,13 +151,30 @@ describe("log poller", () => {
     expect(server.lastQuery()).toContain("after_at=");
 
     server.add(1);
-    poller.resync();
+    poller.resume(null);
     release?.();
     server.respond = null;
     await vi.advanceTimersByTimeAsync(POLL_MS);
 
-    // The next request starts over, so a fresh backend gets the newest page.
+    // The next request starts over, so a backend holding nothing gets the newest page.
     expect(server.lastQuery()).toBe("");
+    poller.stop();
+  });
+
+  it("resumes after the newest row the backend holds, walking back so no row is skipped", async () => {
+    server.add(5);
+    const held = server.rows[0]?.created_at ?? ""; // the newest row, held from before a refresh
+    server.add(PAGE_SIZE + 10); // more rows than one page came in meanwhile
+    const poller = startLogPoller("g1", deliver);
+    // The first request went out before the backend said where to resume; its answer is
+    // dropped, and the next one starts after the held row.
+    poller.resume(held);
+    await vi.advanceTimersByTimeAsync(POLL_MS);
+    expect(server.lastQuery()).toBe(`?after_at=${held}`);
+    for (let i = 0; i < 4; i += 1) await vi.advanceTimersByTimeAsync(POLL_MS);
+    // Every row above the held one was delivered, and none at or below it.
+    const above = server.rows.filter((r) => BigInt(r.created_at) > BigInt(held)).map((r) => r.created_at);
+    expect(deliveredIds()).toEqual(new Set(above));
     poller.stop();
   });
 

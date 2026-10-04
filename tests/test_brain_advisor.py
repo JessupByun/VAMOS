@@ -41,7 +41,7 @@ def rig(tmp_path):
             self.updates: queue.Queue[str] = queue.Queue()
             self.clock = Clock()
             self.provider = FakeProvider(script)
-            self.ledger = Ledger(tmp_path / "costs.jsonl", datetime(2026, 10, 2, 12))
+            self.ledger = Ledger(tmp_path / "costs.jsonl")
             self.advice_log = tmp_path / "advice.jsonl"
             self.advisor = Advisor(
                 self.provider,

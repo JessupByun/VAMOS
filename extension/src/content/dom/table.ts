@@ -48,25 +48,16 @@ function union(parts: Box[]): Box | null {
   return { left, top, width: right - left, height: bottom - top };
 }
 
-// VAMOS's own badges hang just under each seat.
-const BADGE_HEIGHT = 26;
-
 // Where the pot was last seen, for this window size: between hands it can be empty or gone,
 // and the card should not jump around the screen when it is.
 let lastCenter: { viewport: string; box: Box } | null = null;
 
 /**
- * What the action card must keep clear of, and what it sits next to. Containers are
- * measured with their descendants: PokerNow positions many parts absolutely (hole cards,
- * the pot's "total" pill, the "Check or Fold" button above the action row), and a
+ * Where the action card goes: just above the pot. Containers are measured with their
+ * descendants, since PokerNow positions parts absolutely (the pot's "total" pill) and a
  * container's own box leaves those out.
  */
 export function readLayout(root: ParentNode): Layout {
-  // Taken seats only: before a game fills up, PokerNow draws every empty seat as a
-  // ".table-player-seat" placeholder with a Sit button, which the card may cover (it never
-  // takes clicks).
-  const seats = boxes(root, ".table-player:not(.table-player-seat)");
-  const decisions = union(boxes(root, "p.action-signal, .game-decisions-ctn, .game-decisions-ctn *"));
   const pot = union(boxes(root, ".table-pot-size, .table-pot-size *"));
   const board = union(boxes(root, ".table-cards, .table-cards *"));
   const viewport = `${window.innerWidth}x${window.innerHeight}`;
@@ -81,16 +72,6 @@ export function readLayout(root: ParentNode): Layout {
   return {
     viewport: { width: window.innerWidth, height: window.innerHeight },
     center: pot ?? remembered ?? board ?? expected,
-    decisions,
-    obstacles: [
-      ...seats,
-      ...boxes(
-        root,
-        ".table-player:not(.table-player-seat) .card-container, .table-player-bet-value, .dealer-button-ctn, .dealer-button-ctn *",
-      ),
-      ...[pot, board, decisions].filter((b) => b !== null),
-    ],
-    soft: seats.map((b) => ({ left: b.left, top: b.top + b.height, width: b.width, height: BADGE_HEIGHT })),
   };
 }
 

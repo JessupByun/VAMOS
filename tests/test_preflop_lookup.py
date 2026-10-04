@@ -153,3 +153,17 @@ def test_exactly_on_a_solved_depth_the_neighbor_covers_a_spot_its_own_table_does
     shallow.spots[()].strategy[:, INDEX["72o"]] = [1, 0, 0, 0]
     advice = advise([shallow, deep, deeper], [], "SB", ("7h", "2c"), depth=50, seed="z")
     assert advice is not None and advice.mix[0] == ("fold", 1.0) and advice.depths == (20,)
+
+
+def test_a_column_rounded_short_of_one_never_draws_a_zero_percent_action():
+    # Stored to 0.001, AA's column here sums to 0.999 with a 0% "call" sorted last: the
+    # missing 0.001 must not fall to it.
+    table = heads_up_table(50)
+    table.spots[()].strategy[:, INDEX["AA"]] = [0, 0, 0.826, 0.173]
+    drawn = {
+        advise([table], [], "SB", ("As", "Ad"), depth=50, seed=f"h{i}:0:2").action
+        for i in range(5000)
+    }
+    assert drawn == {"raise 2.5", "raise 3"}
+    mix = dict(advise([table], [], "SB", ("As", "Ad"), depth=50, seed="x").mix)
+    assert sum(mix.values()) == pytest.approx(1.0)

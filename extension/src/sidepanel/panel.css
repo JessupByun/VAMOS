@@ -1,8 +1,8 @@
 /* Calm by default: everything is neutral except what an action says, colored along the
    rainbow by how much money it puts in (orange-red fold, yellow call, blue bet, purple raise,
    pink all in; a check puts in nothing and stays neutral). Where advice came from is told
-   by its label. Status (active, warnings, won or lost) keeps its own green, yellow and red;
-   orange is only the wordmark. The card on the table uses the same colors. */
+   by its label. Status (active, switches on, warnings, won or lost) keeps its own green,
+   yellow and red. The card on the table uses the same colors. */
 :root {
   color-scheme: light dark;
   --bg: #f4f5f7;
@@ -11,7 +11,6 @@
   --fg: #16181c;
   --muted: #5f646d;
   --soft: rgba(20, 22, 26, 0.05);
-  --brand: #d9783a;
   --fold: #9c3412;
   --call: #5c5400;
   --bet: #184f9e;
@@ -30,7 +29,6 @@
     --fg: #eef0f3;
     --muted: #9aa0a9;
     --soft: rgba(255, 255, 255, 0.05);
-    --brand: #f0a46c;
     --fold: #ef8a5e;
     --call: #d8cf6e;
     --bet: #7fb0f0;
@@ -56,18 +54,113 @@ main {
   padding: 12px;
 }
 
+/* The header: the wordmark in the action colors (the one flourish), the backend's state,
+   and the two switches. */
 .top {
+  padding: 4px 4px 2px;
+}
+
+.brandrow {
   display: flex;
-  gap: 10px;
-  align-items: baseline;
-  padding: 2px 4px 4px;
+  gap: 8px;
+  align-items: center;
+}
+
+.chip-mark {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  color: var(--fg);
 }
 
 .wordmark {
-  font-size: 15px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  color: var(--brand);
+  font-size: 21px;
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: 0.05em;
+  line-height: 1;
+  background: linear-gradient(90deg, var(--call), var(--bet) 40%, var(--raise) 70%, var(--allin));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.brandrow .state {
+  margin-left: auto;
+}
+
+.switches {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+button.switch {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  padding: 7px 10px;
+  border-radius: 10px;
+  text-align: left;
+  color: var(--fg);
+  background: var(--card);
+  border: 1px solid var(--border);
+}
+
+button.switch:hover {
+  border-color: var(--muted);
+}
+
+.switch .track {
+  position: relative;
+  flex: none;
+  width: 30px;
+  height: 17px;
+  border-radius: 999px;
+  background: var(--soft);
+  border: 1px solid var(--border);
+  transition: background 0.15s;
+}
+
+.switch .knob {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform 0.15s, background 0.15s;
+}
+
+.switch.on .track {
+  background: var(--ok);
+  border-color: var(--ok);
+}
+
+.switch.on .knob {
+  transform: translateX(13px);
+  background: var(--card);
+}
+
+.switch .text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.switch .name {
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.switch .hint {
+  overflow: hidden;
+  font-size: 10.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--muted);
 }
 
 .state {
