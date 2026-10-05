@@ -38,6 +38,22 @@ def test_checked_to_the_hero():
     assert (s.pot, s.to_call, s.price, s.min_raise, s.behind) == (180, 0, 0, 20, 940)
 
 
+def test_the_big_blind_option_is_a_raise():
+    rows = [
+        f"-- starting hand #5 (id: h5)  No Limit Texas Hold'em (dealer: {P[V1]}) --",
+        f"Player stacks: #1 {P[V1]} (10.00) | #2 {P[HERO]} (10.00)",
+        "Your hand is 7♣, 6♦",
+        f"{P[V1]} posts a small blind of 0.10",
+        f"{P[HERO]} posts a big blind of 0.20",
+        f"{P[V1]} calls 0.20",
+    ]
+    h = build_hands((100 + i, line) for i, line in enumerate(rows)).hands[-1]
+    spot = decision(h, HERO)
+    assert legal(h, HERO, spot) == ["check", "raise", "allin"]
+    facts = claude_facts(h, HERO, spot, {}, {V1: "Player A"})
+    assert (facts["min_raise_to_bb"], "min_bet_bb" in facts) == (2.0, False)
+
+
 def test_facing_a_bet():
     h, spot = hand(DEEP, *FLOP, f"{P[V1]} bets 0.80", f"{P[V2]} folds")
     assert legal(h, HERO, spot) == ["fold", "call", "raise", "allin"]

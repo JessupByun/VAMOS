@@ -29,10 +29,16 @@ def brute_heads_up(hero, board, rng):
 
 
 def test_aces_against_kings_preflop():
-    # Known result for AA vs KK with no shared suits: about 82%.
+    # Exact for As Ad against Kh Kc, enumerated over all 1,712,304 boards: 81.2555%.
     result = equity(("As", "Ad"), (), [{("Kh", "Kc"): 1.0}])
-    assert result.value == pytest.approx(0.82, abs=0.01)
+    assert result.value == pytest.approx(0.812555, abs=4 * result.stderr)
     assert result.method == "monte carlo"
+
+
+def test_sampling_is_repeatable_for_a_seed():
+    spot = (("As", "Ad"), (), [{("Kh", "Kc"): 1.0, ("Qd", "Qc"): 0.5}])
+    assert equity(*spot).value == equity(*spot).value
+    assert equity(*spot, seed=1).value != equity(*spot).value
 
 
 def test_weights_are_honored_unlike_eval7s_own_helpers():

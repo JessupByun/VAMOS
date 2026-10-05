@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from itertools import combinations
 
 import eval7
+import eval7.xorshift_rand
 import numpy as np
 
 type Combo = tuple[str, str]
@@ -71,11 +72,14 @@ def _exact_heads_up(hero: Sequence[str], board: Sequence[str], rng: Range) -> Eq
 
 
 def _sampled_heads_up(
-    hero: Sequence[str], board: Sequence[str], rng: Range, samples: int
+    hero: Sequence[str], board: Sequence[str], rng: Range, samples: int, seed: int
 ) -> Equity:
     live = _live(rng, set(hero) | set(board))
     if not live:
         raise ValueError("no live combos in the opponent's range")
+    # eval7 seeds itself from the clock; a fixed seed gives the same spot the same number.
+    # Its xorshift state must not be zero (that state never changes and the sampler hangs).
+    eval7.xorshift_rand.seed(random.Random(seed).getrandbits(62) | 1)
     groups: dict[float, list[Combo]] = defaultdict(list)
     for combo, weight in live.items():
         groups[weight].append(combo)
@@ -152,4 +156,4 @@ def equity(
         return _sampled_multiway(hero, board, ranges, samples or MULTIWAY_SAMPLES, seed)
     if len(board) >= 4:
         return _exact_heads_up(hero, board, ranges[0])
-    return _sampled_heads_up(hero, board, ranges[0], samples or HEADS_UP_SAMPLES)
+    return _sampled_heads_up(hero, board, ranges[0], samples or HEADS_UP_SAMPLES, seed)

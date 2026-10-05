@@ -60,7 +60,7 @@ def test_the_strongest_hands_raise_at_a_standard_size():
         "deviation": False,
     }
     assert advise(["Your hand is A♠, Q♦", *THREE], "A", "ABC")["action"] == "RAISE TO 60 (3bb)"
-    # Over a limp the big blind isolates to 4bb (nothing is owed, so it is a bet here).
+    # Over a limp the big blind isolates to 4bb.
     limped = ["Your hand is A♠, A♦", *THREE, f"{P['A']} calls 20", f"{P['B']} folds"]
     assert advise(limped, "C", "ABC")["action"] == "RAISE TO 80 (4bb)"
 

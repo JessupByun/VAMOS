@@ -2,12 +2,24 @@ import json
 
 import pytest
 
+from vamos.brain.advisor import describe
 from vamos.brain.answer import BadAnswer, Choice, Spot, settle
 
 # Facing a 0.40 bet into 1.20 (pot 1.60 with the bet), 9.40 behind, blinds 0.10/0.20.
 FACING = Spot(pot=160, to_call=40, street_bet=0, price=40, min_raise=40, behind=940, big_blind=20)
 # Checked to us: pot 1.20, nothing to call.
 CHECKED = Spot(pot=120, to_call=0, street_bet=0, price=0, min_raise=20, behind=940, big_blind=20)
+# Limped to the big blind: pot 0.40, the big blind's 0.20 already in.
+BB_OPTION = Spot(
+    pot=40,
+    to_call=0,
+    street_bet=20,
+    price=20,
+    min_raise=20,
+    behind=980,
+    big_blind=20,
+    legal=("check", "raise", "allin"),
+)
 
 
 def answer(*rows, note="ok", plan=""):
@@ -38,7 +50,7 @@ def test_illegal_actions_are_dropped_and_frequencies_renormalized():
     ]
 
 
-def test_to_bb_sizes_a_raise_and_a_raise_with_nothing_owed_is_a_bet():
+def test_to_bb_sizes_a_raise_and_a_raise_with_no_bet_standing_is_a_bet():
     def rows(*items):
         return json.dumps(
             {
@@ -54,6 +66,10 @@ def test_to_bb_sizes_a_raise_and_a_raise_with_nothing_owed_is_a_bet():
     assert (raised.action, raised.to) == ("raise", 6 * FACING.big_blind)
     bet = settle(rows(("raise", 2)), CHECKED, "n").chosen
     assert (bet.action, bet.to) == ("bet", 2 * CHECKED.big_blind)
+    # The big blind's option: nothing owed, but going over the big blind is a raise.
+    option = settle(rows(("bet", 3.5)), BB_OPTION, "n").chosen
+    assert (option.action, option.to) == ("raise", 70)
+    assert describe(option, BB_OPTION) == "RAISE TO 0.70 (3.5bb)"
     # More than the stack is all in.
     assert settle(rows(("raise", 500)), FACING, "n").chosen.action == "allin"
 

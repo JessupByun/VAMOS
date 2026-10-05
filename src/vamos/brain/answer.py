@@ -101,11 +101,11 @@ def _all_in(spot: Spot) -> Cents:
 def _legal(spot: Spot, action: str, pct: float, to_bb: float = 0.0) -> Choice | None:
     if action == "allin" and "allin" not in spot.legal and "call" in spot.legal:
         action = "call"  # with raising closed, the most Hero can put in is a call
-    # A bet and a raise are the same move; which one depends on whether a bet is faced (the
-    # big blind's raise over limpers is a bet here, as nothing is owed).
-    if action == "raise" and spot.to_call == 0:
+    # A bet and a raise are the same move: a raise once a bet stands on this street, even
+    # with nothing owed (the big blind's option over limpers).
+    if action == "raise" and spot.price == 0:
         action = "bet"
-    elif action == "bet" and spot.to_call > 0:
+    elif action == "bet" and spot.price > 0:
         action = "raise"
     if action not in spot.legal:
         return None
@@ -122,13 +122,9 @@ def _legal(spot: Spot, action: str, pct: float, to_bb: float = 0.0) -> Choice | 
         return None  # nothing left to bet or raise with
     share = max(pct, 0) / 100
     if action == "bet":
-        if spot.price > spot.street_bet:
-            return None
-        lowest = spot.street_bet + spot.big_blind
-        to = spot.street_bet + round(share * spot.pot)
+        lowest = spot.big_blind
+        to = round(share * spot.pot)
     else:
-        if spot.to_call == 0:
-            return None
         lowest = spot.price + spot.min_raise
         to = spot.price + round(share * (spot.pot + spot.to_call))
     if to_bb > 0:

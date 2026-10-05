@@ -50,7 +50,13 @@ def legal(hand: Hand, hero: str, spot: Decision) -> list[str]:
         # Short of a full raise, the only raise PokerNow offers is all in.
         full = hand.street_bets.get(hero, 0) + spot.behind >= hand.price + hand.min_raise
         return ["fold", "call", "raise", "allin"] if full else ["fold", "call", "allin"]
-    return ["check"] + (["bet", "allin"] if can_wager else [])
+    if not can_wager:
+        return ["check"]
+    if hand.price == 0:
+        return ["check", "bet", "allin"]
+    # Nothing owed but a bet stands: the big blind's option, where putting more in is a raise.
+    full = hand.street_bets.get(hero, 0) + spot.behind >= hand.price + hand.min_raise
+    return ["check", "raise", "allin"] if full else ["check", "allin"]
 
 
 def _bet_faced(hand: Hand, hero: str, labels: dict[str, str]) -> dict | None:
