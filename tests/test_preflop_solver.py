@@ -63,7 +63,7 @@ def test_push_fold_matches_holdem_resources(stack):
 
 @pytest.mark.corpus
 @pytest.mark.skipif(not HRC.exists(), reason="run scripts/fetch_hrc_pushfold.py")
-@pytest.mark.parametrize("stack", range(2, 16))
+@pytest.mark.parametrize("stack", range(2, 11))
 def test_the_shipped_charts_are_worth_what_holdem_resources_is(stack):
     # The committed tables, not a fresh solve: the small blind's value with both players on
     # the shipped chart equals its value with both on HRC's published one.

@@ -5,7 +5,7 @@ What answers each preflop decision, what each part approximates, and how it was 
 ## At the table
 
 At the hero's preflop turn (`engine/advice.py`), in order:
-- Heads-up at 15bb or less effective (the smaller start-of-hand stack): the push/fold chart, labeled `Preflop chart` on the card.
+- Heads-up at 10bb or less effective (the smaller start-of-hand stack): the push/fold chart, labeled `Preflop chart` on the card.
 - Otherwise the rules in `engine/preflop_rules.py`, labeled `Preflop rule`: trash folds (or checks when free) and the strongest hands raise at a standard size.
 - Everything else goes to Claude (`VAMOS! AI (Claude Opus 5.5 · low)` on the card), or shows only the facts when the AI switch is off.
 
@@ -42,11 +42,11 @@ The saved games are pruned after 3 days, so each run measures a different window
 
 ## Push/fold chart
 
-- Nash for the heads-up game where the small blind may only jam or fold and the big blind may only call or fold, solved by discounted CFR over the 169 hand classes with exact card removal (`preflop/solver.py`, `preflop/payoffs.py`, `preflop/matchups.py`), one table per whole big blind from 2 to 15bb (`preflop/tables/`).
+- Nash for the heads-up game where the small blind may only jam or fold and the big blind may only call or fold, solved by discounted CFR over the 169 hand classes with exact card removal (`preflop/solver.py`, `preflop/payoffs.py`, `preflop/matchups.py`), one table per whole big blind from 2 to 10bb (`preflop/tables/`).
 - It answers only the small blind's first action and the big blind facing a jam.
   A limp, a raise well under half the effective stack (a min-raise at 6bb or deeper) and every later decision go to the rules or Claude; at 5bb or less a 2bb min-raise is read as the jam.
 - Approximations:
-  - The full game also lets the small blind limp and min-raise; HoldemResources recommends pure push/fold only up to about 10bb, and at 11-15bb the chart folds 46-54% of small-blind hands, many of which a full strategy would limp instead.
+  - The full game also lets the small blind limp and min-raise; the chart stops at 10bb, the limit HoldemResources recommends for pure push/fold (until 2026-10-05 it ran to 15bb, where it folded 46-54% of small-blind hands that a full strategy would partly limp). Deeper, the rules or Claude decide.
   - It plays Nash and ignores the profiles: against a player who jams or calls far wider or tighter than Nash, a best response would gain more.
   - Between whole depths the mix is blended in log of the stack, so hands at the jam/fold threshold show mixes that are blending artifacts (for example 49% jam at 9.5bb for a hand HoldemResources always jams); the cost is under 2 mbb a hand from 5.5bb and about 8 at 2.5bb.
   - A raise that is not all in, to about half the effective stack or more, counts as the jam (the raiser is committed), so the big blind's answer is then CALL; exactly on a solved depth n the next table down is tried too, which lowers the cutoff to (n-1)/2bb (40% of the stack at 5bb).
@@ -55,7 +55,7 @@ The saved games are pruned after 3 days, so each run measures a different window
 ## Checks
 
 - A fresh solve matches HoldemResources' published Nash solution at 15 depths from 2 to 25bb: every hand played differently is one both treat as a near coin flip (within 0.001bb), and the check fails if card removal is dropped or equities shift half a point (`tests/test_preflop_solver.py`; run `uv run python scripts/fetch_hrc_pushfold.py` first).
-- The committed tables are worth what HoldemResources' strategy is: the small blind's value with both players on each shipped table equals its value on HoldemResources' at every depth from 2 to 15bb, within 0.0001bb (same file).
+- The committed tables are worth what HoldemResources' strategy is: the small blind's value with both players on each shipped table equals its value on HoldemResources' at every depth from 2 to 10bb, within 0.0001bb (same file).
   Hands played differently from HoldemResources are within about 0.008bb between their two actions; the shipped tables stopped after 100 iterations at 0.004-0.014 mbb of exploitability (0.5 mbb is only the generator's stopping target).
 - Every committed table's exploitability is recomputed from its strategies and is under 0.5 mbb a hand, aces never fold, and each file matches the SHA-256 in `manifest.json` (`tests/test_preflop_tables.py`).
 - The rules are checked spot by spot in `tests/test_engine_advice.py`, each fix with a test that fails on the code before it.

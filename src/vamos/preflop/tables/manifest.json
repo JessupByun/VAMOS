@@ -7,41 +7,6 @@
    "seconds": 0,
    "sha256": "3a192a081d47fe8b1356da0c11c6eaf3984c53a2b629013f0e76d7c4a19e905b"
   },
-  "pushfold-2p-11bb.json.gz": {
-   "ev_sum_bb": -0.0,
-   "iterations": 100,
-   "nash_conv_mbb": 0.011,
-   "seconds": 0,
-   "sha256": "4300a16058dc715a37b561cec775f4e2fa1bd62e2a73615bfa1719b3fdf22a65"
-  },
-  "pushfold-2p-12bb.json.gz": {
-   "ev_sum_bb": -0.0,
-   "iterations": 100,
-   "nash_conv_mbb": 0.008,
-   "seconds": 0,
-   "sha256": "10015176f1921ad5ca867c4d9ef61a1bc9bb328e3ff82088ab0f79eba49235bd"
-  },
-  "pushfold-2p-13bb.json.gz": {
-   "ev_sum_bb": -0.0,
-   "iterations": 100,
-   "nash_conv_mbb": 0.012,
-   "seconds": 0,
-   "sha256": "bc4199e97e4237abb60289b1686ed3b0465eec2beee4cafdfc5fcdd71eee7c12"
-  },
-  "pushfold-2p-14bb.json.gz": {
-   "ev_sum_bb": 0.0,
-   "iterations": 100,
-   "nash_conv_mbb": 0.011,
-   "seconds": 0,
-   "sha256": "e167b2d3145c21835c0083027d687f6ab3b9f7fc191cb032ecc4527a96fb1d3f"
-  },
-  "pushfold-2p-15bb.json.gz": {
-   "ev_sum_bb": 0.0,
-   "iterations": 100,
-   "nash_conv_mbb": 0.012,
-   "seconds": 0,
-   "sha256": "68b1f0328e4050864ae8b334bc114641e15641cc277107a4969e30b091673ba4"
-  },
   "pushfold-2p-2bb.json.gz": {
    "ev_sum_bb": 0.0,
    "iterations": 100,

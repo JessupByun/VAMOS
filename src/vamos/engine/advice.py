@@ -1,7 +1,7 @@
 """
-Preflop advice that needs no Claude call: heads-up at 15bb or less the push/fold chart
+Preflop advice that needs no Claude call: heads-up at 10bb or less the push/fold chart
 (Nash for the game where the small blind may only jam or fold, matching HoldemResources'
-published solution; above about 10bb the full game also limps and min-raises), otherwise
+published solution; deeper, the full game also limps and min-raises), otherwise
 the rules in preflop_rules (trash folds, the strongest hands raise). None means nothing
 here covers the spot, and Claude decides; postflop Claude always decides. The home-built
 full-depth tables were retired on 2026-10-05 (docs/preflop.md).
@@ -16,7 +16,9 @@ from vamos.log.hands import Hand, Street
 from vamos.preflop import lookup, tables
 from vamos.preflop.lookup import Table
 
-PUSH_FOLD_MAX = 15.0  # at or below this effective stack, the push/fold tables apply
+# At or below this effective stack the push/fold chart applies: HoldemResources recommends
+# pure push/fold only up to about 10bb.
+PUSH_FOLD_MAX = 10.0
 SOURCE = "Chart"
 
 

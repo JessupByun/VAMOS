@@ -220,3 +220,11 @@ def test_a_min_raise_from_a_short_stack_is_read_as_the_jam():
     min_raise = ["Your hand is K♠, 2♦", *HU, f"{P['A']} raises to 40"]
     advice = advise(min_raise, "B", stacks=(80, 80))
     assert (advice["source"], advice["action"]) == ("Chart", "CALL 20 (1bb)")
+
+
+def test_the_chart_stops_at_10bb():
+    # At 10bb the shipped chart answers the small blind; at 12bb a full strategy limps and
+    # min-raises too, so K5o (no rule covers it) goes to Claude.
+    first_in = ["Your hand is K♠, 5♦", *HU]
+    assert advise(first_in, "A", stacks=(200, 200))["source"] == "Chart"
+    assert advise(first_in, "A", stacks=(240, 240)) is None

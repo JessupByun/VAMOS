@@ -1,5 +1,5 @@
 """
-Solve the heads-up push/fold chart at 2-15bb and write src/vamos/preflop/tables/ with its
+Solve the heads-up push/fold chart at 2-10bb and write src/vamos/preflop/tables/ with its
 manifest (see vamos.preflop.tables). Each solve runs until its NashConv (exploitability) is
 under the target or the iteration cap is reached; both are recorded in the file's
 provenance and in the manifest.
@@ -20,7 +20,7 @@ from vamos.preflop.tables import DIR, MANIFEST, digest, encode, file_name
 from vamos.preflop.tree import PUSH_FOLD, build
 
 MENU = "pushfold"
-DEPTHS = tuple(range(2, 16))
+DEPTHS = tuple(range(2, 11))
 TARGET = 0.5  # NashConv in mbb/hand
 CAP = 4000  # iterations
 CHECK_EVERY = 100
