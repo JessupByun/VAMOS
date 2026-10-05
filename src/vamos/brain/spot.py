@@ -1,12 +1,12 @@
 """
-The hero's postflop decision in the terms Claude is asked about and its answer is checked
-against: the betting state, the actions the rules allow, and the facts sent with the hand.
+The hero's decision in the terms Claude is asked about and its answer is checked against:
+the betting state, the actions the rules allow, and the facts sent with the hand.
 """
 
 from vamos.brain.answer import Spot
 from vamos.engine.madehand import improving_cards
 from vamos.engine.state import VOLUNTARY, Decision, seat_order
-from vamos.log.hands import Hand
+from vamos.log.hands import Hand, Street
 
 
 def _behind(hand: Hand, player: str) -> int:
@@ -116,13 +116,17 @@ def claude_facts(hand: Hand, hero: str, spot: Decision, card: dict, labels: dict
         "effective_stack_bb": round(effective / bb, 2),
         "hero_acts_last": _acts_last(hand, hero),
         "hero_hand": card.get("madeHand"),
-        # Exact, so Claude never counts outs itself; empty means no such draw.
-        "next_card_improves_hero_to": {
-            made: {"count": len(cards), "cards": cards}
-            for made, cards in improving_cards(spot.hero_cards, spot.board).items()
-        },
         "opponents_in_hand": len(spot.opponents),
     }
+    if spot.street == Street.PREFLOP:
+        # Preflop "acts last" means after the flop: the blinds act last now, first later.
+        facts["hero_in_position_after_flop"] = facts.pop("hero_acts_last")
+    else:
+        # Exact, so Claude never counts outs itself; empty means no such draw.
+        facts["next_card_improves_hero_to"] = {
+            made: {"count": len(cards), "cards": cards}
+            for made, cards in improving_cards(spot.hero_cards, spot.board).items()
+        }
     faced = _bet_faced(hand, hero, labels) if spot.to_call > 0 else None
     if faced:
         facts["bet_faced"] = faced

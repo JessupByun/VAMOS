@@ -2,7 +2,7 @@
 
 VAMOS (PAIv2) is a real-time poker assistant for PokerNow NLH cash games: a Chrome MV3 extension reads the table, a local Python backend (launched by Chrome native messaging) does the math, and Claude gives postflop advice with the user's opponent profiles in context.
 The approved plan, with every design decision and the phase list, is in `~/.claude/plans/im-starting-a-new-ticklish-yao.md`.
-Current phase: P3 (the postflop brain; P0 to P2 are done, and preflop is frozen as good enough).
+Current phase: P3 (Claude decides postflop and the close preflop spots; P0 to P2 are done).
 
 ## Commands
 
@@ -32,7 +32,7 @@ After a rebuild, reload VAMOS in `chrome://extensions` and then reload the Poker
 - `src/vamos/engine/` live decision facts: equity, decision state and turn order, made-hand text, the action card's facts.
 - `src/vamos/brain/` Claude's postflop advice: `pseudonyms.py` (names never reach the API), `prompt.py` (a short role plus the profiles as the cached prefix, then the hand as JSON; deliberately no strategy guide, Claude's own judgment does the rest), `provider.py` (streaming calls), `advisor.py` (background calls, deadline, stale-node cancel), `answer.py` (schema and legal sizing), `spot.py` (legal actions), `costs.py` (ledger in `data/costs.jsonl`).
 - `src/vamos/session.py` one game: the live log rows, the hands rebuilt from them, and tonight's read per player (`reads()`), which goes to Claude with each opponent and to the side panel. The rows are appended to `data/games/<game>.jsonl` (pruned after 3 days), so a restarted backend picks the night up where it was; on (re)start the content script asks the backend where to resume (`resume_request`) and the poller walks back to that row; when the backend holds nothing of the game, the poller walks the whole log back to the game's start with `before_at`, in turns with the live polls.
-- `src/vamos/preflop/` the home-built preflop solver and its generated tables in `data/` (committed); `docs/preflop.md` lists every approximation with its measured size. Read it before changing the solver.
+- `src/vamos/preflop/` the home-built preflop solver; only its heads-up push/fold tables (`preflop/tables/`, committed) are still used, the rest were retired after an audit. `src/vamos/engine/preflop_rules.py` answers clear preflop spots (trash folds, the strongest hands raise); everything else goes to Claude. `docs/preflop.md` lists every approximation; read it before changing either.
 - `docs/pokernow.md` verified facts about PokerNow's log endpoint, log lines and DOM; `docs/log-grammar.md` the full line grammar with evidence. Read both before touching parsing or DOM code.
 - `tests/` pytest suite, one test file per module.
 - `profiles/` the user's opponent profiles, gitignored except `_TEMPLATE.md` and `_PROMPT.md`.
@@ -59,7 +59,7 @@ After a rebuild, reload VAMOS in `chrome://extensions` and then reload the Poker
 - DOM seat classes (`table-player-N`) are hero-relative positions, not physical seats; join DOM to log by player ID (`/players/<id>` link).
 - Respect PokerNow's rate limit (about one log request per 2s per IP): back off on 429/503, never add parallel pollers.
 - Never advise on stale state: advice is stamped with its decision node and only shown while that node is current.
-- Every piece of advice shows its source on the card: `Preflop chart` (rule-based), `VAMOS! AI (Claude Opus 5.5 · low)` (postflop, always naming the model and effort), and plain `VAMOS!` while the hand is being read; the word "Math" is not used. Fallbacks are never silent: a failed AI call says why on the card.
+- Every piece of advice shows its source on the card: `Preflop chart` (heads-up push/fold), `Preflop rule` (a clear fold, check or raise), `VAMOS! AI (Claude Opus 5.5 · low)` (Claude, before or after the flop, always naming the model and effort), and plain `VAMOS!` while the hand is being read; the word "Math" is not used. Fallbacks are never silent: a failed AI call says why on the card.
 - Colors stay calm: only what an action says is colored, along the rainbow by how much money it puts in (orange-red fold, yellow call, blue bet, purple raise, pink all in; check stays neutral), and only on the action and the option drawn. Where advice came from is told by its label, never a color. Status (connection, warnings, errors, won or lost) keeps its own green, yellow and red; orange is only the wordmark. The card (`overlay.css`) and the side panel (`panel.css`) define the same tokens.
 - "Ask deeper" adds its answer under the first one in the side panel; an earlier answer for the same decision is never replaced. A backend error on a spot shows on the card instead of "reading the hand...".
 - Prompts use pseudonyms; no real name, alias or PokerNow nickname may reach the API.

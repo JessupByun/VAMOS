@@ -63,41 +63,6 @@ def played(strategy: np.ndarray, actions: tuple[str, ...], reach: np.ndarray) ->
     return float((reach * (1 - folds)).sum() / reach.sum())
 
 
-@pytest.mark.parametrize("players", [3, 4])
-def test_fewer_players_behind_play_more_hands(players):
-    for table in load_all()[("standard", players)]:
-        path: tuple[str, ...] = ()
-        shares = []
-        while path in table.spots and table.spots[path].position != "BB":
-            spot = table.spots[path]
-            shares.append(played(spot.strategy, spot.actions, PRIOR))
-            path = (*path, f"{spot.position}:fold")
-        assert shares == sorted(shares), (players, table.stack, shares)
-
-
-def test_fewer_hands_continue_against_a_three_bet_than_defend_an_open():
-    for table in load_all()[("standard", 2)]:
-        root = table.spots[()]
-        opened = PRIOR * root.strategy[root.actions.index("raise 3")]
-        defend = table.spots[("SB:raise 3",)]
-        defending = played(defend.strategy, defend.actions, PRIOR) * PRIOR.sum()
-        three_bet = next(a for a in defend.actions if a.startswith("raise"))
-        facing = table.spots.get(("SB:raise 3", f"BB:{three_bet}"))
-        if facing is None:
-            continue
-        continuing = played(facing.strategy, facing.actions, opened) * opened.sum()
-        assert continuing < defending, table.stack
-
-
-def test_a_bigger_open_is_defended_less():
-    for table in load_all()[("standard", 2)]:
-        small = table.spots[("SB:raise 2.5",)]
-        big = table.spots[("SB:raise 3",)]
-        assert played(big.strategy, big.actions, PRIOR) <= played(
-            small.strategy, small.actions, PRIOR
-        ), table.stack
-
-
 def test_the_main_lines_are_learned():
     # Every hand at the first decision and at the answer to each first action was learned;
     # deeper spots nobody reaches give no advice.

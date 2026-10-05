@@ -1,7 +1,8 @@
 """
 Solve the preflop baseline and write src/vamos/preflop/tables/ (see vamos.preflop.tables).
 
-Full trees at 20-150bb and push/fold at 2-15bb, for 4, 3 and 2 players. Each solve runs
+By default heads-up push/fold at 2-15bb, the only tables committed; full trees at
+20-150bb and 3-4 players can be named on the command line. Each solve runs
 until its NashConv (exploitability, heads-up) is under the target or the iteration cap is
 reached; both are recorded in the file's provenance and in the manifest.
 Run: uv run python scripts/gen_preflop_tables.py [players ...] [standard|pushfold]
@@ -74,8 +75,10 @@ def main() -> None:
     # threads and the machine ends up oversubscribed many times over.
     for var in ("VECLIB_MAXIMUM_THREADS", "OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS"):
         os.environ.setdefault(var, "2")
-    players = [int(a) for a in sys.argv[1:] if a.isdigit()] or [4, 3, 2]
-    menus = [a for a in sys.argv[1:] if not a.isdigit()] or ["standard", "pushfold"]
+    # Only heads-up push/fold is committed (it matches HoldemResources' Nash); the other
+    # tables were retired on 2026-10-05 and can still be solved by naming them.
+    players = [int(a) for a in sys.argv[1:] if a.isdigit()] or [2]
+    menus = [a for a in sys.argv[1:] if not a.isdigit()] or ["pushfold"]
     jobs = []
     if "standard" in menus:
         jobs += [("standard", p, float(d)) for p in players for d in DEPTHS]

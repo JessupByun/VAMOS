@@ -27,11 +27,35 @@ def test_a_pure_call():
 
 
 def test_illegal_actions_are_dropped_and_frequencies_renormalized():
-    # Checking is not possible facing a bet; betting is not possible either.
+    # Checking is not possible facing a bet; a bet facing one is read as a raise.
     a = settle(
         answer(("check", 0, 0.5), ("bet", 50, 0.2), ("call", 0, 0.2), ("fold", 0, 0.1)), FACING, "n"
     )
-    assert [(c.action, round(c.freq, 3)) for c in a.mix] == [("call", 0.667), ("fold", 0.333)]
+    assert [(c.action, round(c.freq, 3)) for c in a.mix] == [
+        ("raise", 0.4),
+        ("call", 0.4),
+        ("fold", 0.2),
+    ]
+
+
+def test_to_bb_sizes_a_raise_and_a_raise_with_nothing_owed_is_a_bet():
+    def rows(*items):
+        return json.dumps(
+            {
+                "reason": "ok",
+                "strategy": [
+                    {"action": a, "to_bb": t, "size_pct_pot": 0, "freq": 1} for a, t in items
+                ],
+                "plan": "",
+            }
+        )
+
+    raised = settle(rows(("raise", 6)), FACING, "n").chosen
+    assert (raised.action, raised.to) == ("raise", 6 * FACING.big_blind)
+    bet = settle(rows(("raise", 2)), CHECKED, "n").chosen
+    assert (bet.action, bet.to) == ("bet", 2 * CHECKED.big_blind)
+    # More than the stack is all in.
+    assert settle(rows(("raise", 500)), FACING, "n").chosen.action == "allin"
 
 
 def test_bet_and_raise_sizes_are_pot_relative():

@@ -1,14 +1,16 @@
 """
-Claude's postflop answer: the fixed JSON shape it must return, and how that becomes one
-legal action on the card.
+Claude's answer, before or after the flop: the fixed JSON shape it must return, and how
+that becomes one legal action on the card.
 
 The reason comes first in the schema, so the model states what decides the spot before
-it picks the action; the plan for the next street follows. Claude's sizes are a
-percentage of the pot: a bet of that share of the pot, or a raise of that share of the pot
-after calling. Code, not the model, makes the answer legal: actions the spot does not allow
-are dropped (an all in where only calling is allowed counts as a call), frequencies are
-renormalized, sizes are snapped between the minimum and the stack (within 10% of the stack
-becomes all in), and one action is sampled per decision.
+it picks the action; the plan for the next street follows. A bet or raise is sized by
+to_bb, Hero's street total after it in big blinds, or when that is 0 by size_pct_pot: a
+bet of that share of the pot, or a raise of that share of the pot after calling. Code, not
+the model, makes the answer legal: a bet where only raising is possible counts as a raise
+and the other way round, actions the spot does not allow are dropped (an all in where only
+calling is allowed counts as a call), frequencies are renormalized, sizes are snapped
+between the minimum and the stack (within 10% of the stack becomes all in), and one action
+is sampled per decision.
 """
 
 import json
@@ -29,10 +31,11 @@ SCHEMA = {
                 "type": "object",
                 "properties": {
                     "action": {"type": "string", "enum": list(ACTIONS)},
+                    "to_bb": {"type": "number"},
                     "size_pct_pot": {"type": "number"},
                     "freq": {"type": "number"},
                 },
-                "required": ["action", "size_pct_pot", "freq"],
+                "required": ["action", "to_bb", "size_pct_pot", "freq"],
                 "additionalProperties": False,
             },
         },
@@ -95,9 +98,15 @@ def _all_in(spot: Spot) -> Cents:
     return spot.street_bet + spot.behind
 
 
-def _legal(spot: Spot, action: str, pct: float) -> Choice | None:
+def _legal(spot: Spot, action: str, pct: float, to_bb: float = 0.0) -> Choice | None:
     if action == "allin" and "allin" not in spot.legal and "call" in spot.legal:
         action = "call"  # with raising closed, the most Hero can put in is a call
+    # A bet and a raise are the same move; which one depends on whether a bet is faced (the
+    # big blind's raise over limpers is a bet here, as nothing is owed).
+    if action == "raise" and spot.to_call == 0:
+        action = "bet"
+    elif action == "bet" and spot.to_call > 0:
+        action = "raise"
     if action not in spot.legal:
         return None
     all_in = _all_in(spot)
@@ -122,6 +131,8 @@ def _legal(spot: Spot, action: str, pct: float) -> Choice | None:
             return None
         lowest = spot.price + spot.min_raise
         to = spot.price + round(share * (spot.pot + spot.to_call))
+    if to_bb > 0:
+        to = min(round(to_bb * spot.big_blind), all_in)
     to = max(snap(to, spot.big_blind), snap(lowest, spot.big_blind, up=True))
     if to >= all_in * (1 - ALL_IN_WITHIN):
         return Choice("allin", all_in, 0)
@@ -140,7 +151,12 @@ def settle(text: str, spot: Spot, seed: str, reveal=lambda s: s) -> Answer:
     merged: dict[tuple[str, Cents], float] = {}
     for row in rows if isinstance(rows, list) else []:
         try:
-            choice = _legal(spot, str(row["action"]), float(row["size_pct_pot"]))
+            choice = _legal(
+                spot,
+                str(row["action"]),
+                float(row["size_pct_pot"]),
+                float(row.get("to_bb") or 0),
+            )
             freq = max(float(row["freq"]), 0.0)
         except (KeyError, TypeError, ValueError):
             continue

@@ -1,7 +1,7 @@
 # Preflop baseline
 
 How VAMOS's home-built preflop solver works, what it approximates, and how each part was checked.
-It is a stand-in until HRC Pro tables replace it; every number it produces is labeled approximate.
+Only its heads-up push/fold tables are still used at the table (see At the table).
 
 ## The game
 
@@ -56,16 +56,15 @@ It is a stand-in until HRC Pro tables replace it; every number it produces is la
 
 ## At the table
 
-- Tables are solved for 2, 3 and 4 players: full trees at 20, 35, 50, 75, 100 and 150bb, push/fold at 2 to 15bb (`scripts/gen_preflop_tables.py`, stored as solver-independent gzipped JSON with a hashed manifest in `preflop/tables/`).
-- At the hero's preflop turn (`engine/advice.py`, `preflop/lookup.py`):
-  - the effective stack (the hero against the deepest opponent still in) picks push/fold tables at 15bb or less, full trees above;
-  - the two nearest solved depths are blended by distance in log of the stack;
-  - each live action is matched at its spot in the tree: folds, checks and calls as themselves, raises to the nearest solved size by ratio, all-ins to the tree's all-in;
-  - the hero's raise sizes are scaled to the live bet faced (a 4bb open stands for the 3bb open, so a 4x 3-bet becomes 16bb, not 12);
-  - one action is sampled from the mix per decision, so the card does not change between refreshes, and the mix is shown when no action has 90% or more.
-- No advice, rather than a guess, when the tree cannot represent the hand: five or more players, a straddle, a raise more than twice or under half the nearest solved size, or an action the tree does not offer there (a cold call of a 3-bet).
-- No advice either where the solve trained the hand too little: spots nobody else reaches, hands still on the solver's starting point (an exact even split), and hands that reach the spot less than 0.1% of the time by their own choices.
-- Known residual: in 16 deep four-handed multi-limp spots (out of about 8,000 across the tables) aces still fold 1-45% facing an all-in; more solving would fix it, and those lines are very rare.
+- Retired on 2026-10-05: an audit against real solver output (published 6-max charts, GTO Wizard heads-up 50bb, HoldemResources push/fold) found only heads-up push/fold reliable.
+  Deeper heads-up play, blind decisions, 3-bets and 4-bets were too far off to show as advice, so the full trees and the 3-4 player push/fold tables were deleted (they remain in git history).
+- What remains at the hero's preflop turn (`engine/advice.py`):
+  - heads-up at 15bb or less effective: the push/fold chart (`pushfold-2p-*`, blended between depths, one action drawn per decision);
+  - otherwise the rules in `engine/preflop_rules.py`: trash folds (or checks when free), the strongest hands raise at a standard size;
+  - everything else, and every 3-bet or more, goes to Claude (`Claude` on the card), or shows only the facts when the AI switch is off.
+- The trash list was frozen from the retired 3-handed solves: hands folding 99% or more both opening on the button and in the big blind facing a 2.5bb button open, at every depth from 35 to 100bb (47 hands, 41% of deals).
+  Those solves played both spots looser than published charts, so their folds are folds there too; near break-even big blind defends without rake are the known exception.
+  The rule is not used heads-up or blind against blind.
 
 ## Checks
 

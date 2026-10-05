@@ -296,18 +296,20 @@ def test_an_error_on_a_spot_tells_the_card_instead_of_reading_forever(backend, m
     assert reply["facts"]["advice"]["action"] is not None and "error" not in reply
 
 
-def test_a_broken_chart_keeps_the_facts_and_says_why(backend, monkeypatch):
+def test_a_broken_preflop_rule_hands_the_spot_to_claude_and_keeps_the_facts(tmp_path, monkeypatch):
     import vamos.host.server as server
 
     def broken(*args, **kwargs):
         raise ZeroDivisionError("float division by zero")
 
+    backend, fake, _ = claude_backend(tmp_path, [Reply(BET_HALF, "end_turn", {})])
     monkeypatch.setattr(server, "preflop_advice", broken)
     backend.handle(page(*HERO_HAND))
     [reply] = backend.handle(TURN)
     found = reply["facts"]
     assert (found["pot"], found["toCall"]) == ("1.5bb", "10 (0.5bb)")
-    assert (found["advice"]["action"], found["advice"]["error"]) == (None, "chart error (logged)")
+    assert found["advice"]["source"] == "Claude"
+    assert [r.preset.name for r in fake.requests] == ["standard"]
 
 
 FLOP_HAND = [

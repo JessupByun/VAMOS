@@ -462,28 +462,29 @@ class Backend:
         if cached is None or cached[0] != spot.node:
             found = facts(spot)
             try:
+                # Preflop: the push/fold chart or a rule when one covers the spot.
                 found["advice"] = preflop_advice(hand, spot, hero)
             except Exception:
-                # The facts stay up; the chart says why it has nothing.
-                self._log_failure(game_id, spot.node, "the preflop chart")
-                found["advice"] = {**_NO_CHART, "error": "chart error (logged)"}
+                # Claude decides instead; the facts stay up either way.
+                self._log_failure(game_id, spot.node, "the preflop rules")
+                found["advice"] = None
             cached = (spot.node, found)
             self._facts[game_id] = cached
         payload = cached[1]
-        if spot.street != Street.PREFLOP and not self.ai_on:
+        if payload.get("advice") is not None:
+            return payload  # answered at once, no Claude call
+        if not self.ai_on:
             return {**payload, "advice": None, "aiOff": True}
-        if spot.street != Street.PREFLOP:
-            try:
-                self._advise(game_id, hand, hero, spot, payload, ask)
-            except Exception:
-                # Recorded as a failed call, so the card and the panel say why and it is
-                # not tried again for this decision and preset.
-                self._log_failure(game_id, spot.node, "Claude's prompt")
-                preset = ask or self._preset_for(game_id, hand)
-                stub = Job(spot.node, Request(PRESETS[preset], [], []), None)  # type: ignore[arg-type]
-                self.advisor.start(game_id, stub, 0.0, refuse="internal error (logged)")
-            payload = {**payload, "advice": self.advisor.view(game_id, spot.node)}
-        return payload
+        try:
+            self._advise(game_id, hand, hero, spot, payload, ask)
+        except Exception:
+            # Recorded as a failed call, so the card and the panel say why and it is not
+            # tried again for this decision and preset.
+            self._log_failure(game_id, spot.node, "Claude's prompt")
+            preset = ask or self._preset_for(game_id, hand)
+            stub = Job(spot.node, Request(PRESETS[preset], [], []), None)  # type: ignore[arg-type]
+            self.advisor.start(game_id, stub, 0.0, refuse="internal error (logged)")
+        return {**payload, "advice": self.advisor.view(game_id, spot.node)}
 
     def _log_failure(self, game_id: str, node: str, what: str) -> None:
         # Once per spot: the same spot is recomputed on every log page while it is up.
@@ -550,7 +551,7 @@ class Backend:
             request,
             betting(hand, hero, spot),
             names.reveal,
-            "advice" if ask is None else "ask",
+            ("preflop" if spot.street == Street.PREFLOP else "advice") if ask is None else "ask",
         )
         refuse = None
         try:
@@ -880,17 +881,6 @@ def _net(meta: dict) -> Message | None:
             return as_written
         sessions.append({"label": label, "amount": amount, "date": dates.get(label)})
     return {"total": m.group(1), "sessions": sessions}
-
-
-# The chart's block when it has no answer for the spot.
-_NO_CHART = {
-    "source": "Chart",
-    "action": None,
-    "mix": None,
-    "pick": None,
-    "pickPct": None,
-    "deviation": False,
-}
 
 
 def _summary(body: str) -> str | None:

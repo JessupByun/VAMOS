@@ -112,17 +112,12 @@ function CardBody({ turn, facts }: { turn: string; facts: Facts | null }) {
       </div>
     );
   }
+  // Preflop, answered at once: the push/fold chart heads-up when short, else a rule.
   return (
     <div class="action-card chart">
-      <Source kind="chart" label="Preflop chart" />
+      <Source kind="chart" label={advice.source === "Rule" ? "Preflop rule" : "Preflop chart"} />
       {advice.action ? <Action text={advice.action} /> : <Action text={current.madeHand} />}
       {advice.mix && <Mix parts={advice.mix} pick={advice.pick} deviation={advice.deviation} />}
-      {!advice.action &&
-        (advice.error ? (
-          <div class="line note warn">no chart: {advice.error}</div>
-        ) : (
-          <div class="line note">no chart for this spot</div>
-        ))}
       <div class="line facts">{factsLine(current, advice.action !== null)}</div>
     </div>
   );

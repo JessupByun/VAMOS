@@ -231,6 +231,7 @@ export function isClaude(advice: SpotFacts["advice"]): advice is ClaudeAdvice {
 }
 
 export interface PreflopAdvice {
+  /** "Chart" (heads-up push/fold) or "Rule" (a clear fold or raise). */
   source: string;
   /** e.g. "RAISE TO 0.60 (3bb)", drawn from the mix. */
   action: string | null;
@@ -241,8 +242,6 @@ export interface PreflopAdvice {
   pickPct: number | null;
   /** The draw came from a less frequent option than the top one. */
   deviation: boolean;
-  /** Set when the chart failed on this spot, e.g. "chart error (logged)". */
-  error?: string;
 }
 
 /** Facts for the hero's turn, or null while the log has not caught up with the table. */

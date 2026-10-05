@@ -342,7 +342,7 @@ function CurrentHand({ hand }: { hand: Hand }) {
       <h2>Current hand</h2>
       {hand.info && <HandHeader info={hand.info} />}
       {hand.decisions.length === 0 ? (
-        <p class="muted small">No AI decisions yet this hand; they come after the flop.</p>
+        <p class="muted small">No AI decisions yet this hand.</p>
       ) : (
         hand.decisions.map((d) => (
           <DecisionView key={d.node} decision={d} live={d.node === hand.live} gameId={hand.gameId} />
@@ -355,7 +355,7 @@ function CurrentHand({ hand }: { hand: Hand }) {
 function Dial({ settings }: { settings: Settings }) {
   return (
     <section class="card">
-      <h2>Model (currently used only postflop)</h2>
+      <h2>Model</h2>
       <div class="segmented" role="radiogroup" aria-label="Model">
         {settings.presets.map((preset) => (
           <label key={preset.name} class={`${preset.name}${settings.preset === preset.name ? " on" : ""}`}>
@@ -732,7 +732,7 @@ function Panel() {
             <Switch
               label="AI advice"
               on={settings.aiOn}
-              hint={settings.aiOn ? "Claude answers postflop" : "off: no API calls, facts only"}
+              hint={settings.aiOn ? "Claude answers the close spots" : "off: no API calls, facts only"}
               onChange={(on) => send({ type: "settings", aiOn: on })}
             />
             <Switch

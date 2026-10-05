@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { expect, type Page, test } from "@playwright/test";
@@ -324,11 +324,10 @@ test("the action card shows facts on the hero's turn only once the log has caugh
   await expect(card).toContainText("reading the hand");
 
   harness.addLogLines([`"new guy @ ${STRANGER_ID}" folds`]);
-  // Preflop the chart decides; one facts line follows.
-  await expect(card.locator(".source")).toHaveText("Preflop chart");
-  await expect(card.locator(".action")).toHaveText(
-    /^(FOLD|CALL 0\.10 \(0\.5bb\)|RAISE TO \d+\.\d\d \(\d+(\.\d)?bb\)|ALL IN .*)$/,
-  );
+  // ATo in the small blind, folded to: neither a clear fold nor a clear raise, so Claude
+  // decides preflop too (the canned answer's bet becomes the minimum raise).
+  await expect(card.locator(".source")).toHaveText("VAMOS! AI (Claude Opus 5.5 · low)");
+  await expect(card.locator(".action")).toHaveText("RAISE TO 0.40 (2bb)");
   await expect(card.locator(".facts")).toHaveText(/^SB · pot 1\.5bb · need 25% · ATo$/);
   // The card sits at the top of the table, centered just above the pot.
   const pot = await page.locator(".table-pot-size").boundingBox();
@@ -365,7 +364,7 @@ test("the action card shows facts on the hero's turn only once the log has caugh
       ?.insertAdjacentHTML("beforeend", '<form class="raise-controller-form"></form>');
   });
   await page.waitForTimeout(1200);
-  await expect(card.locator(".source")).toHaveText("Preflop chart");
+  await expect(card.locator(".source")).toHaveText("VAMOS! AI (Claude Opus 5.5 · low)");
   // PokerNow dims its action area when it is not the hero's turn, even if the seat mark
   // lags: the card goes back to waiting.
   await page.evaluate(() => document.querySelector(".game-decisions-ctn")?.classList.add("low"));
@@ -374,6 +373,24 @@ test("the action card shows facts on the hero's turn only once the log has caugh
 
   await page.evaluate(() => document.querySelector(".you-player")?.classList.remove("decision-current"));
   await expect(card).toContainText("waiting for your turn");
+});
+
+test("a clear preflop spot is answered at once by a rule, with no Claude call", async () => {
+  const page = await openTable();
+  const card = page.locator("#vamos-root .action-card");
+  harness.addLogLines(HAND_START.map((line) => line.replace("A♠, 10♦", "A♠, A♦")));
+  await heroTurn(page);
+  // The table shows the same aces as the log (VAMOS waits while the two disagree).
+  await page.evaluate(() =>
+    document.querySelector(".you-player .card-s-T")?.classList.replace("card-s-T", "card-s-A"),
+  );
+  harness.addLogLines([`"new guy @ ${STRANGER_ID}" folds`]);
+  await expect(card.locator(".source")).toHaveText("Preflop rule");
+  await expect(card.locator(".action")).toHaveText("RAISE TO 0.60 (3bb)");
+  await expect(card.locator(".chip.picked")).toHaveText("raise 3bb 100%");
+  // Nothing was asked of Claude for this decision.
+  await page.waitForTimeout(500);
+  expect(existsSync(join(harness.dataDir, "advice.jsonl"))).toBe(false);
 });
 
 test("after the flop the card shows Claude's answer and the panel its reasoning", async () => {
@@ -500,7 +517,7 @@ test("screenshots of the card and the side panel", async () => {
   harness.addLogLines(HAND_START);
   await heroTurn(page);
   harness.addLogLines([`"new guy @ ${STRANGER_ID}" folds`]);
-  await expect(card.locator(".source")).toHaveText("Preflop chart");
+  await expect(card.locator(".source")).toContainText("VAMOS! AI");
   await card.screenshot({ path: `${dir}/2-chart-card.png` });
   await page.screenshot({ path: `${dir}/2-chart-table.png` });
   harness.addLogLines([
