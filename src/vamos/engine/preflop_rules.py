@@ -1,19 +1,24 @@
 """
-Preflop rules for the spots every solver agrees on, so that most preflop decisions need no
-Claude call: trash folds, and the strongest hands raise. Everything else goes to Claude.
+Preflop rules for the spots every solver agrees on: trash folds, and the strongest hands
+raise. They answer about a third of preflop decisions (about one in ten heads-up, where
+trash never folds by rule); Claude decides the rest.
 
 TRASH is frozen from VAMOS's own 3-handed solves at 35, 50, 75 and 100bb (retired
 2026-10-05): the hands that fold at least 99% both opening on the button and in the big
-blind facing a 2.5bb button open, at every one of those depths. Those solves played the
-button and the big blind looser than published 6-max solver charts (docs/preflop.md), so
-a hand even they fold is folded by real solvers too, apart from near break-even defends at
-the bottom of a big blind's range without rake. The rule is not used heads-up or blind
-against blind, where real ranges are much wider; a free check is always taken.
+blind facing a 2.5bb button open, at every one of those depths. Those solves' ranges are
+close to published 6-max solver charts, which assume rake; this game has none, and without
+rake the big blind defends wider against small raises. So trash folds only at a price at
+least as steep as the spot the list comes from, never heads-up or blind against blind,
+where real ranges are much wider, and never facing an all-in, where nothing is left to
+play after the call and a cheap price can make any two cards a call. A free check is always
+taken. Facing a 3-bet, a straddle or dead money, trash still folds at a normal price.
 
-The raise sets are hands every solver plays for a raise at any stack and seat: the open
-set first in or over limpers, the 3-bet set facing exactly one raise by someone else.
-Facing a 3-bet or more (a re-raise of the hero included), with a straddle or dead money,
-or when trash gets a cheap price, Claude decides.
+The raise sets are hands for which every solver's mix includes a raise at any stack and
+seat (some spots mix in calls or limps, at almost no cost): the open set first in or over
+limpers, the 3-bet set facing exactly one raise by someone else. Facing a single all-in
+only aces and kings call or re-raise by rule; whether to call one with queens or ace-king
+depends on the shover. Facing a 3-bet or more (a re-raise of the hero included), or with a
+straddle or dead money, Claude decides.
 """
 
 from vamos.brain.answer import snap
@@ -34,26 +39,64 @@ TRASH = _hands(
 )
 OPEN_ALWAYS = _hands("AA KK QQ JJ TT AKs AQs AJs KQs AKo AQo")
 THREE_BET_ALWAYS = _hands("AA KK QQ AKs AKo")
+CALL_ALL_IN = _hands("AA KK")
 
-# A raise that would put this share of the hero's stack in goes all in instead.
+# A raise that would put this share of the effective stack in goes all in instead.
 ALL_IN_SHARE = 0.4
-# Trash folds only when calling needs at least this share of the pot: at a cheaper price
-# (a tiny all-in, a big blind closing a multiway min-raise) the call can be right.
-TRASH_FOLD_PRICE = 0.20
+# Trash folds only when calling needs at least this share of the pot: the big blind's price
+# against the 2.5bb button open the list comes from (1.5 to win 5.5). At a cheaper price (a
+# min-raise, callers in between, several limpers) the call can be right without rake.
+TRASH_FOLD_PRICE = 0.27
 # Posts that change the betting from plain blinds: the raise rules leave these to Claude.
 ODD_POSTS = {"post_straddle", "post_missed_bb", "post_missing_sb", "post_ante"}
 SOURCE = "Rule"
 
 
 def _blind_battle(hand: Hand, hero: str) -> bool:
-    """Everyone but the two blinds has folded: a heads-up spot inside a bigger game."""
+    """Folded to the blinds without a chip in: a heads-up spot inside a bigger game."""
     if hand.dead_small_blind:
         return False  # no small blind in the hand, so no blind battle either
     labels = positions(hand)
-    folded = hand.folded()
     if labels.get(hero) not in ("SB", "BB"):
         return False
-    return all(pid in folded for pid, label in labels.items() if label not in ("SB", "BB"))
+    folded = hand.folded()
+    # An opener who folded to a squeeze does not make it one: the blinds face a 3-bet.
+    entered = {
+        a.player
+        for a in hand.actions
+        if a.street == Street.PREFLOP and a.kind in ("call", "bet", "raise")
+    }
+    return all(
+        pid in folded and pid not in entered
+        for pid, label in labels.items()
+        if label not in ("SB", "BB")
+    )
+
+
+def _all_in_faced(hand: Hand, hero: str) -> bool:
+    """The bet to match was made all in: calling it leaves nothing to play for."""
+    return any(
+        a.street == Street.PREFLOP
+        and a.kind in ("bet", "raise")
+        and a.all_in
+        and a.to == hand.price
+        and a.player != hero
+        for a in hand.actions
+    )
+
+
+def _reach(hand: Hand, hero: str, spot: Decision) -> int:
+    """The hero's street total that someone still in can match; more would come back."""
+    stacks = {s.player.id: s.stack for s in hand.seats}
+    all_in = hand.street_bets.get(hero, 0) + spot.behind
+    deepest = max(
+        (
+            stacks[pid] - hand.put_in.get(pid, 0) + hand.street_bets.get(pid, 0)
+            for pid in spot.opponents
+        ),
+        default=all_in,
+    )
+    return min(all_in, deepest)
 
 
 def _raise_to(hand: Hand, hero: str, spot: Decision) -> int:
@@ -95,7 +138,12 @@ def rule(hand: Hand, spot: Decision, hero: str, legal: list[str]) -> dict | None
         if spot.to_call == 0:
             return _advice("CHECK", "check")
         price = spot.to_call / (spot.pot + spot.to_call)
-        if spot.players_dealt >= 3 and not _blind_battle(hand, hero) and price >= TRASH_FOLD_PRICE:
+        if (
+            spot.players_dealt >= 3
+            and price >= TRASH_FOLD_PRICE
+            and not _blind_battle(hand, hero)
+            and not _all_in_faced(hand, hero)
+        ):
             return _advice("FOLD", "fold")
         return None
     preflop = [a for a in hand.actions if a.street == Street.PREFLOP]
@@ -106,7 +154,7 @@ def rule(hand: Hand, spot: Decision, hero: str, legal: list[str]) -> dict | None
     if not raises:
         strong = OPEN_ALWAYS
     elif len(raises) == 1 and raises[0].player != hero:
-        strong = THREE_BET_ALWAYS
+        strong = CALL_ALL_IN if _all_in_faced(hand, hero) else THREE_BET_ALWAYS
     else:
         strong = frozenset()
     if cls not in strong:
@@ -123,9 +171,10 @@ def rule(hand: Hand, spot: Decision, hero: str, legal: list[str]) -> dict | None
                 f"CALL {format_chips(spot.to_call, bb)} ({format_bb(spot.to_call, bb)})", "call"
             )
         return None
-    # Never below the smallest raise PokerNow accepts.
+    # Never below the smallest raise PokerNow accepts. A raise of much of what the others can
+    # still match (the hero may be far deeper than all of them) is all in.
     to = max(snap(_raise_to(hand, hero, spot), bb), snap(hand.price + hand.min_raise, bb, up=True))
-    if to >= all_in * ALL_IN_SHARE:
+    if to >= _reach(hand, hero, spot) * ALL_IN_SHARE:
         return shove
     return _advice(
         f"RAISE TO {format_chips(to, bb)} ({format_bb(to, bb)})", f"raise {format_bb(to, bb)}"

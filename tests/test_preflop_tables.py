@@ -3,13 +3,16 @@
 import json
 
 import numpy as np
-import pytest
 
 from vamos.preflop.matchups import COMBO_COUNTS, INDEX
 from vamos.preflop.tables import DIR, MANIFEST, digest, load_all
 
 PRIOR = COMBO_COUNTS / COMBO_COUNTS.sum()
-pytestmark = pytest.mark.skipif(not MANIFEST.exists(), reason="no tables generated yet")
+
+
+def test_the_tables_are_committed():
+    # The backend quietly turns the chart off without them, so their absence must fail here.
+    assert MANIFEST.exists()
 
 
 def manifest() -> dict:

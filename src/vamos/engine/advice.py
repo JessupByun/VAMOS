@@ -1,9 +1,10 @@
 """
-Preflop advice at the hero's decision where the answer is clear, so no Claude call is
-needed: heads-up at 15bb or less the push/fold chart (it matches HoldemResources' published
-Nash), otherwise the rules in preflop_rules (trash folds, the strongest hands raise). None
-means nothing here covers the spot, and Claude decides; postflop Claude always decides.
-The home-built full-depth tables were retired on 2026-10-05 (docs/preflop.md).
+Preflop advice that needs no Claude call: heads-up at 15bb or less the push/fold chart
+(Nash for the game where the small blind may only jam or fold, matching HoldemResources'
+published solution; above about 10bb the full game also limps and min-raises), otherwise
+the rules in preflop_rules (trash folds, the strongest hands raise). None means nothing
+here covers the spot, and Claude decides; postflop Claude always decides. The home-built
+full-depth tables were retired on 2026-10-05 (docs/preflop.md).
 """
 
 from vamos.brain.answer import snap
@@ -28,11 +29,12 @@ def preflop_advice(
     """The card's advice block, or None after the flop or where Claude decides."""
     if spot.street != Street.PREFLOP or spot.effective_bb is None or not spot.big_blind:
         return None
+    allowed = legal(hand, hero, spot)
     if spot.players_dealt == 2 and spot.effective_bb <= PUSH_FOLD_MAX:
-        chart = _push_fold(hand, spot, hero, table_sets)
+        chart = _push_fold(hand, spot, hero, table_sets, allowed)
         if chart is not None:
             return chart
-    return preflop_rules.rule(hand, spot, hero, legal(hand, hero, spot))
+    return preflop_rules.rule(hand, spot, hero, allowed)
 
 
 def _push_fold(
@@ -40,11 +42,14 @@ def _push_fold(
     spot: Decision,
     hero: str,
     table_sets: dict[tuple[str, int], list[Table]] | None,
+    allowed: list[str],
 ) -> dict | None:
     """Heads-up jam or fold, and calling a jam, from the push/fold chart; None off its tree."""
     moves = lookup.live_moves(hand)
     chosen = (table_sets or tables.load_all()).get(("pushfold", 2))
-    if moves is None or not chosen:
+    # Shallower than every table (a blind posted all in for less), the chart's game is not
+    # the one being played.
+    if moves is None or not chosen or spot.effective_bb < chosen[0].stack:
         return None
     position = "SB" if spot.players_dealt == 2 and spot.position == "BTN" else spot.position
     advice = lookup.advise(
@@ -52,6 +57,12 @@ def _push_fold(
     )
     if advice is None:
         return None
+    if (
+        "allin" not in allowed
+        and "raise" not in allowed
+        and any(action not in ("fold", "check", "call") for action, _ in advice.mix)
+    ):
+        return None  # the chart would jam where PokerNow offers no raise
     all_in = hand.street_bets.get(hero, 0) + spot.behind
     scale = (hand.price / spot.big_blind) / advice.faced if hand.price else 1.0
 

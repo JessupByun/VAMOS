@@ -99,7 +99,7 @@ def test_trash_folds_checks_when_free_and_waits_for_claude_heads_up_or_blind_aga
     assert advise(["Your hand is 7♠, 2♦", *HU, f"{P['A']} raises to 60"], "B") is None
 
 
-def test_everything_in_between_and_every_three_bet_goes_to_claude():
+def test_everything_in_between_and_strong_hands_facing_a_three_bet_go_to_claude():
     assert advise(["Your hand is 10♠, 9♠", *THREE], "A", "ABC") is None
     three_bet = ["Your hand is A♠, A♦", *THREE, f"{P['A']} raises to 60", f"{P['B']} raises to 240"]
     assert advise(three_bet, "C", "ABC") is None
@@ -152,3 +152,52 @@ def test_a_straddle_or_dead_money_leaves_the_raises_to_claude():
         f"{P['A']} posts a straddle of 40",
     ]
     assert advise(straddled, "B", "ABC") is None
+
+
+def test_trash_never_folds_to_an_all_in():
+    # A 3bb shove with the small blind out: 72o needs 31%, and calls a wide shover.
+    jam = ["Your hand is 7♠, 2♦", *THREE, f"{P['A']} raises to 60 and go all in", f"{P['B']} folds"]
+    assert advise(jam, "C", "ABC", stacks=(60, 1000, 1000)) is None
+
+
+def test_facing_one_all_in_only_aces_and_kings_answer_by_rule():
+    jam = [*THREE, f"{P['A']} raises to 1000 and go all in", f"{P['B']} folds"]
+    assert advise(["Your hand is K♠, K♦", *jam], "C", "ABC")["action"] == "CALL 980 (49bb)"
+    assert advise(["Your hand is Q♠, Q♦", *jam], "C", "ABC") is None
+    assert advise(["Your hand is A♠, K♦", *jam], "C", "ABC") is None
+
+
+def test_trash_folds_only_at_a_price_as_steep_as_its_source_spot():
+    # The list comes from the big blind facing a 2.5bb open: 1.5 to win 5.5, 27%.
+    def facing(size):
+        return ["Your hand is K♠, 4♦", *THREE, f"{P['A']} raises to {size}", f"{P['B']} folds"]
+
+    assert advise(facing(50), "C", "ABC")["action"] == "FOLD"
+    assert advise(facing(60), "C", "ABC")["action"] == "FOLD"
+    # A min-raise asks 22%: without rake the top of the trash list can defend.
+    assert advise(facing(40), "C", "ABC") is None
+
+
+def test_a_squeeze_is_not_a_blind_battle():
+    # The button opened and folded to the small blind's 3-bet: the big blind faces a 3-bet.
+    squeeze = [
+        "Your hand is 7♠, 2♦",
+        *THREE,
+        f"{P['A']} raises to 60",
+        f"{P['B']} raises to 240",
+        f"{P['A']} folds",
+    ]
+    assert advise(squeeze, "C", "ABC")["action"] == "FOLD"
+
+
+def test_a_raise_of_much_of_what_others_can_match_goes_all_in():
+    # The big blind covers everyone: a 4x 3-bet (12bb) is most of the opener's 10bb stack.
+    short_open = ["Your hand is A♠, A♦", *THREE, f"{P['A']} raises to 60", f"{P['B']} folds"]
+    advice = advise(short_open, "C", "ABC", stacks=(200, 1000, 3000))
+    assert advice["action"] == "ALL IN 3,000 (150bb)"
+
+
+def test_below_the_shallowest_chart_the_rules_answer():
+    # The chart starts at 10bb here; at 5bb the push/fold spot falls to the rules.
+    advice = advise(["Your hand is A♠, A♦", *HU], "A", stacks=(100, 100), tables=pushfold_tables())
+    assert (advice["source"], advice["action"]) == ("Rule", "ALL IN 100 (5bb)")

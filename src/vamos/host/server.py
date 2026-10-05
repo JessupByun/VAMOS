@@ -74,7 +74,8 @@ class Backend:
         # computed for it, keyed by decision node.
         self.turns: dict[str, Message] = {}
         self._facts: dict[str, tuple[str, Message]] = {}
-        self._failed_node: dict[str, str] = {}  # per game, the spot last logged as failing
+        # Per game, the spot and the step last logged as failing.
+        self._failed_node: dict[str, tuple[str, str]] = {}
         self._profiles = ProfileSet({}, ())
         self._profiles_stamp: tuple | None = None
         # Claude's calls finish on their own threads; their updates take this lock, and so
@@ -487,9 +488,10 @@ class Backend:
         return {**payload, "advice": self.advisor.view(game_id, spot.node)}
 
     def _log_failure(self, game_id: str, node: str, what: str) -> None:
-        # Once per spot: the same spot is recomputed on every log page while it is up.
-        if self._failed_node.get(game_id) != node:
-            self._failed_node[game_id] = node
+        # Once per spot and failure: the same spot is recomputed on every log page while it
+        # is up, and a second, different failure there must still be logged.
+        if self._failed_node.get(game_id) != (node, what):
+            self._failed_node[game_id] = (node, what)
             log.exception("[VAMOS] could not compute %s at %s", what, node)
 
     def _preset_for(self, game_id: str, hand: Hand) -> str:

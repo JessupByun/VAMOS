@@ -17,6 +17,7 @@ test checks that the committed files still match it.
 import gzip
 import hashlib
 import json
+import logging
 from functools import cache
 from pathlib import Path
 
@@ -24,6 +25,8 @@ import numpy as np
 
 from vamos.preflop.lookup import Spot, Table
 from vamos.preflop.matchups import CLASSES
+
+log = logging.getLogger(__name__)
 
 FORMAT = "vamos-preflop/1"
 DIR = Path(__file__).parent / "tables"
@@ -85,6 +88,7 @@ def digest(data: bytes) -> str:
 def load_all() -> dict[tuple[str, int], list[Table]]:
     """Every committed table, grouped by (menu, players), shallowest first."""
     if not MANIFEST.exists():
+        log.warning("[VAMOS] no preflop tables at %s: the push/fold chart is off", MANIFEST)
         return {}
     manifest = json.loads(MANIFEST.read_text())
     grouped: dict[tuple[str, int], list[Table]] = {}
