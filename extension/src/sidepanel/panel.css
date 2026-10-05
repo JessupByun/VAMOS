@@ -108,11 +108,6 @@ button.switch {
   border: 1px solid var(--border);
 }
 
-/* The AI switch gets its own row, so its hint can say what Claude decides. */
-.switches .switch.wide {
-  grid-column: 1 / -1;
-}
-
 button.switch:hover {
   border-color: var(--muted);
 }
@@ -160,12 +155,15 @@ button.switch:hover {
   font-weight: 700;
 }
 
+/* Two lines at most, so a narrow switch still shows its whole description. */
 .switch .hint {
+  display: -webkit-box;
   overflow: hidden;
   font-size: 10.5px;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  line-height: 1.3;
   color: var(--muted);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .state {

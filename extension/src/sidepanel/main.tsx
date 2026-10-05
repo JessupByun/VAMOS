@@ -689,17 +689,10 @@ function Chip() {
 }
 
 /** An on/off switch with its current meaning spelled out under it. */
-function Switch(props: {
-  label: string;
-  on: boolean;
-  hint: string;
-  wide?: boolean;
-  onChange: (on: boolean) => void;
-}) {
-  const { label, on, hint, wide, onChange } = props;
-  const classes = ["switch", on && "on", wide && "wide"].filter(Boolean).join(" ");
+function Switch(props: { label: string; on: boolean; hint: string; onChange: (on: boolean) => void }) {
+  const { label, on, hint, onChange } = props;
   return (
-    <button type="button" class={classes} role="switch" aria-checked={on} onClick={() => onChange(!on)}>
+    <button type="button" class={on ? "switch on" : "switch"} role="switch" aria-checked={on} onClick={() => onChange(!on)}>
       <span class="track">
         <span class="knob" />
       </span>
@@ -732,24 +725,19 @@ function Panel() {
         {settings && (
           <div class="switches">
             <Switch
-              label="AI advice"
-              wide
+              label="AI Advice"
               on={settings.aiOn}
-              hint={
-                settings.aiOn
-                  ? "Claude decides postflop and the close preflop spots"
-                  : "off: no API calls; preflop rules still answer"
-              }
+              hint={settings.aiOn ? "mixed preflop and AI postflop" : "off: preflop rules only, no API calls"}
               onChange={(on) => send({ type: "settings", aiOn: on })}
             />
             <Switch
-              label="Card on table"
+              label="VAMOS! HUD"
               on={settings.showCard}
-              hint={settings.showCard ? "shown on your turn" : "hidden"}
+              hint={settings.showCard ? "displayed on your turn" : "hidden"}
               onChange={(on) => send({ type: "settings", showCard: on })}
             />
             <Switch
-              label="Badges on table"
+              label="Per-Player Stats"
               on={settings.showBadges}
               hint={settings.showBadges ? "under each seat" : "hidden"}
               onChange={(on) => send({ type: "settings", showBadges: on })}

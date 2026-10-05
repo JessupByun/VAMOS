@@ -189,8 +189,8 @@ test("switches in the side panel hide the card and the badges on the table, and 
   await expect(card).toContainText("waiting for your turn");
   await expect(badges).toHaveCount(3); // alex, the stranger and the hero
 
-  const cardSwitch = panel.getByRole("switch", { name: /Card on table/ });
-  const badgeSwitch = panel.getByRole("switch", { name: /Badges on table/ });
+  const cardSwitch = panel.getByRole("switch", { name: /VAMOS! HUD/ });
+  const badgeSwitch = panel.getByRole("switch", { name: /Per-Player Stats/ });
   await badgeSwitch.click();
   await expect(badges).toHaveCount(0);
   await expect(card).toHaveCount(1);

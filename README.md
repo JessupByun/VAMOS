@@ -28,7 +28,7 @@ Everything else is maintained by Claude:
 - Preflop, heads-up at 10bb or less: a push/fold chart (`Preflop chart` on the card).
 - Preflop, clear spots: simple rules (`Preflop rule`). Trash folds when 3 or more players are dealt in and the price is normal or steeper (not blind against blind, not facing an all-in); the strongest hands raise.
 - Everything else, before or after the flop: Claude Opus 5.5 at low effort (`VAMOS! AI (Claude Opus 5.5 · low)`), with Ask deeper for a medium-effort second answer.
-- The side panel's switches turn AI advice, the card and the badges on or off; with AI off no Claude call is made.
+- The side panel's switches: AI Advice (with it off no Claude call is made; the preflop rules and chart still answer), VAMOS! HUD (the card on the table) and Per-Player Stats (the badges under each seat).
 - Claude sees opponents only under pseudonyms (Player A, Player B, ...); no real name or nickname is sent.
 
 ## Setup (once)
