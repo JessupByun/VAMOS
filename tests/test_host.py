@@ -752,3 +752,16 @@ def test_claude_gets_only_the_profiles_of_players_at_the_table(tmp_path):
     system = json.dumps(request.system)
     assert "Loose-passive." in system  # alex, seated
     assert "Never folds the river." not in system  # zed, not at the table
+
+
+def test_profile_stats_come_from_key_stats_before_the_summary():
+    from vamos.host.server import _profile_view
+    from vamos.profiles import parse_profile
+
+    body = (
+        "---\nname: x\n---\n## Summary\nTighter lately (recent VPIP 38%, 61/160).\n\n"
+        "## Key stats\n- VPIP 44% (264/600), PFR 15% (90/600)\n- Recent: VPIP 38% (61/160)\n"
+    )
+    stats = _profile_view(parse_profile("x", body))["stats"]
+    assert stats["vpip"] == {"pct": "44", "count": "264/600"}
+    assert stats["pfr"] == {"pct": "15", "count": "90/600"}

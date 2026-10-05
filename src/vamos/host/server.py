@@ -804,6 +804,21 @@ _PROFILE_STATS = (
 )
 
 
+def _headline_stats(body: str) -> Message:
+    """The headline numbers, read from the Key stats section when there is one, so a
+    "recent VPIP 40%" in the Summary is never taken for the overall number."""
+    section = re.search(r"(?ims)^#+[ \t]*Key stats[ \t]*$(.*?)(?=^#+[ \t]|\Z)", body)
+    texts = [section.group(1), body] if section else [body]
+    stats = {}
+    for name, pattern in _PROFILE_STATS:
+        for text in texts:
+            m = re.search(rf"{pattern}[^\d\n%]{{0,12}}(\d+)%(?:\s*\((\d+/\d+))?", text)
+            if m:
+                stats[name] = {"pct": m.group(1), "count": m.group(2)}
+                break
+    return stats
+
+
 def _profile_view(profile: Profile) -> Message:
     """What the side panel shows about a profile: the user's own file, read only."""
     meta = {}
@@ -818,13 +833,7 @@ def _profile_view(profile: Profile) -> Message:
         "meta": meta,
         "net": _net(profile.meta),
         "summary": _summary(profile.body),
-        "stats": {
-            name: {"pct": m.group(1), "count": m.group(2)}
-            for name, pattern in _PROFILE_STATS
-            if (
-                m := re.search(rf"{pattern}[^\d\n%]{{0,12}}(\d+)%(?:\s*\((\d+/\d+))?", profile.body)
-            )
-        },
+        "stats": _headline_stats(profile.body),
         "body": profile.body,
     }
 
