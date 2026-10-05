@@ -359,7 +359,21 @@ def test_claude_answers_postflop_under_pseudonyms(tmp_path):
     backend, fake, sent = claude_backend(
         tmp_path, [(gate, Reply(BET_HALF, "end_turn", {"input_tokens": 10_000}))]
     )
-    backend.handle(page(*FLOP_HAND))
+    # An earlier, finished hand: alex folded the small blind.
+    finished = [
+        (
+            100,
+            '-- starting hand #1 (id: h1)  No Limit Texas Hold\'em (dealer: "alex @ Qw3rTy7UiO") --',
+        ),
+        (101, 'Player stacks: #1 "alex @ Qw3rTy7UiO" (1000) | #2 "Hero @ heroid0001" (1000)'),
+        (102, '"alex @ Qw3rTy7UiO" posts a small blind of 10'),
+        (103, '"Hero @ heroid0001" posts a big blind of 20'),
+        (104, '"alex @ Qw3rTy7UiO" folds'),
+        (105, 'Uncalled bet of 10 returned to "Hero @ heroid0001"'),
+        (106, '"Hero @ heroid0001" collected 20 from pot'),
+        (107, "-- ending hand #1 --"),
+    ]
+    backend.handle(page(*finished, *FLOP_HAND))
     [reply] = backend.handle(FLOP_TURN)
     advice = reply["facts"]["advice"]
     assert (advice["source"], advice["state"], advice["action"]) == ("Claude", "thinking", None)
@@ -373,8 +387,10 @@ def test_claude_answers_postflop_under_pseudonyms(tmp_path):
     # Tonight's read goes with each opponent; Hero's own numbers are not sent.
     content = request.messages[-1]["content"]
     spot = json.JSONDecoder().raw_decode(content[content.index("{") :])[0]
-    reads_sent = {p["name"]: "tonight" in p for p in spot["players"]}
-    assert reads_sent == {"Hero": False, "Player A": True}
+    reads_sent = {p["name"]: p.get("this_session") for p in spot["players"]}
+    assert reads_sent["Hero"] is None
+    # Finished hands only: alex's call in the hand being played is not yet history.
+    assert (reads_sent["Player A"]["hands"], reads_sent["Player A"]["vpip"]) == (1, 0)
 
     gate.set()
     update = sent.get(timeout=3)

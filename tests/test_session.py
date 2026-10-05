@@ -344,3 +344,14 @@ def test_a_show_from_before_an_id_change_still_counts_as_won():
     r = read_of(hand_1, hand_2)
     assert "aaaaaaaaaa" not in r
     assert [s.result for s in r["newalid001"].showdowns] == ["won"]
+
+
+def test_a_settled_read_leaves_out_the_hand_being_played():
+    # Hand 2 is still going: Bob's limp is live history for the panel, not yet for Claude.
+    s = GameSession("g")
+    s.add_page(body(*HAND_1, *HAND_2))
+    from vamos.session import reads
+
+    assert (reads(s.log)["bbbbbbbbbb"].hands, reads(s.log)["bbbbbbbbbb"].vpip) == (2, 1)
+    settled = reads(s.log, settled=True)["bbbbbbbbbb"]
+    assert (settled.hands, settled.vpip) == (1, 0)

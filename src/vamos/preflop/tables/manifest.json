@@ -5,63 +5,63 @@
    "iterations": 100,
    "nash_conv_mbb": 0.009,
    "seconds": 0,
-   "sha256": "3a192a081d47fe8b1356da0c11c6eaf3984c53a2b629013f0e76d7c4a19e905b"
+   "sha256": "119a065b653ac9a336f1a8e4c928970febd037a503738efd6309f5cc8dff3b8b"
   },
   "pushfold-2p-2bb.json.gz": {
    "ev_sum_bb": 0.0,
    "iterations": 100,
    "nash_conv_mbb": 0.007,
    "seconds": 0,
-   "sha256": "b310e6f58292280847310309764e2641b0e2c400254c5fd4cd1c74052b00db77"
+   "sha256": "e9590c9689e507e2dcd4b32a4c4b813eac42dc91de3d8abf9857ca0a3dc3346d"
   },
   "pushfold-2p-3bb.json.gz": {
    "ev_sum_bb": 0.0,
    "iterations": 100,
    "nash_conv_mbb": 0.004,
    "seconds": 0,
-   "sha256": "dfae18e20b04176c1dacf6b1287c51fce313e5484463a6c1b554f7d96efddc72"
+   "sha256": "ab60cb270df401f9b4d21bb0229a190fbf69b5e6233d3d92c5cb19ff0c874f08"
   },
   "pushfold-2p-4bb.json.gz": {
    "ev_sum_bb": 0.0,
    "iterations": 100,
    "nash_conv_mbb": 0.004,
    "seconds": 0,
-   "sha256": "49ec2d82a26a19ae7c9a9e00be1a25764bde37f7021d883ec0c9e2bae5a2c579"
+   "sha256": "04795f81cbd0131edbc734831ba05f3b70fa1e066daaf0fc8b3b653e427ccd36"
   },
   "pushfold-2p-5bb.json.gz": {
    "ev_sum_bb": 0.0,
    "iterations": 100,
    "nash_conv_mbb": 0.009,
    "seconds": 0,
-   "sha256": "5920b6b616620b793561a4a7e36f5a1a29858d3ac90096dc089c1c39787f473d"
+   "sha256": "38d6d45b74d98b8c15494c4c974a65a644392a99db6724e986bb527a80bfdc04"
   },
   "pushfold-2p-6bb.json.gz": {
    "ev_sum_bb": -0.0,
    "iterations": 100,
    "nash_conv_mbb": 0.009,
    "seconds": 0,
-   "sha256": "29205e37688e4039e7979889f1c44f48fb830424006493d83c5cd0337fac55d9"
+   "sha256": "03ce9cde99c61e1045321b112b65ba468a401d22dbcf96f342d14e3cd2be89d6"
   },
   "pushfold-2p-7bb.json.gz": {
    "ev_sum_bb": -0.0,
    "iterations": 100,
    "nash_conv_mbb": 0.011,
    "seconds": 0,
-   "sha256": "5481db367b7197d7bee7a159f0d5796ea564ab5b1f099db88b088eafaeb327d1"
+   "sha256": "b74a338c881356df44d764dcec869b76fca4a687c37ff4fb5bd1e8e3512591a2"
   },
   "pushfold-2p-8bb.json.gz": {
    "ev_sum_bb": -0.0,
    "iterations": 100,
    "nash_conv_mbb": 0.011,
    "seconds": 0,
-   "sha256": "7bf677bdfba73b2db81ba14cc6a70f3238e42360e42446d7e660e1b52d1feca4"
+   "sha256": "a08a4f3fef617ae3cb05866e9525baf5d50109fda651c21c95ed47fa11b42e0d"
   },
   "pushfold-2p-9bb.json.gz": {
    "ev_sum_bb": -0.0,
    "iterations": 100,
    "nash_conv_mbb": 0.014,
    "seconds": 0,
-   "sha256": "4d8ef7c001f7f85a0f2dea1a6ae61b50561fa11a7cff3db7a0cf9eae378c26d3"
+   "sha256": "9440d24b04160b6e10733d39ddbd54309f2b0bc29b42bf36063f1e080f8f0bbe"
   }
  }
 }

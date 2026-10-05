@@ -107,6 +107,10 @@ def _legal(spot: Spot, action: str, pct: float, to_bb: float = 0.0) -> Choice | 
         action = "bet"
     elif action == "bet" and spot.price > 0:
         action = "raise"
+    if action in ("bet", "raise") and action not in spot.legal and "allin" in spot.legal:
+        action = "allin"  # short of a full raise, the only raise PokerNow offers is all in
+    if action in ("call", "fold") and spot.to_call == 0 and "check" in spot.legal:
+        action = "check"  # nothing owed: calling is checking, and folding gives up for free
     if action not in spot.legal:
         return None
     all_in = _all_in(spot)

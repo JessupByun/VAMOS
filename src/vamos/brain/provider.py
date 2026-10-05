@@ -3,7 +3,8 @@ Claude calls for advice, before and after the flop.
 
 A call streams, so a decision that has already passed can stop it: the stream is closed
 from a watcher thread, since thinking streams no events while it runs (its text is omitted
-by default), and only tokens produced up to then are billed. Failures
+by default). In practice the blocked read can take until the 60 s request timeout to
+return, and whether billing stops at the close is unverified (2026-10-06 review). Failures
 come back as `CallFailed` with a short reason for the card. The SDK's own retries are off:
 the advisor owns the deadline and decides whether there is time to try again.
 

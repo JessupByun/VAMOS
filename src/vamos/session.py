@@ -171,12 +171,16 @@ class Read:
         }
 
 
-def reads(log: HandLog) -> dict[str, Read]:
-    """Tonight's read on every player dealt in, under their current ID."""
+def reads(log: HandLog, settled: bool = False) -> dict[str, Read]:
+    """
+    This session's read on every player dealt in, under their current ID. `settled` leaves
+    out the hand still being played, so the bet the hero is facing is not counted as the
+    bettor's history (what Claude gets); the side panel shows the live count.
+    """
     tally: dict[str, dict] = {}
     shown: dict[str, list[Showdown]] = {}
     for hand in log.hands:
-        if not hand.seats:
+        if not hand.seats or (settled and hand is log.hands[-1] and not hand.ended):
             continue
         ids = [log.current_id(s.player.id) for s in hand.seats]
         for pid in ids:

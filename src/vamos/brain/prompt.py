@@ -26,13 +26,14 @@ PokerNow: blinds 0.10/0.20, buy-ins of 10.00 (50 big blinds) with rebuys and top
 rake, usually three to five players. You advise one player, Hero, at the moment Hero must
 act, before or after the flop. Before the flop, a push/fold chart (heads-up at 10bb or less)
 and simple rules answer the clearest spots (trash folding at a normal price, the strongest
-hands opening or 3-betting one raise); you get everything else, including any 3-bet or
-more and any all-in. Your job is to win Hero the most money by exploiting
-each opponent's specific weaknesses, as described in their profile below. Where a profile
-says nothing about the situation, use your own judgment.
+hands opening or 3-betting one raise, aces and kings against a single all-in); you get
+everything else, including nearly every 3-bet pot and all-in. Your job is to win Hero the
+most money by exploiting each opponent's specific weaknesses, as described in their
+profile below. Where a profile says nothing about the situation, use your own judgment.
 
-Each message gives the hand so far: every player's position and stack, with tonight's read
-on each opponent (counts from tonight's hands only, so weigh them by the number of hands)
+Each message gives the hand so far: every player's position and stack, with this session's
+read on each opponent (counts from this session's finished hands only, so weigh them by the
+number of hands)
 and Hero's own notes on them when Hero wrote any; every action in order with the board
 cards where they were dealt; Hero's cards; and exact numbers computed from them (pot,
 price, stacks, Hero's made hand, the cards that would complete Hero's draws). Trust those
@@ -118,7 +119,7 @@ def spot_message(
             "stack_bb": _bb(stacks[pid], bb),
             "behind_bb": _bb(stacks[pid] - hand.put_in.get(pid, 0), bb),
             **({"folded": True} if pid in folded else {}),
-            **({"tonight": tonight[pid]} if tonight and pid in tonight else {}),
+            **({"this_session": tonight[pid]} if tonight and pid in tonight else {}),
             **({"hero_notes": player_notes[pid]} if player_notes and pid in player_notes else {}),
         }
         for pid in sorted(stacks, key=lambda p: list(positions).index(p) if p in positions else 99)
@@ -159,5 +160,5 @@ def spot_message(
     body = json.dumps(spot, separators=(",", ":"))
     text = f"Hand so far (amounts in big blinds):\n{body}\n"
     if notes.strip():
-        text += f"\nHero's notes for tonight: {notes.strip()}\n"
+        text += f"\nHero's notes for this session: {notes.strip()}\n"
     return text + "\nWhat should Hero do?"

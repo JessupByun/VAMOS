@@ -493,7 +493,7 @@ class Backend:
             log.exception("[VAMOS] could not compute %s at %s", what, node)
 
     def _preset_for(self, game_id: str, hand: Hand) -> str:
-        """The dial's preset, locked for the whole hand (Claude's cache is per model and effort)."""
+        """The dial's preset, locked for the whole hand: a change applies from the next hand."""
         locked = self._hand_preset.get(game_id)
         if locked is None or locked[0] != hand.number:
             locked = (hand.number, self.preset)
@@ -517,7 +517,9 @@ class Backend:
         labels[hero] = HERO
         # Tonight's read on the opponents only: Hero's own numbers are not sent.
         tonight = {
-            pid: r.summary() for pid, r in reads(self._session(game_id).log).items() if pid != hero
+            pid: r.summary()
+            for pid, r in reads(self._session(game_id).log, settled=True).items()
+            if pid != hero
         }
         # The hand itself names players only by pseudonym; the notes are the user's own words.
         game_log = self._session(game_id).log

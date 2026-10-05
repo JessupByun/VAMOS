@@ -152,3 +152,22 @@ def test_sizes_sit_on_a_quarter_big_blind_at_any_stakes():
 def test_options_under_half_a_percent_are_dropped():
     a = settle(answer(("fold", 0, 0), ("call", 0, 1)), FACING, seed="n")
     assert a.mix == (Choice("call", 40, 1.0),)
+
+
+def test_a_raise_short_of_a_full_raise_is_all_in_and_nothing_owed_is_a_check():
+    # 5bb behind facing an open to 4bb: PokerNow offers fold, call or all in.
+    short = Spot(
+        pot=140,
+        to_call=60,
+        street_bet=20,
+        price=80,
+        min_raise=60,
+        behind=80,
+        big_blind=20,
+        legal=("fold", "call", "allin"),
+    )
+    a = settle(answer(("raise", 0, 0.7), ("fold", 0, 0.3)), short, seed="n")
+    assert [(c.action, c.to) for c in a.mix] == [("allin", 100), ("fold", 0)]
+    # The big blind's option: "call" and "fold" both mean checking.
+    a = settle(answer(("call", 0, 0.6), ("fold", 0, 0.4)), BB_OPTION, seed="n")
+    assert [(c.action, round(c.freq, 2)) for c in a.mix] == [("check", 1.0)]

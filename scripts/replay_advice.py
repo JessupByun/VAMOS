@@ -140,7 +140,8 @@ def main() -> None:
         present = {p["name"] for p in spot["players"]}
         seated = {key for key in profiles.profiles if names.label(key) in present}
         system = prompt.prefix(profiles, names, seated)
-        notes = re.search(r"Hero's notes for tonight: (.*)\n", text)
+        # Spots logged before 2026-10-06 say "tonight" where newer ones say "this session".
+        notes = re.search(r"Hero's notes for (?:tonight|this session): (.*)\n", text)
         lines, ids = rebuild(spot)
         hand = build_hands((100 + i, line) for i, line in enumerate(lines)).hands[-1]
         hero = ids[HERO]
@@ -149,7 +150,11 @@ def main() -> None:
             print(f"line {number}: could not rebuild the decision, skipped")
             continue
         labels = {pid: name for name, pid in ids.items()}
-        tonight = {ids[p["name"]]: p["tonight"] for p in spot["players"] if p.get("tonight")}
+        tonight = {
+            ids[p["name"]]: p.get("this_session") or p["tonight"]
+            for p in spot["players"]
+            if p.get("this_session") or p.get("tonight")
+        }
         player_notes = {
             ids[p["name"]]: p["hero_notes"] for p in spot["players"] if p.get("hero_notes")
         }

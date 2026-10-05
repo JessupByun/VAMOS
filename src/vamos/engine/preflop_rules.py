@@ -5,18 +5,20 @@ trash never folds by rule); Claude decides the rest.
 
 TRASH is frozen from VAMOS's own 3-handed solves at 35, 50, 75 and 100bb (retired
 2026-10-05): the hands that fold at least 99% both opening on the button and in the big
-blind facing a 2.5bb button open, at every one of those depths. Those solves' ranges are
-close to published 6-max solver charts, which assume rake; this game has none, and without
-rake the big blind defends wider against small raises. So trash folds only at a price at
+blind facing a 2.5bb button open, at every one of those depths. Those solves' flop model was
+tuned on a GTO Wizard article's numbers, so the boundary is not from an allowed source; each
+hand is backed separately (docs/preflop.md: Sklansky-Malmuth group 9, our equity tables).
+This game has no rake, and without rake the big blind defends wider against small raises.
+So trash folds only at a price at
 least as steep as the spot the list comes from, and never heads-up or blind against blind,
 where real ranges are much wider. Facing any all-in it goes to Claude, whatever the price:
 the call is decided by raw equity against the shover's range, and a short or loose shover
 can make most trash a call; Claude has the shover's profile. A free check is always taken.
 Facing a 3-bet, a straddle or dead money, trash still folds at a normal price.
 
-The raise sets are hands for which every solver's mix includes a raise at any stack and
-seat (some spots mix in calls or limps, at almost no cost): the open set first in or over
-limpers, the 3-bet set facing exactly one raise by someone else. Facing a single all-in
+The raise sets: the open set (Sklansky-Malmuth groups 1-2 plus AQo) first in or over
+limpers, the 3-bet set (at least 63% equity against a top-15% opening range) facing
+exactly one raise by someone else. Facing a single all-in
 only aces and kings call or re-raise by rule; whether to call one with queens or ace-king
 depends on the shover. Facing a 3-bet or more (a re-raise of the hero included), or with a
 straddle or dead money, Claude decides.

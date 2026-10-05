@@ -98,7 +98,9 @@ def test_the_spot_message_describes_the_hand_without_names():
         "Player A": 60.0,
         "Player B": 40.0,
     }
-    assert spot["players"][[p["name"] for p in spot["players"]].index("Player A")]["tonight"] == {
+    assert spot["players"][[p["name"] for p in spot["players"]].index("Player A")][
+        "this_session"
+    ] == {
         "hands": 30,
         "vpip": 21,
     }

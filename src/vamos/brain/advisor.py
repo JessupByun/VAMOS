@@ -4,7 +4,7 @@ the background.
 
 Every call is stamped with the decision node it answers, and what it returns is shown only
 while that node is current. When the hero acts or the hand moves on, the call is cancelled
-(its stream is closed, so only tokens produced are billed) and its answer is dropped. A call
+(its stream is closed) and its answer is dropped. A call
 has a deadline from the table's clock, about five seconds before the hero's time runs out,
 or 25 seconds after the turn began when the table has no clock. A call that misses it,
 fails or answers nonsense leaves the facts on the card with the reason. A failure that may

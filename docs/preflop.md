@@ -22,11 +22,14 @@ At the hero's preflop turn (`engine/advice.py`), in order:
 - Claude decides facing a 3-bet or more (the hero's own raise counts), with a straddle or dead money posted, and in every spot above that no rule covers.
   Trash still folds facing a 3-bet, a straddle or dead money at a normal price.
 
-Where the lists come from, and their limits:
+Where the lists come from, and their limits (VAMOS's rule: nothing from a source whose terms forbid real-time assistance or reuse may set advice):
 - The trash list was frozen from VAMOS's retired 3-handed solves: hands folding 99% or more both opening on the button and in the big blind facing a 2.5bb button open, at every depth from 35 to 100bb.
-- Those solves' ranges are about as wide as published raked 6-max charts (button opens 41-45%, big blind defends 54-58% against 2.5x); without rake the big blind defends wider against small raises, which is why trash folds only at the source spot's price or steeper.
-- The raise sets are hands for which every published solver mix includes a raise; in some spots (the heads-up small blind, deep unraked blinds) solvers mix in calls or limps, at almost no cost.
-- Not used heads-up or blind against blind, where real ranges are much wider (in GTO Wizard's heads-up 50bb solve, which has a small ante, the small blind folds only 4% of hands first in).
+  Those solves' flop model was tuned on numbers read from a GTO Wizard article, so the list's exact boundary is not from an allowed source.
+  Each hand has allowed backing of its own: 46 of the 47 are in Sklansky and Malmuth's group 9, the hands to fold (54o is group 8); facing a raise, our own equity tables decide most of them; and in the saved games only 15-17% of opens at 4 or more handed win the blinds uncontested, so stealing with trash rarely works in this pool.
+- Without rake the big blind defends wider against small raises, which is why trash folds only at the source spot's price or steeper.
+- The open set is exactly Sklansky and Malmuth's groups 1 and 2 plus AQo.
+  The 3-bet set holds at least 63% equity against a top-15% opening range and 67% against a top-30% one (our own tables; QQ 68% and 71%).
+- Not used heads-up or blind against blind, where real ranges are much wider: every hand has at least 32% equity against a random hand (32o, the lowest, 32.3%), while completing the small blind costs 25% of the pot and calling a 2.5bb open 30%.
 
 Coverage on the saved games (`uv run python scripts/replay_preflop_routes.py`, 2026-10-05, 7 games, 350 hero decisions):
 
