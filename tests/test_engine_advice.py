@@ -116,3 +116,39 @@ def test_nothing_after_the_flop():
         "Flop:  [K♠, 7♦, 2♣]",
     ]
     assert advise(lines, "B") is None
+
+
+def test_a_re_raise_of_the_hero_goes_to_claude_but_a_limp_then_raise_is_one_raise():
+    # The hero opened and got 3-bet: a 4-bet decision, Claude's even with queens.
+    three_bet = ["Your hand is Q♠, Q♦", *THREE, f"{P['A']} raises to 60", f"{P['B']} raises to 240"]
+    assert advise([*three_bet, f"{P['C']} folds"], "A", "ABC") is None
+    # The hero limped and faces one raise: aces still raise.
+    limp_raise = [
+        "Your hand is A♠, A♦",
+        *THREE,
+        f"{P['A']} calls 20",
+        f"{P['B']} folds",
+        f"{P['C']} raises to 80",
+    ]
+    assert advise(limp_raise, "A", "ABC")["action"] == "RAISE TO 240 (12bb)"
+
+
+def test_trash_does_not_fold_at_a_cheap_price():
+    # A 1.25bb all-in from a short stack: 8% equity to call is not a fold for 72o.
+    short = [
+        "Your hand is 7♠, 2♦",
+        *THREE,
+        f"{P['A']} raises to 25 and go all in",
+        f"{P['B']} folds",
+    ]
+    assert advise(short, "C", "ABC", stacks=(25, 1000, 1000)) is None
+
+
+def test_a_straddle_or_dead_money_leaves_the_raises_to_claude():
+    straddled = [
+        "Your hand is A♠, A♦",
+        f"{P['B']} posts a small blind of 10",
+        f"{P['C']} posts a big blind of 20",
+        f"{P['A']} posts a straddle of 40",
+    ]
+    assert advise(straddled, "B", "ABC") is None
