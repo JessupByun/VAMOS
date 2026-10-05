@@ -68,7 +68,7 @@ def test_positions_put_the_blinds_where_they_were_posted(path):
     from vamos.engine.state import positions
 
     for hand in load(path).hands:
-        if hand.dealer is None or len(hand.seats) < 3 or hand.dead_small_blind:
+        if hand.dealer is None or len(hand.seats) < 3:
             continue
         labels = positions(hand)
         for action in hand.actions:

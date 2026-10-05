@@ -67,6 +67,61 @@ Player stacks: {roster("A", "B", "C")}
     assert positions(h) == {"BBBBBBBBBB": "SB", "CCCCCCCCCC": "BB", "AAAAAAAAAA": "BTN"}
 
 
+def test_dead_small_blind_three_handed_labels_the_poster_bb_and_nobody_sb():
+    # B's seat, the small blind's, is empty; C posts the big blind one seat after the button.
+    text = f"""\
+-- starting hand #9 (id: h9)  No Limit Texas Hold'em (dealer: {P["A"]}) --
+Player stacks: #1 {P["A"]} (1000) | #3 {P["C"]} (1000) | #4 {P["D"]} (1000)
+Dead Small Blind
+{P["C"]} posts a big blind of 20
+"""
+    h = hand(text)
+    labels = positions(h)
+    # Order matters too: the prompt lists players in this order.
+    assert list(labels.items()) == [
+        ("CCCCCCCCCC", "BB"),
+        ("DDDDDDDDDD", "CO"),
+        ("AAAAAAAAAA", "BTN"),
+    ]
+    assert to_act(h) == "DDDDDDDDDD"
+    h = hand(text + f"{P['D']} raises to 60\n")
+    assert positions(h)["DDDDDDDDDD"] == "CO"
+    assert decision(h, "CCCCCCCCCC").position == "BB"
+    assert to_act(h) == "AAAAAAAAAA"
+
+
+def test_dead_small_blind_four_handed_counts_the_empty_seat():
+    h = hand(f"""\
+-- starting hand #10 (id: h10)  No Limit Texas Hold'em (dealer: {P["A"]}) --
+Player stacks: #1 {P["A"]} (1000) | #3 {P["C"]} (1000) | #4 {P["D"]} (1000) | #5 {P["E"]} (1000)
+Dead Small Blind
+{P["C"]} posts a big blind of 20
+{P["D"]} calls 20
+""")
+    assert list(positions(h).items()) == [
+        ("CCCCCCCCCC", "BB"),
+        ("DDDDDDDDDD", "HJ"),
+        ("EEEEEEEEEE", "CO"),
+        ("AAAAAAAAAA", "BTN"),
+    ]
+    assert to_act(h) == "EEEEEEEEEE"
+
+
+def test_dead_small_blind_with_a_player_between_the_button_and_the_big_blind():
+    # From a real hand (pglAxUBh #112): A, back from a break, sits after the button and
+    # before the empty small blind seat, posts a missed big blind, and acts where the small
+    # blind would, so A is labeled SB.
+    h = hand(f"""\
+-- starting hand #11 (id: h11)  No Limit Texas Hold'em (dealer: {P["E"]}) --
+Player stacks: #1 {P["A"]} (1000) | #3 {P["C"]} (1000) | #5 {P["E"]} (1000)
+Dead Small Blind
+{P["C"]} posts a big blind of 20
+{P["A"]} posts a missed big blind of 20
+""")
+    assert positions(h) == {"AAAAAAAAAA": "SB", "CCCCCCCCCC": "BB", "EEEEEEEEEE": "BTN"}
+    assert to_act(h) == "EEEEEEEEEE"
+
+
 def test_decision_reports_price_pot_and_effective_stack():
     h = hand(f"""\
 -- starting hand #3 (id: h3)  No Limit Texas Hold'em (dealer: {P["A"]}) --
