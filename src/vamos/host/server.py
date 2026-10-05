@@ -60,6 +60,8 @@ class Backend:
     ):
         self.data_dir = data_dir
         self.profiles_dir = profiles_dir
+        # Save draft's output, next to profiles/ (in the repo, or the test's temp folder).
+        self.drafts_dir = data_dir.parent / "drafts"
         # Raw log pages, as fetched, are only written to disk when explicitly asked (fixture
         # recording at test tables); the parsed rows of each game are saved below.
         self.record = record
@@ -102,7 +104,6 @@ class Backend:
         self.show_card = saved.get("showCard") is not False  # the card on the table
         self.show_badges = saved.get("showBadges") is not False  # the badges under the seats
         self.hero_names = [str(n) for n in saved.get("heroNames", []) if isinstance(n, str)]
-        self.notes = ""  # tonight's quick notes, never saved
         self.player_notes: dict[str, str] = {}  # PokerNow ID -> tonight's notes on that player
         # Per game, the notes written at that table, saved next to its log so a restarted
         # backend has them too.
@@ -210,15 +211,11 @@ class Backend:
                 self.player_notes[message["playerId"]] = text
                 if message.get("gameId"):
                     self._save_notes(message["gameId"], message["playerId"], text)
-            else:
-                self.notes = text
             return []
         if kind == "save_draft":
             return [self._save_draft(message["gameId"], message["playerId"])]
         if kind == "ask":
             return self._ask(message)
-        if kind == "settings_request":
-            return [self._settings(), self._costs()]
         log.warning("unknown message type %r", kind)
         return []
 
@@ -350,8 +347,8 @@ class Backend:
 
     def _save_draft(self, game_id: str, pid: str) -> Message:
         """
-        Tonight's read and notes on one player as a draft profile in data/drafts/, for the
-        user to review and merge into profiles/ themselves. VAMOS never writes profiles/.
+        This session's read and notes on one player as a draft in drafts/, for the user to
+        review and merge into profiles/ themselves. VAMOS never writes profiles/.
         """
         session = self._session(game_id)
         aliases = session.log.aliases
@@ -363,15 +360,14 @@ class Backend:
         read = reads(session.log).get(current)
         name = profile.name if profile else seat.get("name") or pid
         today = datetime.now()
-        # One file per player per game: saving again overwrites tonight's earlier save.
-        stem = f"{_slug(name)}-{today:%Y-%m-%d}-{_slug(game_id)}-{_slug(current)}"
-        path = self.data_dir / "drafts" / f"{stem}.md"
+        path = _draft_path(self.drafts_dir, f"{today:%Y-%m-%d}-{_slug(name)}", game_id, current)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
             _draft_text(
                 name,
                 seat.get("name", ""),
                 current,
+                game_id,
                 profile,
                 read,
                 self._notes_for(pid, aliases),
@@ -381,7 +377,7 @@ class Backend:
         return {
             "type": "draft_saved",
             "playerId": pid,
-            "path": str(path.relative_to(self.data_dir.parent)),
+            "path": str(path.relative_to(self.drafts_dir.parent)),
         }
 
     def _hero_id(self, game_id: str) -> str | None:
@@ -495,7 +491,7 @@ class Backend:
             log.exception("[VAMOS] could not compute %s at %s", what, node)
 
     def _preset_for(self, game_id: str, hand: Hand) -> str:
-        """The dial's preset, locked for the whole hand (Claude's cache is per model)."""
+        """The dial's preset, locked for the whole hand (Claude's cache is per model and effort)."""
         locked = self._hand_preset.get(game_id)
         if locked is None or locked[0] != hand.number:
             locked = (hand.number, self.preset)
@@ -522,7 +518,6 @@ class Backend:
             pid: r.summary() for pid, r in reads(self._session(game_id).log).items() if pid != hero
         }
         # The hand itself names players only by pseudonym; the notes are the user's own words.
-        notes = names.hide(self.notes)
         game_log = self._session(game_id).log
         player_notes = {
             game_log.current_id(pid): names.hide(text)
@@ -537,8 +532,7 @@ class Backend:
             claude_facts(hand, hero, spot, card, labels),
             legal(hand, hero, spot),
             tonight,
-            notes,
-            player_notes,
+            player_notes=player_notes,
         )
         # Only the profiles of players at this table (seated or dealt in), never the hero's.
         at_table = {s["id"] for s in self.seated.get(game_id, [])} | {
@@ -557,7 +551,7 @@ class Backend:
         )
         refuse = None
         try:
-            names.check("\n".join([system.user_text, notes, *player_notes.values()]))
+            names.check("\n".join([system.user_text, *player_notes.values()]))
         except LeakError as error:
             log.error("[VAMOS] %s", error)
             refuse = "blocked: a real name was left in the prompt"
@@ -662,8 +656,8 @@ class Backend:
             "problems": [
                 *profiles.problems,
                 *(
-                    f'"{name}" is too short or too generic to keep from Claude; '
-                    "give that player a longer alias or nickname"
+                    f'"{name}" is too short or looks like a pseudonym, so it is not hidden '
+                    "from Claude; rename that profile, or ask the player for a longer nickname"
                     for name in sorted(self.names.unusable)
                 ),
             ],
@@ -700,6 +694,31 @@ def _slug(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9_-]+", "-", name).strip("-").lower() or "player"
 
 
+def _draft_path(folder: Path, stem: str, game_id: str, pid: str) -> Path:
+    """
+    "2026-10-05-alex.md": saving again in the same game overwrites it; another game (or
+    another player of the same name) that day gets "-2", "-3", ...
+    """
+    for n in range(1, 100):
+        path = folder / (f"{stem}.md" if n == 1 else f"{stem}-{n}.md")
+        if not path.exists() or _draft_of(path) == (game_id, pid):
+            return path
+    raise RuntimeError(f"too many drafts named {stem}")
+
+
+def _draft_of(path: Path) -> tuple[str, str] | None:
+    """The game and player a saved draft is about, from its frontmatter."""
+    lines = path.read_text().splitlines()
+    try:
+        end = lines.index("---", 1) if lines and lines[0] == "---" else 0
+        meta = yaml.safe_load("\n".join(lines[1:end])) if end else None
+    except (ValueError, yaml.YAMLError):
+        return None
+    if not isinstance(meta, dict):
+        return None
+    return str(meta.get("game", "")), str(meta.get("player_id", ""))
+
+
 def _pct(count: int, of: int) -> str:
     return f"{round(100 * count / of)}% ({count}/{of})" if of else "n/a"
 
@@ -708,17 +727,22 @@ def _draft_text(
     name: str,
     nickname: str,
     pid: str,
+    game_id: str,
     profile: Profile | None,
     read: Read | None,
     notes: str,
     today: datetime,
 ) -> str:
-    """A draft profile in the template's shape: frontmatter, then what tonight showed."""
+    """
+    A draft for the user to merge by hand: frontmatter naming the player and the game, then
+    this session's numbers, hands shown and notes.
+    """
     # Dumped, not formatted, so a nickname like "Al: the shark" or "Bob, Jr" stays valid.
     meta = {
         "name": name,
         "aliases": [nickname] if nickname and nickname != name else [],
         "player_id": pid,
+        "game": game_id,
         "draft_of": profile.key if profile else "none",
         "saved": today.isoformat(timespec="minutes"),
     }
@@ -794,9 +818,9 @@ _SHOWN_META = ("hands", "sessions", "net", "last_updated")
 
 
 # Headline numbers read from a profile's text for the side panel, first mention of each, in
-# the template's wording ("- 3-bet 11% (11/96)", "- Flop c-bet 80% (40/50); facing a flop
-# bet: fold 35% (33/94)") or the older one ("- 3-bet vs an open 6% (7/114)", "- C-bets 61%",
-# "- Faced a bet: fold 35%"). 3-bets are read from a stats line only, since prose like
+# the template's wording ("- 3-bet vs an open 11% (11/96)", "- Flop: C-bets 80% (40/50).
+# Faced a bet: fold 35% (21/60)") or the older one ("- 3-bet 6% (7/114)", "- Flop c-bet
+# 61%", "facing a flop bet: fold 35%"). 3-bets are read from a stats line only, since prose like
 # "facing a 3-bet: call 82%" would otherwise be taken for one. Claude reads the whole profile.
 _PROFILE_STATS = (
     ("vpip", r"\bVPIP"),

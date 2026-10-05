@@ -5,7 +5,10 @@ import json
 import numpy as np
 
 from vamos.preflop.matchups import COMBO_COUNTS, INDEX
+from vamos.preflop.payoffs import ChipPayoffs
+from vamos.preflop.solver import evaluate
 from vamos.preflop.tables import DIR, MANIFEST, digest, load_all
+from vamos.preflop.tree import PUSH_FOLD, build
 
 PRIOR = COMBO_COUNTS / COMBO_COUNTS.sum()
 
@@ -28,10 +31,23 @@ def test_files_match_the_manifest():
 
 
 def test_every_table_met_its_convergence_target():
-    targets = {2: 0.5, 3: 3.0, 4: 5.0}
     for name, summary in manifest().items():
-        players = int(name.split("-")[1][0])
-        assert summary["nash_conv_mbb"] < targets[players], (name, summary)
+        assert summary["nash_conv_mbb"] < 0.5, (name, summary)
+
+
+def test_every_table_is_near_nash_when_recomputed():
+    # Not just the number each file reports: both players' best-response gains against the
+    # shipped strategies, recomputed.
+    payoffs = ChipPayoffs()
+    for table in load_all()[("pushfold", 2)]:
+        tree = build(2, table.stack, PUSH_FOLD)
+        strategy = {}
+        for d in tree.decisions:
+            spot = table.spots[d.path]
+            assert spot.actions == d.actions
+            strategy[d.id] = spot.strategy
+        ev, best = evaluate(tree, payoffs, strategy)
+        assert (best - ev).sum() * 1000 < 0.5, table.stack
 
 
 def test_every_mix_is_a_distribution():
@@ -43,21 +59,13 @@ def test_every_mix_is_a_distribution():
 
 
 def test_aces_never_fold():
-    # Exactly never on the first two decisions. Deeper, where the card would advise, a known
-    # residual: in long four-handed multi-limp lines (16 spots out of about 8,000 on
-    # 2026-10-02) aces fold 1-45% facing an all-in, from too little training there.
-    deep = 0
     for tables in load_all().values():
         for table in tables:
             for path, spot in table.spots.items():
                 if "fold" not in spot.actions or table.untrained[path][INDEX["AA"]]:
                     continue
                 fold = spot.strategy[spot.actions.index("fold"), INDEX["AA"]]
-                if len(path) <= 1:
-                    assert fold < 0.001, (table.players, table.stack, path, fold)
-                elif fold >= 0.01:
-                    deep += 1
-    assert deep <= 20
+                assert fold < 0.001, (table.players, table.stack, path, fold)
 
 
 def played(strategy: np.ndarray, actions: tuple[str, ...], reach: np.ndarray) -> float:

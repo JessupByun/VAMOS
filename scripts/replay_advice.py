@@ -1,14 +1,16 @@
 """
-Replay logged postflop spots through today's prompt and facts, to check a change on real
-hands before playing with it.
+Replay logged spots (before or after the flop) through today's prompt and facts, to check a
+change on real hands before playing with it.
 
 Each spot in data/advice.jsonl is rebuilt into PokerNow log lines (from the hand JSON that
 was sent, under the same pseudonyms), so the engine computes today's facts with today's
-code; the system prompt is built from today's profiles and guide. The new answers are shown
-next to the logged ones and saved to data/replays/. Spends real money (about 1 cent per
-Sonnet spot); --dry-run prints a rebuilt message without calling Claude.
+code; the system prompt holds today's profiles of the players in that spot, as live calls
+do. The new answers are shown next to the logged ones and saved to data/replays/. Spends
+real money (about 1-2 cents per spot on Opus 5.5 low); --dry-run prints a rebuilt message
+without calling Claude.
 
-Run: uv run python scripts/replay_advice.py [--preset balanced] [--lines 5,6,7] [--dry-run]
+Run: uv run python scripts/replay_advice.py [--preset standard|deep] [--effort low|medium]
+     [--lines 5,6,7] [--dry-run]
 """
 
 import argparse
@@ -105,7 +107,7 @@ def street_line(street: str, board: list[str]) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--preset", default="balanced", choices=list(PRESETS))
+    parser.add_argument("--preset", default="standard", choices=list(PRESETS))
     parser.add_argument("--effort", help="override the preset's effort (low, medium, high, ...)")
     parser.add_argument("--lines", help="1-based lines of data/advice.jsonl (default: all)")
     parser.add_argument("--dry-run", action="store_true")
@@ -127,7 +129,6 @@ def main() -> None:
     for key in sorted(profiles.profiles):
         profile = profiles.profiles[key]
         names.add(key, [profile.name, *profile.aliases], shown=profile.name)
-    system = prompt.prefix(profiles, names)
     provider = AnthropicProvider()
     results, spent = [], 0.0
     for number, entry in enumerate(logged, 1):
@@ -135,6 +136,10 @@ def main() -> None:
             continue
         text = entry["spot"]
         spot = json.loads(text[text.index("{") : text.rindex("}") + 1])
+        # Live calls send only the profiles of the players at the table.
+        present = {p["name"] for p in spot["players"]}
+        seated = {key for key in profiles.profiles if names.label(key) in present}
+        system = prompt.prefix(profiles, names, seated)
         notes = re.search(r"Hero's notes for tonight: (.*)\n", text)
         lines, ids = rebuild(spot)
         hand = build_hands((100 + i, line) for i, line in enumerate(lines)).hands[-1]

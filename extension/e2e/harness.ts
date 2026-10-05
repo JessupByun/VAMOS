@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -97,6 +97,8 @@ export interface Harness {
   recordedPages: () => RecordedPage[];
   /** Claude's canned answer from the next call on, e.g. a mixed strategy. */
   setClaudeAnswer: (answer: object) => void;
+  /** Close the browser, let the host exit, and delete the test's temp folder (about 6 MB). */
+  close: () => Promise<void>;
 }
 
 export async function launch(): Promise<Harness> {
@@ -199,5 +201,24 @@ export async function launch(): Promise<Harness> {
             .split("\n")
             .map((line) => JSON.parse(line) as RecordedPage)
         : [],
+    close: async () => {
+      await context.close();
+      // The host exits once Chrome closes its port; wait for it so its log is complete and
+      // nothing is still writing in the folder.
+      const pid = [...hostLog().matchAll(/started \(pid (\d+)\)/g)].map((m) => Number(m[1]));
+      for (let waited = 0; waited < 3000 && pid.some(running); waited += 100) {
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    },
   };
+}
+
+function running(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
 }

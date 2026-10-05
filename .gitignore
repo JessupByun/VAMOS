@@ -1,35 +1,31 @@
 # Python
 .venv/
-/venv/
 __pycache__/
 *.pyc
 .pytest_cache/
 .ruff_cache/
 .hypothesis/
 
-# Extension build and test output
+# Extension build output (test output goes to the system temp folder)
 node_modules/
 extension/dist/
-extension/test-results/
+# Written only by a debugging run with --reporter=html
 extension/playwright-report/
 
 # Secrets
 .env
-cookie_file.pkl
 
-# Private data: profiles are Jessup's, data/ is VAMOS's local state
+# Private data: profiles and drafts are Jessup's, data/ is VAMOS's local state
 profiles/*
 !profiles/_TEMPLATE.md
 !profiles/_PROMPT.md
+drafts/*
+!drafts/README.md
 /data/
 
 # Editors and OS
 .vscode/
-.idea/
 .DS_Store
 
-# Third-party PokerNow logs used as a local parser corpus (scripts/fetch_corpus.py)
+# Third-party data for the corpus checks (scripts/fetch_corpus.py, fetch_hrc_pushfold.py)
 tests/corpus/
-
-# Test-table seat browser profiles and screenshots (extension/tools/test-seats.mjs)
-extension/.test-seats/

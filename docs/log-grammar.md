@@ -1,4 +1,4 @@
-# PokerNow log grammar for VAMOS (P1)
+# PokerNow log grammar
 
 This is the reconciled grammar of PokerNow game-log lines, merged from the tracker, lmc4s, converters and fixtures inventories.
 The CSV export (`entry,at,order`) and the live `/games/<id>/log` endpoint (`msg`) carry the same text, so one grammar serves both.
@@ -84,7 +84,7 @@ ALLIN  = (?P<allin> and go all in)?                    matched after rstrip()
 - Older formats are `(id: x)  (No Limit Texas Hold'em)` (2022-2023), `#N  (No Limit Texas Hold'em)` with no id (2021), `#N  (Texas Hold'em)` (2020-06) and `#N (dealer: ...)` with no variant (2020-05).
 - Only `No Limit Texas Hold'em` occurs in 2026 data; L has `(Pot Limit Omaha Hi)` (88 hands) and `(Pot Limit Omaha Hi/Lo 8 or Better)` (48 hands).
 - Current PokerNow also offers `Pot Limit Omaha Hi/Lo (8 or Better)`, `Pot Limit Omaha 5 Hi` and `Pot Limit Omaha 5 Hi/Lo (8 or Better)`, which contain inner parentheses that a greedy `\((.*)\)` would mis-split.
-- VAMOS should strip one pair of outer parentheses from `variant` and accept the hand only when it equals `No Limit Texas Hold'em` exactly.
+- VAMOS strips one pair of outer parentheses from `variant` and accepts the hand only when it equals `No Limit Texas Hold'em` exactly.
 - A `Game Config Changes` row can share the start row's millisecond and sit just before it.
 - J counts: 6,631 (6,567 with a dealer, 64 dead button); L counts: 482.
 
@@ -737,7 +737,7 @@ Game Config Changes
 
 - It is one multi-line entry, one `* Key: old » new` line per setting.
 - Keys seen: Blind Schedule, Restart Blind Schedule at Level, Allow Rebuy, Nit Minimum Players, Nit Game, Nit Prize (BB), Rabbit Hunt, Allow Run it Twice, 7-2 bounty, Allow Straddle, Double Board, Bomb Pot, Bomb Pot Probability, Bomb Pot BB Quantity, Game Type Cyling (sic), Simulated Fee, Simulated Fee Percentage, Simulated Fee Max Value, Spectator Mode, Cents Mode, Decision Limit Time.
-- Double Board, Allow Run it Twice, Allow Straddle, 7-2 bounty, Bomb Pot, Cents Mode and Game Type Cyling change how later hands are logged, so VAMOS should record them as table modes.
+- Double Board, Allow Run it Twice, Allow Straddle, 7-2 bounty, Bomb Pot, Cents Mode and Game Type Cyling change how later hands are logged; VAMOS keeps them as table rows only (second runs and boards are read from the board rows themselves, and table modes are not tracked).
 - J counts: 69 (68 between hands).
 
 ### Rebuy flow
@@ -768,7 +768,7 @@ The player "Harry @ Q4OMcL0rqd" rebought. New stack 1000.
 - `The player "bobo @ O7q--fndwt" created the game with a stack of 1000.` is a 2020 seating row.
 - Lowercase `flop:`, `turn:` and `river:` are 2020 board rows.
 - Hand descriptors without ranks (`Two Pair`), with suit letters (`Flush, Kh High`), PLO hi/lo text (`hi hand with ...`) and 6-card combinations occur in 2021-2022 rows.
-- These forms do not appear in any 2026 row, so VAMOS should log them as unsupported rather than parse them.
+- These forms do not appear in any 2026 row, so VAMOS leaves them as unknown events rather than parse them.
 
 ### Parser-only rows (no real example)
 
@@ -788,7 +788,7 @@ The player "Harry @ Q4OMcL0rqd" rebought. New stack 1000.
 
 - The tracker's test says `The player "Henry @ FQN9hzhzP_" changed the ID from wgnNFHC2ZI to FQN9hzhzP_ because authenticated login.` was seen live on 2026-09-13.
 - In that example the token already carries the new ID, while the LMC4S synthetic fixture puts the old ID in the token.
-- VAMOS should take both IDs from the `from X to Y` clause and alias the old ID to the new one.
+- VAMOS takes both IDs from the `from X to Y` clause and aliases the old ID to the new one.
 
 #### bomb_pot_post (parser-only)
 
@@ -809,9 +809,7 @@ The player "Harry @ Q4OMcL0rqd" rebought. New stack 1000.
 
 ## Conflicts and resolutions
 
-- Calls, bets and raises: every inventory reads `N` as the street total, and the only counter-hint was docs/pokernow.md's live sample, so total wins (J 6,629 of 6,629 hands balance as totals versus 1,428 as increments).
-- docs/pokernow.md's "Observed live" block is spliced from two hands: in R, `Your hand is 4♠, 10♠` and `"Hero @ heroid0001" calls 20` belong to hand #2, where Hero is the small blind, so the call adds 10 and the LMC4S reading of a zero-increment call is wrong.
-- The same docs block puts the seat request and approval after hand #1, but R logs them before hand #1 and logs both `joined` rows inside hand #1's start block.
+- Calls, bets and raises: every inventory reads `N` as the street total, and J balances 6,629 of 6,629 hands as totals versus 1,428 as increments; the live recording R agrees (hand #2's small blind `calls 20` adds 10).
 - Raise amounts include the raiser's earlier chips on the street, blinds included, as shown by J `pglkWn5b4` hand #30, where totals of 270 preflop and 740 on the flop per player give the collected 2,020.
 - Straddle: LMC4S adds it to the small blind, PokerNowKit treats it as `raises to`, and evo assumes 2xBB, but J balances 34 of 34 hands as cumulative and 28 of 34 as additive, so it is cumulative.
 - Missed big blind: LMC4S adds it, while the tracker and fixtures treat it as live and cumulative, and J balances 20 of 20 cumulative, 14 additive and 3 dead, so it is live and cumulative.

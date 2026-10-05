@@ -28,7 +28,7 @@ Requirements:
 - Mark any pattern backed by fewer than about 10 examples as low confidence.
 - If recent sessions differ from older ones, say so and weight the recent behavior.
 - Be specific and actionable. No generic poker advice, no filler, nothing that would apply to any player.
-- Keep each profile under about 1,500 words (about 4,000 tokens; every word is sent to the assistant on each decision). When adding sessions, recompute every stat over all sessions and show at most two numbers per stat: all sessions and recent (the last two sessions). Fold older per-session splits into the totals.
+- Keep each profile under about 1,500 words (about 4,000 tokens; every word is sent to the assistant on each decision while that player is at the table). When adding sessions, recompute every stat over all sessions and show at most two numbers per stat: all sessions and recent (the last two sessions). Fold older per-session splits into the totals.
 - At most 8 example hands per bullet (describe the rest as a range, e.g. "median top 12%, down to T7s"), at most 5 notable hands, and each hand number at most once outside Notable hands.
 - Leave out any session or hands a player asked to exclude, and say so in the Source line.
 - Output each profile as its own Markdown code block, preceded by the file name, e.g. `bob.md` (lowercase first name).

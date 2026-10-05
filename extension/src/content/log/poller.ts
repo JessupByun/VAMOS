@@ -45,7 +45,7 @@ export function startLogPoller(gameId: string, deliver: (page: LogPage) => boole
   let history: string | null = null;
   let wantHistory = false;
   let historyNext = false;
-  // Bumped by resync(), so a response to a request made before it cannot move the cursor.
+  // Bumped by resume(), so a response to a request made before it cannot move the cursor.
   let generation = 0;
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;

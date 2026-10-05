@@ -82,11 +82,11 @@ export interface PlayerInfo {
   /** A profile's player_id (fixed) or the user's own answer (changeable). */
   source: "player_id" | "answer" | null;
   profile: ProfileView | null;
-  /** Tonight's read, counted from tonight's log only and never saved. */
+  /** This session's read, counted from the current game's log (rebuilt from its saved rows). */
   tonight: TonightRead | null;
   /** The hero's own row. */
   hero?: boolean;
-  /** The user's notes on this player tonight; sent to Claude with every hand they play. */
+  /** The user's notes on this player this session; sent to Claude with every hand they play. */
   notes: string;
 }
 
@@ -109,11 +109,11 @@ export interface TonightRead {
   facedBets: number;
 }
 
-/** A draft profile was written for the user to review. */
+/** A draft was written to drafts/ for the user to review. */
 export interface DraftSaved {
   type: "draft_saved";
   playerId: string;
-  /** Relative to the repo, e.g. "data/drafts/alex-2026-10-03.md". */
+  /** Relative to the repo, e.g. "drafts/2026-10-05-alex.md" ("-2" for a second game that day). */
   path: string;
 }
 
@@ -174,9 +174,10 @@ export interface SpotFacts {
   /** Equity needed to call, in percent. */
   need: number | null;
   madeHand: string;
-  /** Preflop: the charts' action. Postflop: Claude's answer, or why there is none. */
+  /** A preflop rule's or the push/fold chart's action when one answers at once; otherwise
+   * Claude's answer (before or after the flop), or why there is none; null when AI is off. */
   advice: PreflopAdvice | ClaudeAdvice | null;
-  /** Set when Claude is switched off: postflop, the card shows the facts only. */
+  /** Set when AI is off and no preflop rule or chart answered: the card shows the facts only. */
   aiOff?: boolean;
 }
 
@@ -231,7 +232,7 @@ export function isClaude(advice: SpotFacts["advice"]): advice is ClaudeAdvice {
 }
 
 export interface PreflopAdvice {
-  /** "Chart" (heads-up push/fold) or "Rule" (a clear fold or raise). */
+  /** "Chart" (heads-up push/fold) or "Rule" (a clear fold, check or raise). */
   source: string;
   /** e.g. "RAISE TO 0.60 (3bb)", drawn from the mix. */
   action: string | null;
@@ -265,7 +266,7 @@ export type Preset = "standard" | "deep";
 
 export interface PresetInfo {
   name: Preset;
-  /** e.g. "Sonnet 5.5". */
+  /** e.g. "Opus 5.5 · low thinking". */
   label: string;
   /** The model's thinking effort, e.g. "medium". */
   effort: string | null;
@@ -334,12 +335,11 @@ export type PanelToWorker =
   | AssignIdentity
   | ForgetIdentity
   | { type: "settings"; preset?: Preset; aiOn?: boolean; showCard?: boolean; showBadges?: boolean }
-  | { type: "settings_request" }
-  /** Notes for tonight's prompts, on one player (saved with that game's log) or the whole table. */
-  | { type: "notes"; text: string; playerId?: string; gameId?: string }
+  /** Notes on one player for this session's prompts, saved with that game's log. */
+  | { type: "notes"; text: string; playerId: string; gameId?: string }
   /** Re-run the decision on the table with another preset ("Ask deeper"). */
   | { type: "ask"; gameId: string; preset: Preset }
-  /** Write tonight's read and notes on a player to data/drafts/ for the user to review. */
+  /** Write this session's read and notes on a player to drafts/ for the user to review. */
   | { type: "save_draft"; gameId: string; playerId: string };
 export type WorkerToPanel =
   | BackendStatus
@@ -359,5 +359,4 @@ export type HostToWorker =
   | Costs
   | HandInfo
   | DraftSaved
-  | Resume
-  | { type: "error"; message: string };
+  | Resume;

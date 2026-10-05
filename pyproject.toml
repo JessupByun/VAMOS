@@ -41,14 +41,12 @@ select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-m 'not slow and not integration and not corpus'"
+addopts = "-m 'not corpus'"
 filterwarnings = [
     # eval7 parses range strings with a pyparsing call that pyparsing has deprecated; it is
     # third-party code, emitted once at import.
     "ignore::DeprecationWarning:eval7.rangestring",
 ]
 markers = [
-    "slow: long-running reference checks (run with -m slow)",
-    "integration: hits a live external service",
-    "corpus: parser regression over the third-party log corpus in tests/corpus",
+    "corpus: checks against third-party data in tests/corpus (fetched by scripts/fetch_*.py)",
 ]

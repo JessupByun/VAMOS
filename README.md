@@ -1,31 +1,47 @@
 # VAMOS
 
 VAMOS is a real-time poker assistant for [PokerNow](https://www.pokernow.com) No-Limit Hold'em cash games.
-It reads the table from PokerNow's own game log, does the math in code, and asks Claude for postflop decisions with your opponent profiles in context.
-It is the successor to PAIv1.
+It reads the table from PokerNow's own game log, does the math in code, and asks Claude for the decisions that need judgment, with your opponent profiles in context.
+VAMOS only reads and displays; it never clicks or types into PokerNow.
 
-Status: early development (P0 bootstrap). Nothing is playable yet.
+## Your folders
 
-## How it will work
+| Folder | What you do there |
+|---|---|
+| `profiles/` | One `<name>.md` per opponent, written and updated by you. Start from `_TEMPLATE.md`; `_PROMPT.md` is the prompt for generating one in a separate AI chat. VAMOS reads these and never changes them. |
+| `drafts/` | What the side panel's Save draft writes: one file per player and session, such as `2026-10-05-alex.md`. Review it, merge what is useful into that player's profile, then delete it. |
+| `.env` | Your `ANTHROPIC_API_KEY` (see `.env.example`). Never shared or committed. |
 
-- A Chrome extension in your everyday Chrome reads the PokerNow table and shows an action card, seat badges and a side panel.
-- Opening a PokerNow table launches the local Python backend through Chrome native messaging; nothing else to start.
-- Preflop advice comes from precomputed baseline tables, instantly and for free.
-- Postflop advice comes from Claude (Sonnet by default, Opus on demand), with every piece of advice labeled by its source.
-- VAMOS only reads and displays; it never clicks or types into PokerNow.
+Everything else is maintained by Claude:
 
-## Profiles
+| Folder | What it is |
+|---|---|
+| `src/` | The backend that Chrome starts when a PokerNow table opens. |
+| `extension/` | The Chrome extension: the card and badges on the table, and the side panel. |
+| `data/` | VAMOS's own state: saved games (kept 3 days), settings, seat matches, costs and logs. Nothing to edit. |
+| `docs/` | Reference notes: PokerNow's log and page, and how preflop advice works. |
+| `scripts/` | Developer tools. |
+| `tests/` | The test suite. |
 
-Opponent profiles are Markdown files you write and maintain yourself in `profiles/`, one per person.
-They are gitignored; only `profiles/_TEMPLATE.md` and `profiles/_PROMPT.md` (a prompt for generating profiles in a separate AI chat) are tracked.
-VAMOS reads profiles but never edits them, and never learns from anything on its own.
+## How it works
 
-## Development
+- Preflop, heads-up at 15bb or less: a push/fold chart (`Preflop chart` on the card).
+- Preflop, clear spots: simple rules (`Preflop rule`); trash folds when 3 or more players are dealt in, and the strongest hands raise.
+- Everything else, before or after the flop: Claude Opus 5.5 at low effort (`VAMOS! AI (Claude Opus 5.5 · low)`), with Ask deeper for a medium-effort second answer.
+- The side panel's switches turn AI advice, the card and the badges on or off; with AI off no Claude call is made.
+- Claude sees opponents only under pseudonyms (Player A, Player B, ...); no real name or nickname is sent.
 
-Requires Python 3.12, [uv](https://docs.astral.sh/uv/), Node.js and Google Chrome.
+## Setup (once)
 
 ```bash
 uv sync
-uv run pytest
-uv run ruff check .
+uv run vamos install
+cd extension && npm ci && npm run build
 ```
+
+Then load `extension/dist` as an unpacked extension in `chrome://extensions`, put your API key in `.env`, and open a PokerNow table.
+
+## After an update
+
+Reload VAMOS in `chrome://extensions`, then reload the PokerNow tab.
+That also restarts the backend, which Chrome runs from this folder.

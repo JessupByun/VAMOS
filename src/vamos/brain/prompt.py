@@ -1,11 +1,13 @@
 """
-What Claude is sent for a postflop decision, kept short on purpose: a role, the user's
-profiles, and the hand. Claude's judgment does the rest; there is no strategy guide.
+What Claude is sent for a decision before or after the flop, kept short on purpose: a role,
+the profiles of the players at the table, and the hand. Claude's judgment does the rest;
+there is no strategy guide.
 
-The system prompt is a cached prefix: the role and every profile, pseudonymized. It holds
-every profile rather than only the players seated, so names mentioned inside one profile
-are hidden too and the prefix stays byte-identical while players come and go; it changes
-only when a profile file does. Each decision is then one user message with the hand so far:
+The system prompt is a cached prefix: the role and the profiles of the players at the table
+(never the hero's), pseudonymized with every profile's names registered, so a name
+mentioned inside one profile is hidden too. It is written again when the set of profiled
+players at the table changes or a profile file does. Each decision is then one user
+message with the hand so far:
 the full history in order (board cards where they were dealt) and exact numbers computed
 from it. Every request is a fresh conversation rather than a growing one per hand: the
 expensive part is the cached prefix either way.

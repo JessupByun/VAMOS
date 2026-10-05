@@ -1,9 +1,11 @@
 """
 Opponent profiles: the user's own Markdown files in profiles/, one per person.
 
-VAMOS only reads them. A file is YAML frontmatter followed by free-form Markdown; the
-fields VAMOS uses are `tag` (seat badge label), `aliases` and `player_id` (one PokerNow ID
-or a list of them). Files whose name starts with "_" (template, prompt) are skipped.
+VAMOS only reads them. A file is YAML frontmatter followed by free-form Markdown; VAMOS
+uses `name`, `tag` (seat badge label), `player_id` (one PokerNow ID or a list of them) and
+optional `aliases`, and shows `hands`, `sessions`, `net` and `last_updated`, the summary's
+first sentence and the Key stats lines in the side panel. Files whose name starts with "_"
+(template, prompt) are skipped.
 """
 
 import re

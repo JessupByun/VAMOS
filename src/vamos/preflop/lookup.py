@@ -1,18 +1,18 @@
 """
-The preflop baseline at a live decision: the solved-tree spot that matches what happened,
-the hero's mix there, and one action sampled from it.
+A solved preflop chart at a live decision: the spot that matches what happened, the hero's
+mix there, and one action sampled from it. Only the heads-up push/fold chart is loaded
+today (engine/advice.py).
 
 Live play is mapped onto the solved trees:
 - positions come from the seats (heads-up the button is the small blind);
-- a raise goes to the nearest solved size, compared as a ratio (a 4bb open counts as the
-  3bb open), and an all-in counts as the tree's all-in; a raise more than twice or under
-  half the nearest size (a 50bb open shove where only 2.5 and 3bb opens were solved) is
-  off the tree;
+- a raise goes to the nearest solved size, compared as a ratio, and an all-in counts as the
+  tree's all-in; a raise more than twice or under half the nearest size is off the tree.
+  In the push/fold chart the only raise is the jam, so at 10bb a raise to 6bb counts as the
+  jam (the raiser is committed) and a raise to 4bb is off the chart;
 - the effective stack picks the two nearest solved depths and the mix is blended between
   them by distance (in log of the stack).
-Anything the trees do not cover (five or more players, a straddle, a cold call of a 3-bet),
-and hands the solve learned nothing for at a spot (nobody else ever reaches it), get no
-advice rather than a guess.
+Anything the trees do not cover (a limp, a min-raise, a straddle, more players), and hands
+the solve learned nothing for at a spot, get no advice rather than a guess.
 """
 
 import math

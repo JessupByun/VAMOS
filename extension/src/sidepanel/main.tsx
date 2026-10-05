@@ -83,7 +83,8 @@ function onHand(info: HandInfo) {
 function onFacts(gameId: string, node: string | null, advice: unknown) {
   const hand = hands.get(gameId);
   if (node === null || !isClaude(advice as ClaudeAdvice | null)) {
-    // The decision passed (or a preflop chart is up): nothing on this table is live.
+    // The decision passed (or a preflop rule or chart answered, or AI is off): nothing on
+    // this table is live.
     if (hand) hands.set(gameId, { ...hand, live: null });
     return;
   }
@@ -228,15 +229,9 @@ function AnswerView(props: { answer: ClaudeAnswer; deeper: boolean; live: boolea
   );
 }
 
-function answersOf(advice: ClaudeAdvice): ClaudeAnswer[] {
-  if (advice.answers?.length) return advice.answers;
-  const { model, preset, state, reason, action, mix, pick, pickPct, deviation, why, plan } = advice;
-  return [{ model, preset, state, reason, action, mix, pick, pickPct, deviation, why, plan }];
-}
-
 function DecisionView(props: { decision: Decision; live: boolean; gameId: string }) {
   const { decision, live, gameId } = props;
-  const answers = answersOf(decision.advice);
+  const answers = decision.advice.answers;
   return (
     <div class={live ? "decision live" : "decision"}>
       <div class="head">
@@ -617,7 +612,7 @@ function PlayerRow(props: { player: PlayerInfo; profiles: Players["profiles"]; g
             <button
               type="button"
               class="mini"
-              title="Write this session's read and your notes to data/drafts/ for you to review"
+              title="Write this session's read and your notes to drafts/ for you to review"
               onClick={() => send({ type: "save_draft", gameId, playerId: player.id })}
             >
               Save draft

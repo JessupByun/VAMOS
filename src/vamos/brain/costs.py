@@ -24,7 +24,7 @@ SOFT_CAP = 5.00  # dollars per session
 class CallCost:
     at: str  # ISO time
     model: str
-    kind: str  # advice, explain, ...
+    kind: str  # advice, preflop, ask (Ask deeper), or replay from scripts/replay_advice.py
     input_tokens: int
     output_tokens: int
     cache_read_tokens: int

@@ -469,15 +469,6 @@ def test_the_dial_and_the_heros_names_come_from_settings(tmp_path):
     assert "Jessica" not in sent_text and "when Hero check-raises" in sent_text
 
 
-def test_notes_are_sent_under_pseudonyms(tmp_path):
-    backend, fake, _ = claude_backend(tmp_path, [Reply(BET_HALF, "end_turn", {})])
-    backend.handle({"type": "notes", "text": "alex is on tilt"})
-    backend.handle(page(*FLOP_HAND))
-    backend.handle(FLOP_TURN)
-    content = fake.requests[0].messages[0]["content"]
-    assert "Player A is on tilt" in content and "alex" not in content
-
-
 def test_each_new_decision_restarts_the_clock(tmp_path):
     profiles = tmp_path / "profiles"
     profiles.mkdir()
@@ -563,7 +554,7 @@ def test_an_empty_summary_section_is_not_filled_from_the_next_heading():
     assert _summary("# rj\n\nLoose floater who cold-calls.\n") == "Loose floater who cold-calls."
 
 
-def test_a_draft_profile_goes_to_data_drafts_and_never_to_profiles(tmp_path):
+def test_a_draft_goes_to_drafts_and_never_to_profiles(tmp_path):
     backend, _, _ = claude_backend(tmp_path, [])
     backend.handle(SEATS)
     backend.handle(page(*FLOP_HAND))
@@ -571,15 +562,20 @@ def test_a_draft_profile_goes_to_data_drafts_and_never_to_profiles(tmp_path):
     before = sorted(p.name for p in (tmp_path / "profiles").iterdir())
     [saved] = backend.handle({"type": "save_draft", "gameId": GAME, "playerId": "Qw3rTy7UiO"})
     assert saved["type"] == "draft_saved"
-    assert re.fullmatch(
-        rf"data/drafts/alex-\d{{4}}-\d{{2}}-\d{{2}}-{GAME.lower()}-9u4gp8c1eh\.md", saved["path"]
-    )
+    assert re.fullmatch(r"drafts/\d{4}-\d{2}-\d{2}-alex\.md", saved["path"])
     text = (tmp_path / saved["path"]).read_text()
     assert "draft_of: alex" in text and "- Hands: 1" in text and "very bluffy" in text
+    assert f"game: {GAME}" in text
     assert sorted(p.name for p in (tmp_path / "profiles").iterdir()) == before
     # Another player's draft from the same game never overwrites this one.
     [other] = backend.handle({"type": "save_draft", "gameId": GAME, "playerId": "zzzzzzzzzz"})
     assert other["path"] != saved["path"] and (tmp_path / saved["path"]).exists()
+    # Saving again in the same game replaces the draft; another game that day gets "-2".
+    [again] = backend.handle({"type": "save_draft", "gameId": GAME, "playerId": "Qw3rTy7UiO"})
+    assert again["path"] == saved["path"]
+    (tmp_path / saved["path"]).write_text(text.replace(f"game: {GAME}", "game: earlier"))
+    [later] = backend.handle({"type": "save_draft", "gameId": GAME, "playerId": "Qw3rTy7UiO"})
+    assert later["path"] == saved["path"].replace(".md", "-2.md")
 
 
 def test_a_draft_frontmatter_stays_valid_for_any_nickname():
@@ -587,7 +583,9 @@ def test_a_draft_frontmatter_stays_valid_for_any_nickname():
     from vamos.profiles import parse_profile
 
     for nickname in ("Al: the shark", "#1 fish", "[x]", "Bob, Jr"):
-        text = _draft_text("Al", nickname, "aaaaaaaaaa", None, None, "", datetime(2026, 10, 3))
+        text = _draft_text(
+            "Al", nickname, "aaaaaaaaaa", GAME, None, None, "", datetime(2026, 10, 3)
+        )
         # Moved into profiles/ as is, the draft parses, with the nickname as one alias.
         profile = parse_profile("al", text)
         assert profile.aliases == (nickname,) and profile.player_ids == ("aaaaaaaaaa",)

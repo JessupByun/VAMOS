@@ -23,8 +23,12 @@ test.beforeEach(async () => {
   harness = await launch();
 });
 
-test.afterEach(async () => {
-  await harness.context.close();
+test.afterEach(async ({}, testInfo) => {
+  // A failed test keeps its host log in the report; the temp folder goes either way.
+  if (testInfo.status !== testInfo.expectedStatus) {
+    await testInfo.attach("host.log", { body: harness.hostLog(), contentType: "text/plain" });
+  }
+  await harness.close();
 });
 
 const pillStatus = (page: Page) => page.locator("#vamos-root .status");
@@ -448,10 +452,10 @@ test("after the flop the card shows Claude's answer and the panel its reasoning"
   await expect(panel.locator(".players li.mapped .group").nth(1).locator(".st .v")).toHaveText(["48%", "12%", "+12.40"]);
   await expect(panel.locator(".players li.mapped .session")).toHaveText(["ASep 1+20.00", "BSep 8-7.60"]);
   await expect(panel.locator(".players li.mapped .session .amount")).toHaveClass([/pos/, /neg/]);
-  // A draft of tonight's read goes to data/drafts/, never to profiles/.
+  // A draft of this session's read goes to drafts/, never to profiles/.
   const alexRow = panel.locator(".players li.player", { has: panel.locator(".who", { hasText: /^alex$/ }) });
   await alexRow.getByRole("button", { name: "Save draft" }).click();
-  await expect(panel.locator(".players .saved")).toHaveText(/^Draft saved to data\/drafts\/alex-\d{4}-\d{2}-\d{2}-e2etest-known00001\.md$/);
+  await expect(panel.locator(".players .saved")).toHaveText(/^Draft saved to drafts\/\d{4}-\d{2}-\d{2}-alex\.md$/);
 
   // Asking deeper adds the deeper answer under the first one; it never replaces it.
   await panel.getByRole("button", { name: "Ask deeper" }).click();
@@ -518,8 +522,8 @@ test("screenshots of the card and the side panel", async () => {
   await heroTurn(page);
   harness.addLogLines([`"new guy @ ${STRANGER_ID}" folds`]);
   await expect(card.locator(".source")).toContainText("VAMOS! AI");
-  await card.screenshot({ path: `${dir}/2-chart-card.png` });
-  await page.screenshot({ path: `${dir}/2-chart-table.png` });
+  await card.screenshot({ path: `${dir}/2-preflop-card.png` });
+  await page.screenshot({ path: `${dir}/2-preflop-table.png` });
   harness.addLogLines([
     `"TestHero @ ${HERO_ID}" calls 0.20`,
     `"alex @ ${KNOWN_ID}" checks`,

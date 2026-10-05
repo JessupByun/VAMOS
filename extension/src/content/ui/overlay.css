@@ -100,10 +100,6 @@
   --accent: var(--vamos-bad);
 }
 
-.action-card.neutral {
-  --accent: var(--vamos-muted);
-}
-
 /* The quiet state: the backend's status, and whether it is waiting for the hero's turn. */
 .action-card.waiting {
   display: flex;
@@ -247,7 +243,6 @@
 }
 
 .action-card .chip.picked {
-  opacity: 1;
   font-weight: 800;
   background: color-mix(in srgb, currentColor 16%, transparent);
   border: 1.5px solid currentColor;

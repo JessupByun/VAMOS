@@ -1,18 +1,19 @@
 """
-Claude's postflop advice: at most one call per decision and preset, run in the background.
+Claude's advice, before or after the flop: at most one call per decision and preset, run in
+the background.
 
 Every call is stamped with the decision node it answers, and what it returns is shown only
 while that node is current. When the hero acts or the hand moves on, the call is cancelled
 (its stream is closed, so only tokens produced are billed) and its answer is dropped. A call
 has a deadline from the table's clock, about five seconds before the hero's time runs out,
 or 25 seconds after the turn began when the table has no clock. A call that misses it,
-fails or answers nonsense leaves the math on the card with the reason. A failure that may
+fails or answers nonsense leaves the facts on the card with the reason. A failure that may
 pass on its own (Claude overloaded, a dropped connection, an unreadable answer) is tried
 once more if enough time is left.
 
 Every call that answers or fails is appended to data/advice.jsonl, under pseudonyms: the
-hand as sent, Claude's raw answer and what the card showed, so the presets can later be
-compared on real spots (it cannot be rebuilt afterwards).
+hand as sent, Claude's raw answer and what the card showed, so real spots can be replayed
+through a changed prompt (scripts/replay_advice.py; it cannot be rebuilt afterwards).
 """
 
 import hashlib
@@ -49,7 +50,7 @@ class Job:
     request: Request
     spot: Spot
     reveal: Callable[[str], str] = field(default=lambda text: text)
-    kind: str = "advice"  # the cost ledger's label: advice, deep, ...
+    kind: str = "advice"  # the cost ledger's label: advice, preflop or ask
 
 
 class Call:
@@ -313,7 +314,7 @@ class Advisor:
             # From the call's start: how long it took, and how long it was allowed.
             "seconds": round(self._clock() - call.started, 2),
             "allowed": round(call.deadline - call.started, 1),
-            # Which profiles and guide the answer saw, without storing them again.
+            # Which profiles the answer saw, without storing them again.
             "prefix": hashlib.sha256(system.encode()).hexdigest()[:16],
             "spot": request.messages[-1]["content"] if request.messages else None,
             "answer": call.raw,

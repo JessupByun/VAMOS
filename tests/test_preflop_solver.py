@@ -7,6 +7,7 @@ import pytest
 from vamos.preflop.matchups import CLASSES, INDEX
 from vamos.preflop.payoffs import ChipPayoffs
 from vamos.preflop.solver import Solver, action_values, evaluate
+from vamos.preflop.tables import load_all
 from vamos.preflop.tree import PUSH_FOLD, build
 
 HRC = Path(__file__).parent / "corpus" / "hrc"
@@ -60,18 +61,23 @@ def test_push_fold_matches_holdem_resources(stack):
                 assert gap[k] < 1e-3, (stack, action, hand, strategy[a, k], reference[hand])
 
 
-@pytest.mark.parametrize(
-    ("players", "bound"), [(3, 0.015), pytest.param(4, 0.04, marks=pytest.mark.slow)]
-)
-def test_chips_nearly_balance_with_more_players(players, bound):
-    # Exact zero-sum only heads-up; with more players the bucketed multiway odds differ
-    # slightly between seats. A uniform strategy sends whole buckets into multiway pots,
-    # the worst case for buckets split by hand type: +0.010bb a hand three-handed and
-    # +0.032 four-handed (2026-10-02); solved strategies balance better (+0.004 three-handed).
-    tree = build(players, 50)
-    uniform = {d.id: np.full((len(d.actions), 169), 1 / len(d.actions)) for d in tree.decisions}
-    ev, _ = evaluate(tree, PAYOFFS, uniform)
-    assert abs(ev.sum()) < bound
+@pytest.mark.corpus
+@pytest.mark.skipif(not HRC.exists(), reason="run scripts/fetch_hrc_pushfold.py")
+@pytest.mark.parametrize("stack", range(2, 16))
+def test_the_shipped_charts_are_worth_what_holdem_resources_is(stack):
+    # The committed tables, not a fresh solve: the small blind's value with both players on
+    # the shipped chart equals its value with both on HRC's published one.
+    table = next(t for t in load_all()[("pushfold", 2)] if t.stack == stack)
+    tree = build(2, stack, PUSH_FOLD)
+    shipped = {d.id: table.spots[d.path].strategy for d in tree.decisions}
+    push, call = hrc("push")[stack], hrc("call")[stack]
+    theirs = {}
+    for d, reference in zip(tree.decisions, (push, call), strict=True):
+        aggressive = np.array([reference.get(hand, 0.0) for hand in CLASSES])
+        theirs[d.id] = np.stack([1 - aggressive, aggressive])
+    ours, _ = evaluate(tree, PAYOFFS, shipped)
+    published, _ = evaluate(tree, PAYOFFS, theirs)
+    assert ours[0] == pytest.approx(published[0], abs=1e-4)
 
 
 def test_paths_must_name_the_player_to_act():
@@ -82,22 +88,11 @@ def test_paths_must_name_the_player_to_act():
         solution.at(("SB:jam", "BB:call"))  # ends at a showdown, not a decision
 
 
-def test_the_average_strategy_is_weighted_by_own_reach():
-    # DCFR averages each decision's strategies weighted by how often the player reaches it.
-    # Without that weighting this solve sits at 1.04 mbb/hand after 300 iterations; with it,
-    # 0.72 (measured 2026-10-02).
-    from vamos.preflop.realization import Realization
-
-    # The flop model's values are pinned here so a refit does not move the threshold.
-    flop = Realization(
-        50,
-        theta=np.array([2.8142, 1.0593, 1.2693, 1.3583, -0.7426]),
-        out_of_position=0.7199,
-        cap=2.8346,
-    )
-    solver = Solver(build(2, 50), ChipPayoffs(flop=flop))
-    solver.run(300)
-    assert solver.solution().nash_conv * 1000 < 0.85
+def test_only_hands_that_end_in_a_fold_or_an_all_in_are_valued():
+    # The flop model is gone, so a tree whose pots see a flop must not be solved at raw
+    # equity by mistake.
+    with pytest.raises(ValueError):
+        Solver(build(2, 50), PAYOFFS).run(1)
 
 
 def test_best_response_matches_a_closed_form():
@@ -138,15 +133,3 @@ def test_action_values_agree_with_the_evs():
     assert PRIOR @ (strategy * values).sum(axis=0) == pytest.approx(solution.ev[0], abs=1e-9)
     # Aces gain far more by jamming than by folding (about 3.5bb at 10bb).
     assert values[1, 0] - values[0, 0] > 3
-
-
-def test_hands_that_never_reach_a_spot_still_get_a_sensible_answer():
-    # 72o never opens, so it never faces a 3-bet in the solve; its average there would be
-    # early near-uniform iterates. A loose player can get there, so it must fold.
-    from vamos.preflop.realization import Realization
-
-    solver = Solver(build(2, 50), ChipPayoffs(flop=Realization(50)))
-    solver.run(300)
-    node, strategy = solver.solution().at(("SB:raise 2.5", "BB:raise 10"))
-    assert strategy[node.actions.index("fold"), INDEX["72o"]] > 0.95
-    assert strategy[node.actions.index("jam"), INDEX["AA"]] > 0.95

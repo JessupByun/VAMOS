@@ -1,63 +1,50 @@
 """
-Solve the preflop baseline and write src/vamos/preflop/tables/ (see vamos.preflop.tables).
-
-By default heads-up push/fold at 2-15bb, the only tables committed; full trees at
-20-150bb and 3-4 players can be named on the command line. Each solve runs
-until its NashConv (exploitability, heads-up) is under the target or the iteration cap is
-reached; both are recorded in the file's provenance and in the manifest.
-Run: uv run python scripts/gen_preflop_tables.py [players ...] [standard|pushfold]
+Solve the heads-up push/fold chart at 2-15bb and write src/vamos/preflop/tables/ with its
+manifest (see vamos.preflop.tables). Each solve runs until its NashConv (exploitability) is
+under the target or the iteration cap is reached; both are recorded in the file's
+provenance and in the manifest.
+Run: uv run python scripts/gen_preflop_tables.py
 """
 
 import json
 import os
 import subprocess
-import sys
 import time
 from datetime import UTC, datetime
 from multiprocessing import Pool
 
-from vamos.preflop import realization
 from vamos.preflop.lookup import table_from
 from vamos.preflop.payoffs import ChipPayoffs
-from vamos.preflop.realization import Realization
 from vamos.preflop.solver import Solver
 from vamos.preflop.tables import DIR, MANIFEST, digest, encode, file_name
-from vamos.preflop.tree import PUSH_FOLD, STANDARD, build
+from vamos.preflop.tree import PUSH_FOLD, build
 
-DEPTHS = (20, 35, 50, 75, 100, 150)
-PUSH_FOLD_DEPTHS = tuple(range(2, 16))
-# NashConv targets in mbb/hand and iteration caps. Multiway CFR has no convergence
-# guarantee, so its targets are looser.
-TARGET = {2: 0.5, 3: 3.0, 4: 5.0}
-CAP = {2: 4000, 3: 1500, 4: 1000}
+MENU = "pushfold"
+DEPTHS = tuple(range(2, 16))
+TARGET = 0.5  # NashConv in mbb/hand
+CAP = 4000  # iterations
 CHECK_EVERY = 100
-# Four-handed solves hold about 2 GB of cached tables each.
 WORKERS = 3
 
 
-def solve(job: tuple[str, int, float]) -> tuple[str, str, dict]:
-    menu_name, players, stack = job
-    menu = STANDARD if menu_name == "standard" else PUSH_FOLD
+def solve(stack: float) -> tuple[str, dict]:
     started = time.monotonic()
-    tree = build(players, stack, menu)
-    solver = Solver(tree, ChipPayoffs(flop=Realization(stack)))
+    solver = Solver(build(2, stack, PUSH_FOLD), ChipPayoffs())
     while True:
         solver.run(CHECK_EVERY)
         solution = solver.solution()
         nash_conv = solution.nash_conv * 1000
-        if nash_conv < TARGET[players] or solver.iterations >= CAP[players]:
+        if nash_conv < TARGET or solver.iterations >= CAP:
             break
     commit = subprocess.run(
         ["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True
     ).stdout.strip()
     provenance = (
         f"VAMOS discounted CFR, {solver.iterations} iterations, NashConv {nash_conv:.2f} "
-        f"mbb/hand; flop model theta {realization.THETA.tolist()}, out of position "
-        f"{realization.OUT_OF_POSITION}, cap {realization.CAP}, SPR scale "
-        f"{realization.SPR_SCALE}; code {commit}; generated {datetime.now(UTC):%Y-%m-%d}"
+        f"mbb/hand; code {commit}; generated {datetime.now(UTC):%Y-%m-%d}"
     )
-    data = encode(table_from(solution, provenance), menu_name)
-    name = file_name(menu_name, players, stack)
+    data = encode(table_from(solution, provenance), MENU)
+    name = file_name(MENU, 2, stack)
     (DIR / name).write_bytes(data)
     summary = {
         "sha256": digest(data),
@@ -67,7 +54,7 @@ def solve(job: tuple[str, int, float]) -> tuple[str, str, dict]:
         "seconds": round(time.monotonic() - started),
     }
     print(f"[VAMOS] {name}: {summary}", flush=True)
-    return name, menu_name, summary
+    return name, summary
 
 
 def main() -> None:
@@ -75,19 +62,10 @@ def main() -> None:
     # threads and the machine ends up oversubscribed many times over.
     for var in ("VECLIB_MAXIMUM_THREADS", "OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS"):
         os.environ.setdefault(var, "2")
-    # Only heads-up push/fold is committed (it matches HoldemResources' Nash); the other
-    # tables were retired on 2026-10-05 and can still be solved by naming them.
-    players = [int(a) for a in sys.argv[1:] if a.isdigit()] or [2]
-    menus = [a for a in sys.argv[1:] if not a.isdigit()] or ["pushfold"]
-    jobs = []
-    if "standard" in menus:
-        jobs += [("standard", p, float(d)) for p in players for d in DEPTHS]
-    if "pushfold" in menus:
-        jobs += [("pushfold", p, float(d)) for p in players for d in PUSH_FOLD_DEPTHS]
     DIR.mkdir(exist_ok=True)
     manifest = json.loads(MANIFEST.read_text()) if MANIFEST.exists() else {"files": {}}
     with Pool(WORKERS) as pool:
-        for name, _, summary in pool.imap_unordered(solve, jobs):
+        for name, summary in pool.imap_unordered(solve, [float(d) for d in DEPTHS]):
             manifest["files"][name] = summary
             MANIFEST.write_text(json.dumps(manifest, indent=1, sort_keys=True) + "\n")
 

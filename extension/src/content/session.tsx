@@ -23,7 +23,7 @@ export function startSession(gameId: string): () => void {
     players: null,
     seats: [],
     heroSeat: null,
-    layout: null,
+    layout: readLayout(document),
     turn: null,
     facts: null,
     showCard: true,
@@ -33,9 +33,6 @@ export function startSession(gameId: string): () => void {
   let stopped = false;
   let retryDelay = RECONNECT_MIN_MS;
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
-  // Set when the backend went away; the next "ready" is then a fresh backend that has none
-  // of this game's seats, so they are sent again.
-  let backendLost = false;
   // Log pages go out only once the backend has said where to pick the log up (the rows it
   // already holds for this game, from before a refresh or restart).
   let resumed = false;
@@ -129,11 +126,9 @@ export function startSession(gameId: string): () => void {
     next.onMessage.addListener((message: WorkerToContent) => {
       if (message.type === "backend") {
         retryDelay = RECONNECT_MIN_MS;
-        if (message.state === "down") backendLost = true;
         if (message.state !== "ready") resumed = false;
         const becameReady = message.state === "ready" && status().state !== "ready";
         show(message);
-        if (message.state === "ready" && backendLost) backendLost = false;
         if (message.state === "ready" && !resumed) send({ type: "resume_request", gameId });
         if (becameReady) {
           reportSeats(true);
@@ -167,7 +162,6 @@ export function startSession(gameId: string): () => void {
       if (stopped) return;
       if (!chrome.runtime?.id) return retire();
       // The worker stopping also closed the native port, so the backend restarts too.
-      backendLost = true;
       resumed = false;
       show({ type: "backend", state: "connecting" });
       retryTimer = setTimeout(connect, retryDelay);

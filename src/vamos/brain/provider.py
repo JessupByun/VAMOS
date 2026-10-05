@@ -1,5 +1,5 @@
 """
-Claude calls for postflop advice.
+Claude calls for advice, before and after the flop.
 
 A call streams, so a decision that has already passed can stop it: the stream is closed
 from a watcher thread, since thinking streams no events while it runs (its text is omitted
@@ -26,7 +26,7 @@ from vamos.config import REPO_ROOT
 class Preset:
     name: str
     model: str
-    # Adaptive thinking is on by default on both models; effort sets how much they may use.
+    # Adaptive thinking is on by default; effort sets how much it may use.
     effort: str | None = None
     label: str = ""  # for the side panel
     seconds: str = ""  # measured time to an answer, for the side panel

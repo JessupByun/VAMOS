@@ -5,9 +5,8 @@ from vamos.log.hands import build_hands
 from vamos.preflop.lookup import Move, Spot, Table, advise, live_moves, table_from, translate
 from vamos.preflop.matchups import INDEX
 from vamos.preflop.payoffs import ChipPayoffs
-from vamos.preflop.realization import Realization
 from vamos.preflop.solver import Solver
-from vamos.preflop.tree import build
+from vamos.preflop.tree import PUSH_FOLD, build
 
 
 def uniform(actions):
@@ -124,12 +123,12 @@ Player stacks: #1 {P["A"]} (1000) | #2 {P["B"]} (1000) | #3 {P["C"]} (1000)
 
 
 def test_a_solved_table_round_trips_through_lookup():
-    solver = Solver(build(2, 50), ChipPayoffs(flop=Realization(50)))
+    solver = Solver(build(2, 10, PUSH_FOLD), ChipPayoffs())
     solver.run(200)
     table = table_from(solver.solution())
-    advice = advise([table], [Move("SB", "raise", 3.0, False)], "BB", ("As", "Ad"), 50, "s")
+    advice = advise([table], [Move("SB", "raise", 10.0, True)], "BB", ("As", "Ad"), 10, "s")
     assert advice is not None
-    assert advice.mix[0][0] in ("raise 9", "raise 12")  # aces 3-bet
+    assert advice.mix[0][0] == "call"  # aces call the jam
 
 
 def test_no_advice_for_a_hand_the_solve_learned_nothing_for():

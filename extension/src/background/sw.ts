@@ -98,8 +98,6 @@ function connectHost() {
         version: message.version,
         recording: message.recording,
       });
-    } else if (message.type === "error") {
-      setStatus({ type: "backend", state: "down", detail: message.message });
     } else {
       remember(message);
       // Each content script keeps only its own game's players, facts and resume point; the

@@ -3,11 +3,9 @@ Discounted CFR over the 169 hand classes (Brown & Sandholm 2019, alpha 1.5, beta
 gamma 2), with alternating updates and every quantity a 169-vector per action.
 
 Payoffs come from a `Payoffs` object, which turns a terminal into each player's
-counterfactual value given everyone's reach; it owns card removal and the model of what
-happens after the flop. For two players the result is an equilibrium of the model game and
-its exploitability is exact; for more players CFR has no such guarantee, so solutions
-report NashConv (the sum of every player's best-response gain) and are checked for
-stability across runs.
+counterfactual value given everyone's reach, card removal included. Only the heads-up
+push/fold game is solved now; its result is an equilibrium, and its exploitability
+(NashConv, the sum of both players' best-response gains) is exact.
 """
 
 from collections.abc import Callable

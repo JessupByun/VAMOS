@@ -26,8 +26,7 @@ function factsLine(facts: SpotFacts, advised: boolean): string {
   return parts.filter(Boolean).join(" · ");
 }
 
-function placed(layout: Layout | null): Record<string, string> {
-  if (!layout) return { right: "16px", top: "45%" };
+function placed(layout: Layout): Record<string, string> {
   return slotStyle(chooseSpot(layout), layout);
 }
 
@@ -102,7 +101,7 @@ function CardBody({ turn, facts }: { turn: string; facts: Facts | null }) {
   const advice = current.advice;
   if (isClaude(advice)) return <ClaudeCard facts={current} advice={advice} />;
   if (advice === null) {
-    // After the flop with no answer to show (Claude switched off): the facts alone.
+    // No answer to show (AI off, and no preflop rule or chart covers the spot): the facts alone.
     return (
       <div class="action-card neutral">
         <Source kind="neutral" label={BRAND} />

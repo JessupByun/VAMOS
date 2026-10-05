@@ -55,7 +55,7 @@ main {
 }
 
 /* The header: the wordmark in the action colors (the one flourish), the backend's state,
-   and the two switches. */
+   and the three switches. */
 .top {
   padding: 4px 4px 2px;
 }
@@ -372,7 +372,6 @@ p {
 
 /* The option drawn for this decision. */
 .chip.picked {
-  opacity: 1;
   font-weight: 800;
   background: color-mix(in srgb, currentColor 14%, transparent);
   border: 1.5px solid currentColor;
@@ -465,19 +464,6 @@ button.secondary:hover {
   color: var(--muted);
 }
 
-textarea {
-  box-sizing: border-box;
-  width: 100%;
-  resize: vertical;
-  padding: 8px 10px;
-  border-radius: 8px;
-  font: inherit;
-  color: inherit;
-  background: var(--soft);
-  border: 1px solid var(--border);
-}
-
-textarea:focus,
 select:focus {
   outline: 2px solid var(--muted);
   outline-offset: -1px;

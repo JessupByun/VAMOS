@@ -19,7 +19,6 @@ from pathlib import Path
 import numpy as np
 
 from vamos.cards import ALL_HAND_CLASSES, SUITS
-from vamos.engine.equity import equity
 
 CLASSES = ALL_HAND_CLASSES
 INDEX = {c: k for k, c in enumerate(CLASSES)}
@@ -40,6 +39,9 @@ COMBO_COUNTS = np.array([len(combos(c)) for c in CLASSES])
 
 def row(i: int, samples: int) -> tuple[np.ndarray, np.ndarray]:
     """Counts and equity of class i against every class j >= i."""
+    # Only scripts/gen_matchups.py computes equity; the backend just loads the arrays.
+    from vamos.engine.equity import equity
+
     rep = combos(CLASSES[i])[0]
     counts = np.zeros(len(CLASSES), dtype=np.int64)
     values = np.full(len(CLASSES), np.nan)

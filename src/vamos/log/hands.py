@@ -25,10 +25,7 @@ class Street(IntEnum):
     RIVER = 3
 
 
-LIVE_POSTS = {"post_sb", "post_bb", "post_straddle", "post_missed_bb"}
 DEAD_POSTS = {"post_missing_sb", "post_ante"}
-WAGERS = {"call", "bet", "raise"}
-_STREET_OF = {"flop": Street.FLOP, "turn": Street.TURN, "river": Street.RIVER}
 
 # The only hand rows that can follow "-- ending hand" (verified over the corpus). Anything
 # else after an end belongs to a hand whose start row was never received.

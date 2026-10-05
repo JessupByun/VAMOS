@@ -1,5 +1,5 @@
 """
-The preflop game the baseline is solved on: equal stacks, blinds of 0.5 and 1bb, no antes,
+The preflop game trees the solver works on: equal stacks, blinds of 0.5 and 1bb, no antes,
 and a fixed menu of raise sizes. Players are numbered in preflop order (the first to act is
 0, the big blind last); amounts are in big blinds.
 
@@ -7,16 +7,15 @@ With equal stacks an all-in can only be called all in, so there are no side pots
 ends preflop when one player is left, when everyone left is all in, or when betting closes
 and the rest is played after the flop.
 
-The home game has no antes; `ante` exists only to reproduce published solutions that use
-one, for testing the solver against them.
+Only the heads-up PUSH_FOLD game is solved now (its hands end in a fold or an all-in). The
+STANDARD menu, with opens, 3-bets and limps, built the retired full-depth tables; its trees
+reach a flop, which nothing values any more (payoffs.py).
 """
 
 from dataclasses import dataclass, replace
 from typing import Literal
 
 POSITIONS = {2: ("SB", "BB"), 3: ("BTN", "SB", "BB"), 4: ("CO", "BTN", "SB", "BB")}
-# After the flop the blinds act first and the button last; heads-up the button is the SB.
-POSTFLOP_ORDER = {2: ("BB", "SB"), 3: ("SB", "BB", "BTN"), 4: ("SB", "BB", "CO", "BTN")}
 BLINDS = {"SB": 0.5, "BB": 1.0}
 
 
@@ -29,9 +28,8 @@ class Menu:
     three_bets: tuple[float, ...] = (3.0, 4.0)
     iso: float = 4.0  # over one limper; one more big blind per extra limper
     limps: bool = True
-    # Calling a 3-bet without having put chips in voluntarily. Off in the baseline (agreed
-    # 2026-10-02): solvers rarely do it short-handed, and it makes the multiway pots the
-    # flop model handles worst.
+    # Calling a 3-bet without having put chips in voluntarily: off (agreed 2026-10-02),
+    # solvers rarely do it short-handed.
     cold_calls: bool = False
     open_jam: bool = False
 
@@ -42,17 +40,16 @@ PUSH_FOLD = Menu(opens=(), three_bets=(), limps=False, open_jam=True)
 
 @dataclass
 class Terminal:
-    committed: tuple[float, ...]  # bets, not counting the ante
+    committed: tuple[float, ...]
     active: tuple[int, ...]  # players still in the hand
     kind: Literal["fold", "showdown", "flop"]
-    ante: float = 0.0  # dead money from every player
 
     @property
     def pot(self) -> float:
-        return sum(self.committed) + self.ante * len(self.committed)
+        return sum(self.committed)
 
     def spent(self, player: int) -> float:
-        return self.committed[player] + self.ante
+        return self.committed[player]
 
 
 @dataclass
@@ -84,10 +81,9 @@ def _amount(x: float) -> str:
 
 
 class _Builder:
-    def __init__(self, players: int, stack: float, menu: Menu, ante: float):
+    def __init__(self, players: int, stack: float, menu: Menu):
         self.n = players
-        self.stack = stack - ante  # what is left to bet once the ante is in
-        self.ante = ante
+        self.stack = stack
         self.menu = menu
         self.positions = POSITIONS[players]
         self.decisions: list[Decision] = []
@@ -160,11 +156,11 @@ class _Builder:
     def build(self, s: _State, path: tuple[str, ...]) -> Node:
         active = tuple(p for p in range(self.n) if p not in s.folded)
         if len(active) == 1:
-            return Terminal(s.committed, active, "fold", self.ante)
+            return Terminal(s.committed, active, "fold")
         p = self.next_player(s)
         if p is None:
             all_in = any(s.committed[q] >= self.stack for q in active)
-            return Terminal(s.committed, active, "showdown" if all_in else "flop", self.ante)
+            return Terminal(s.committed, active, "showdown" if all_in else "flop")
         node = Decision(len(self.decisions), p, path, s.committed, (), [])
         self.decisions.append(node)
         choices = self.actions(s, p)
@@ -189,8 +185,8 @@ class Tree:
         return POSITIONS[self.players]
 
 
-def build(players: int, stack: float, menu: Menu = STANDARD, ante: float = 0.0) -> Tree:
-    builder = _Builder(players, stack, menu, ante)
+def build(players: int, stack: float, menu: Menu = STANDARD) -> Tree:
+    builder = _Builder(players, stack, menu)
     committed = tuple(BLINDS.get(position, 0.0) for position in POSITIONS[players])
     root = builder.build(_State(committed), ())
     return Tree(players, stack, menu, root, builder.decisions)

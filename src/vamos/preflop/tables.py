@@ -3,10 +3,10 @@ Solved preflop tables on disk: one gzipped JSON file per player count and stack 
 a format that does not depend on the solver, so tables from another tool (HRC Pro) can
 replace them without changing the runtime.
 
-    {"format": "vamos-preflop/1", "players": 4, "stack": 50, "menu": "standard",
+    {"format": "vamos-preflop/1", "players": 2, "stack": 10, "menu": "pushfold",
      "provenance": "...", "hands": [169 class labels],
-     "spots": [{"path": ["CO:raise 2.5", "BTN:fold"], "position": "SB",
-                "actions": ["fold", "call", "raise 10", "raise 12.5"],
+     "spots": [{"path": ["SB:jam"], "position": "BB",
+                "actions": ["fold", "call"],
                 "strategy": [[169 frequencies] per action],
                 "unlearned": [hands the solve learned nothing for here]}]}
 
