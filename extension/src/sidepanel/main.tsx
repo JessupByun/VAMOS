@@ -337,7 +337,7 @@ function CurrentHand({ hand }: { hand: Hand }) {
       <h2>Current hand</h2>
       {hand.info && <HandHeader info={hand.info} />}
       {hand.decisions.length === 0 ? (
-        <p class="muted small">No AI decisions yet this hand.</p>
+        <p class="muted small">No AI decisions yet this hand. Preflop rule and chart answers show on the card only.</p>
       ) : (
         hand.decisions.map((d) => (
           <DecisionView key={d.node} decision={d} live={d.node === hand.live} gameId={hand.gameId} />
@@ -365,7 +365,7 @@ function Dial({ settings }: { settings: Settings }) {
           </label>
         ))}
       </div>
-      <p class="muted small">A change applies from the next hand.</p>
+      <p class="muted small">For every AI decision, before and after the flop. A change applies from the next hand.</p>
     </section>
   );
 }
@@ -689,10 +689,17 @@ function Chip() {
 }
 
 /** An on/off switch with its current meaning spelled out under it. */
-function Switch(props: { label: string; on: boolean; hint: string; onChange: (on: boolean) => void }) {
-  const { label, on, hint, onChange } = props;
+function Switch(props: {
+  label: string;
+  on: boolean;
+  hint: string;
+  wide?: boolean;
+  onChange: (on: boolean) => void;
+}) {
+  const { label, on, hint, wide, onChange } = props;
+  const classes = ["switch", on && "on", wide && "wide"].filter(Boolean).join(" ");
   return (
-    <button type="button" class={on ? "switch on" : "switch"} role="switch" aria-checked={on} onClick={() => onChange(!on)}>
+    <button type="button" class={classes} role="switch" aria-checked={on} onClick={() => onChange(!on)}>
       <span class="track">
         <span class="knob" />
       </span>
@@ -726,8 +733,13 @@ function Panel() {
           <div class="switches">
             <Switch
               label="AI advice"
+              wide
               on={settings.aiOn}
-              hint={settings.aiOn ? "Claude answers the close spots" : "off: no API calls, facts only"}
+              hint={
+                settings.aiOn
+                  ? "Claude decides postflop and the close preflop spots"
+                  : "off: no API calls; preflop rules still answer"
+              }
               onChange={(on) => send({ type: "settings", aiOn: on })}
             />
             <Switch
