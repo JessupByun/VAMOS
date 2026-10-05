@@ -612,7 +612,7 @@ function PlayerRow(props: { player: PlayerInfo; profiles: Players["profiles"]; g
             <button
               type="button"
               class="mini"
-              title="Write this session's read and your notes to drafts/ for you to review"
+              title="Write this session's read and your notes to drafts/ for you to review (saving again replaces this game's draft)"
               onClick={() => send({ type: "save_draft", gameId, playerId: player.id })}
             >
               Save draft

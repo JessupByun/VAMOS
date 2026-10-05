@@ -134,14 +134,9 @@ def test_a_re_raise_of_the_hero_goes_to_claude_but_a_limp_then_raise_is_one_rais
 
 
 def test_trash_does_not_fold_at_a_cheap_price():
-    # A 1.25bb all-in from a short stack: 8% equity to call is not a fold for 72o.
-    short = [
-        "Your hand is 7♠, 2♦",
-        *THREE,
-        f"{P['A']} raises to 25 and go all in",
-        f"{P['B']} folds",
-    ]
-    assert advise(short, "C", "ABC", stacks=(25, 1000, 1000)) is None
+    # A min-raise and a call: the big blind closes for 17% of the pot, not a fold for K4o.
+    cheap = ["Your hand is K♠, 4♦", *THREE, f"{P['A']} raises to 40", f"{P['B']} calls 40"]
+    assert advise(cheap, "C", "ABC") is None
 
 
 def test_a_straddle_or_dead_money_leaves_the_raises_to_claude():
@@ -201,3 +196,27 @@ def test_below_the_shallowest_chart_the_rules_answer():
     # The chart starts at 10bb here; at 5bb the push/fold spot falls to the rules.
     advice = advise(["Your hand is A♠, A♦", *HU], "A", stacks=(100, 100), tables=pushfold_tables())
     assert (advice["source"], advice["action"]) == ("Rule", "ALL IN 100 (5bb)")
+
+
+def test_an_all_in_re_raised_by_a_deeper_player_is_a_plain_raise_to_fold_to():
+    reraised = [
+        "Your hand is 7♠, 2♦",
+        *THREE,
+        f"{P['A']} raises to 100 and go all in",
+        f"{P['B']} raises to 300",
+    ]
+    assert advise(reraised, "C", "ABC", stacks=(100, 1000, 1000))["action"] == "FOLD"
+
+
+def test_the_chart_steps_aside_when_checking_is_free():
+    # Heads-up, the small blind also posted a missed big blind: nothing to call, so check.
+    missed = ["Your hand is 7♠, 2♦", *HU, f"{P['A']} posts a missed big blind of 20"]
+    advice = advise(missed, "A", stacks=(200, 200), tables=pushfold_tables())
+    assert (advice["source"], advice["action"]) == ("Rule", "CHECK")
+
+
+def test_a_min_raise_from_a_short_stack_is_read_as_the_jam():
+    # At 4bb a raise to 2bb commits half the stack: the shipped chart answers it as a jam.
+    min_raise = ["Your hand is K♠, 2♦", *HU, f"{P['A']} raises to 40"]
+    advice = advise(min_raise, "B", stacks=(80, 80))
+    assert (advice["source"], advice["action"]) == ("Chart", "CALL 20 (1bb)")

@@ -29,12 +29,19 @@ def preflop_advice(
     """The card's advice block, or None after the flop or where Claude decides."""
     if spot.street != Street.PREFLOP or spot.effective_bb is None or not spot.big_blind:
         return None
-    allowed = legal(hand, hero, spot)
-    if spot.players_dealt == 2 and spot.effective_bb <= PUSH_FOLD_MAX:
-        chart = _push_fold(hand, spot, hero, table_sets, allowed)
+    # The chart's game has plain blinds and something to call: a heads-up small blind who
+    # also posted a missed big blind can check, which the chart cannot say.
+    plain = not any(a.kind in preflop_rules.ODD_POSTS for a in hand.actions)
+    if (
+        spot.players_dealt == 2
+        and spot.effective_bb <= PUSH_FOLD_MAX
+        and spot.to_call > 0
+        and plain
+    ):
+        chart = _push_fold(hand, spot, hero, table_sets)
         if chart is not None:
             return chart
-    return preflop_rules.rule(hand, spot, hero, allowed)
+    return preflop_rules.rule(hand, spot, hero, legal(hand, hero, spot))
 
 
 def _push_fold(
@@ -42,7 +49,6 @@ def _push_fold(
     spot: Decision,
     hero: str,
     table_sets: dict[tuple[str, int], list[Table]] | None,
-    allowed: list[str],
 ) -> dict | None:
     """Heads-up jam or fold, and calling a jam, from the push/fold chart; None off its tree."""
     moves = lookup.live_moves(hand)
@@ -57,12 +63,6 @@ def _push_fold(
     )
     if advice is None:
         return None
-    if (
-        "allin" not in allowed
-        and "raise" not in allowed
-        and any(action not in ("fold", "check", "call") for action, _ in advice.mix)
-    ):
-        return None  # the chart would jam where PokerNow offers no raise
     all_in = hand.street_bets.get(hero, 0) + spot.behind
     scale = (hand.price / spot.big_blind) / advice.faced if hand.price else 1.0
 

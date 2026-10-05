@@ -767,8 +767,9 @@ The player "Harry @ Q4OMcL0rqd" rebought. New stack 1000.
 - `"bobo @ Vf1v-slbuU" wins 7400 with Pair, K's (hand: Q♠, K♦)` and `"Áron @ KqPrDJjSfQ" gained 960` are 2020 award rows.
 - `The player "bobo @ O7q--fndwt" created the game with a stack of 1000.` is a 2020 seating row.
 - Lowercase `flop:`, `turn:` and `river:` are 2020 board rows.
+- These 2020 forms do not appear in any 2026 row, so VAMOS leaves them as unknown events rather than parse them.
 - Hand descriptors without ranks (`Two Pair`), with suit letters (`Flush, Kh High`), PLO hi/lo text (`hi hand with ...`) and 6-card combinations occur in 2021-2022 rows.
-- These forms do not appear in any 2026 row, so VAMOS leaves them as unknown events rather than parse them.
+- The collect rule accepts these as `collect`, keeping the descriptor as raw text and the combination cards as given; they never appear in 2026 rows.
 
 ### Parser-only rows (no real example)
 

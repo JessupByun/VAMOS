@@ -567,15 +567,19 @@ def test_a_draft_goes_to_drafts_and_never_to_profiles(tmp_path):
     assert "draft_of: alex" in text and "- Hands: 1" in text and "very bluffy" in text
     assert f"game: {GAME}" in text
     assert sorted(p.name for p in (tmp_path / "profiles").iterdir()) == before
-    # Another player's draft from the same game never overwrites this one.
+    # Another player of the same name in the same game gets "-2" and never overwrites it.
+    backend.handle(
+        {**SEATS, "players": [*SEATS["players"][:1], {"id": "zzzzzzzzzz", "name": "alex"}]}
+    )
     [other] = backend.handle({"type": "save_draft", "gameId": GAME, "playerId": "zzzzzzzzzz"})
-    assert other["path"] != saved["path"] and (tmp_path / saved["path"]).exists()
-    # Saving again in the same game replaces the draft; another game that day gets "-2".
+    assert other["path"] == saved["path"].replace(".md", "-2.md")
+    assert "player_id: Qw3rTy7UiO" in (tmp_path / saved["path"]).read_text()
+    # Saving again in the same game replaces the draft; another game that day gets the next number.
     [again] = backend.handle({"type": "save_draft", "gameId": GAME, "playerId": "Qw3rTy7UiO"})
     assert again["path"] == saved["path"]
     (tmp_path / saved["path"]).write_text(text.replace(f"game: {GAME}", "game: earlier"))
     [later] = backend.handle({"type": "save_draft", "gameId": GAME, "playerId": "Qw3rTy7UiO"})
-    assert later["path"] == saved["path"].replace(".md", "-2.md")
+    assert later["path"] == saved["path"].replace(".md", "-3.md")  # "-2" is the other alex
 
 
 def test_a_draft_frontmatter_stays_valid_for_any_nickname():
@@ -765,3 +769,45 @@ def test_profile_stats_come_from_key_stats_before_the_summary():
     stats = _profile_view(parse_profile("x", body))["stats"]
     assert stats["vpip"] == {"pct": "44", "count": "264/600"}
     assert stats["pfr"] == {"pct": "15", "count": "90/600"}
+
+
+def test_a_player_keeps_one_draft_per_game_past_midnight_and_an_id_change(tmp_path, monkeypatch):
+    import vamos.host.server as server
+
+    backend, _, _ = claude_backend(tmp_path, [])
+    backend.handle(SEATS)
+    backend.handle(page(*FLOP_HAND))
+    late = type("Clock", (), {"now": staticmethod(lambda: datetime(2026, 10, 5, 23, 50))})
+    monkeypatch.setattr(server, "datetime", late)
+    [first] = backend.handle({"type": "save_draft", "gameId": GAME, "playerId": "Qw3rTy7UiO"})
+    assert first["path"] == "drafts/2026-10-05-alex.md"
+    # After midnight and an ID change, the same game's draft is replaced, not split in two.
+    after = type("Clock", (), {"now": staticmethod(lambda: datetime(2026, 10, 6, 0, 10))})
+    monkeypatch.setattr(server, "datetime", after)
+    changed = (
+        300,
+        'The player "alex @ alexNew001" changed the ID from Qw3rTy7UiO to alexNew001 because authenticated login.',
+    )
+    backend.handle(page(*FLOP_HAND, changed))
+    [second] = backend.handle({"type": "save_draft", "gameId": GAME, "playerId": "alexNew001"})
+    assert second["path"] == first["path"]
+    assert sorted(p.name for p in (tmp_path / "drafts").iterdir()) == ["2026-10-05-alex.md"]
+    assert "player_id: alexNew001" in (tmp_path / first["path"]).read_text()
+
+
+def test_two_different_failures_on_one_spot_are_both_logged(tmp_path, monkeypatch, caplog):
+    import vamos.host.server as server
+
+    backend, _, _ = claude_backend(tmp_path, [])
+
+    def broken(*args, **kwargs):
+        raise ZeroDivisionError("broken")
+
+    monkeypatch.setattr(server, "preflop_advice", broken)
+    monkeypatch.setattr(backend, "_advise", broken)
+    backend.handle(page(*HERO_HAND))
+    backend.handle(TURN)
+    backend.handle(TURN)  # the same spot again: nothing new is logged
+    logged = [r.getMessage() for r in caplog.records if r.levelname == "ERROR"]
+    assert len(logged) == 2
+    assert "the preflop rules" in logged[0] and "Claude's prompt" in logged[1]

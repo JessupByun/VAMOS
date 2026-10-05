@@ -360,7 +360,9 @@ class Backend:
         read = reads(session.log).get(current)
         name = profile.name if profile else seat.get("name") or pid
         today = datetime.now()
-        path = _draft_path(self.drafts_dir, f"{today:%Y-%m-%d}-{_slug(name)}", game_id, current)
+        # The player's earlier IDs this game, so a draft saved before an ID change is found.
+        ids = {current, *(old for old in aliases if session.log.current_id(old) == current)}
+        path = _draft_path(self.drafts_dir, f"{today:%Y-%m-%d}-{_slug(name)}", game_id, ids)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
             _draft_text(
@@ -694,14 +696,20 @@ def _slug(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9_-]+", "-", name).strip("-").lower() or "player"
 
 
-def _draft_path(folder: Path, stem: str, game_id: str, pid: str) -> Path:
+def _draft_path(folder: Path, stem: str, game_id: str, ids: set[str]) -> Path:
     """
-    "2026-10-05-alex.md": saving again in the same game overwrites it; another game (or
-    another player of the same name) that day gets "-2", "-3", ...
+    The player's draft for this game if one exists, whatever day or name it was first saved
+    under (past midnight, after an ID change, after a profile match), so saving again
+    replaces it; else "2026-10-05-alex.md", or "-2", "-3", ... when another player or game
+    has that name.
     """
+    for existing in sorted(folder.glob("*.md")):
+        found = _draft_of(existing)
+        if found is not None and found[0] == game_id and found[1] in ids:
+            return existing
     for n in range(1, 100):
         path = folder / (f"{stem}.md" if n == 1 else f"{stem}-{n}.md")
-        if not path.exists() or _draft_of(path) == (game_id, pid):
+        if not path.exists():
             return path
     raise RuntimeError(f"too many drafts named {stem}")
 
