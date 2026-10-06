@@ -73,3 +73,17 @@ def test_a_torn_last_line_is_skipped(tmp_path):
     with path.open("a") as f:
         f.write('{"at": "2026-10-')
     assert ledger.totals(AT)["allTime"] == pytest.approx(1.0)
+
+
+def test_offline_replays_count_in_the_month_but_not_at_the_table(tmp_path):
+    from datetime import datetime
+
+    from vamos.brain.costs import CallCost, Ledger
+
+    ledger = Ledger(tmp_path / "costs.jsonl")
+    for kind, dollars in (("advice", 0.01), ("replay", 1.00)):
+        ledger.record(
+            CallCost("2026-10-06T20:00:00", "claude-opus-5-5", kind, 0, 0, 0, 0, 0, dollars)
+        )
+    totals = ledger.totals(datetime(2026, 10, 6, 20, 30))
+    assert (totals["session"], totals["month"]) == (0.01, 1.01)

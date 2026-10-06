@@ -18,6 +18,7 @@ uv run vamos install --record   # test tables only: save raw log pages to data/r
 uv run vamos verify <game_id> <export.csv>   # live-built hands vs PokerNow's exported log
 uv run python scripts/replay_preflop_routes.py   # preflop coverage on the saved games: chart, rule or Claude
 uv run python scripts/replay_advice.py --dry-run # logged spots through today's prompt (without --dry-run it calls Claude and costs money)
+uv run python scripts/replay_saved_preflop.py --dry-run   # saved games' Claude preflop spots through Claude (costs money without --dry-run)
 uv run python scripts/gen_matchups.py && uv run python scripts/gen_preflop_tables.py   # regenerate the push/fold chart
 
 cd extension

@@ -570,6 +570,31 @@ class Backend:
         if self.advisor.asked(game_id, spot.node, ask):
             return
         preset = ask or self._preset_for(game_id, hand)
+        system, message, names, check = self.prompt_for(game_id, hand, hero, spot, card)
+        request = Request(PRESETS[preset], system.blocks, [{"role": "user", "content": message}])
+        job = Job(
+            spot.node,
+            request,
+            betting(hand, hero, spot),
+            names.reveal,
+            ("preflop" if spot.street == Street.PREFLOP else "advice") if ask is None else "ask",
+        )
+        refuse = None
+        try:
+            names.check(check)
+        except LeakError as error:
+            log.error("[VAMOS] %s", error)
+            refuse = "blocked: a real name was left in the prompt"
+        self.advisor.start(game_id, job, self._deadline(game_id), refuse=refuse)
+
+    def prompt_for(
+        self, game_id: str, hand: Hand, hero: str, spot: Decision, card: Message
+    ) -> tuple[prompt.Prefix, str, Pseudonyms, str]:
+        """
+        What Claude is sent for the hero's decision: the cached prefix, the hand message, the
+        pseudonyms to reveal the answer with, and the user's own text to check for names.
+        Also used by scripts/replay_saved_preflop.py, so a replay sends what play would.
+        """
         profiles = self.profiles()
         names = self._pseudonyms(profiles, hero)
         labels = {
@@ -608,21 +633,7 @@ class Backend:
         keys = {self._person(game_id, game_log.current_id(pid), profiles) for pid in at_table}
         keys.discard(self._person(game_id, hero, profiles))
         system = prompt.prefix(profiles, names, keys)
-        request = Request(PRESETS[preset], system.blocks, [{"role": "user", "content": message}])
-        job = Job(
-            spot.node,
-            request,
-            betting(hand, hero, spot),
-            names.reveal,
-            ("preflop" if spot.street == Street.PREFLOP else "advice") if ask is None else "ask",
-        )
-        refuse = None
-        try:
-            names.check("\n".join([system.user_text, *player_notes.values()]))
-        except LeakError as error:
-            log.error("[VAMOS] %s", error)
-            refuse = "blocked: a real name was left in the prompt"
-        self.advisor.start(game_id, job, self._deadline(game_id), refuse=refuse)
+        return system, message, names, "\n".join([system.user_text, *player_notes.values()])
 
     def _person(self, game_id: str, pid: str, profiles: ProfileSet) -> str:
         """Who a player ID is for pseudonyms: their profile's key, or the ID itself."""

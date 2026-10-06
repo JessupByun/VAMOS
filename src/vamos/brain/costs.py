@@ -24,7 +24,7 @@ SOFT_CAP = 5.00  # dollars per session
 class CallCost:
     at: str  # ISO time
     model: str
-    kind: str  # advice, preflop, ask (Ask deeper), or replay from scripts/replay_advice.py
+    kind: str  # advice, preflop, ask (Ask deeper), or replay (the scripts' offline replays)
     input_tokens: int
     output_tokens: int
     cache_read_tokens: int
@@ -121,7 +121,9 @@ class Ledger:
     def totals(self, now: datetime) -> dict[str, float | bool]:
         calls = self._all()
         month = now.strftime("%Y-%m")
-        session = sum(c.dollars for c in _tonight(calls, now))
+        # "This session" is spending at the table: offline replays count in the month and the
+        # total, but not there.
+        session = sum(c.dollars for c in _tonight([c for c in calls if c.kind != "replay"], now))
         return {
             "session": round(session, 4),
             "month": round(sum(c.dollars for c in calls if c.at.startswith(month)), 4),
