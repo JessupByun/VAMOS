@@ -249,6 +249,7 @@ def hand_detail(
     bb = hand.big_blind or 1
     labels = positions(hand)
     names = {s.player.id: s.player.name for s in hand.seats}
+    folded = hand.folded()
     recorded: dict[int, Message] = {}
     for node, record in decisions.items():
         index = _index(node, key)
@@ -272,6 +273,8 @@ def hand_detail(
 
     streets: list[Message] = []
     pot = 0
+    # An uncalled bet comes back on the last street anyone put chips in: nobody can bet after it.
+    returned_on = max((a.street for a in hand.actions if a.added), default=Street.PREFLOP)
     for street in Street:
         indexed = [(i, a) for i, a in enumerate(hand.actions) if a.street == street]
         # A decision the hero never acted on (the hand ended first) closes its street.
@@ -310,6 +313,8 @@ def hand_detail(
             }
         )
         pot += sum(a.added for _, a in indexed)
+        if street == returned_on:
+            pot -= sum(hand.returned.values())
     result = net(hand, pid) if pid is not None else None
     return {
         "key": key,
@@ -319,6 +324,8 @@ def hand_detail(
         "heroCards": list(hand.hero_cards),
         "board": list(hand.board),
         "secondBoard": list(hand.second_run or hand.second_board),
+        # The hero first, then who stayed in, then who folded, each in seat order and with
+        # the cards known: the hero's own, and anyone's shown.
         "players": [
             {
                 "name": s.player.name,
@@ -326,14 +333,14 @@ def hand_detail(
                 "stack": format_money(s.stack, bb),
                 "stackBb": _bb(s.stack, bb),
                 "hero": s.player.id == pid,
+                "cards": list(
+                    hand.hero_cards if s.player.id == pid else hand.shows.get(s.player.id, ())
+                ),
+                "folded": s.player.id in folded,
             }
-            for s in hand.seats
+            for s in sorted(hand.seats, key=lambda s: (s.player.id != pid, s.player.id in folded))
         ],
         "streets": streets,
-        "shows": [
-            {"name": names.get(p, p), "cards": list(cards), "hero": p == pid}
-            for p, cards in hand.shows.items()
-        ],
         "winners": [
             {
                 "name": names.get(p, p),

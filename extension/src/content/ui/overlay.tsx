@@ -101,12 +101,12 @@ function CardBody({ turn, facts }: { turn: string; facts: Facts | null }) {
   const advice = current.advice;
   if (isClaude(advice)) return <ClaudeCard facts={current} advice={advice} />;
   if (advice === null) {
-    // No answer to show (AI off, and no preflop rule or chart covers the spot): the facts alone.
+    // No answer to show (AI off, and no preflop rule or chart covers the spot): the stats alone.
     return (
       <div class="action-card neutral">
         <Source kind="neutral" label={BRAND} />
         <Action text={current.madeHand} />
-        {current.aiOff && <div class="line note">AI off: facts only</div>}
+        {current.aiOff && <div class="line note">AI off: stats only</div>}
         <div class="line facts">{factsLine(current, false)}</div>
       </div>
     );
@@ -173,7 +173,7 @@ function aiLabel(model: string): string {
 
 function ClaudeCard({ facts, advice }: { facts: SpotFacts; advice: ClaudeAdvice }) {
   if (advice.action === null) {
-    // No answer yet, or none coming: the facts stay up, with the reason when there is one.
+    // No answer yet, or none coming: the stats stay up, with the reason when there is one.
     const failed = advice.state === "failed";
     return (
       <div class="action-card claude">

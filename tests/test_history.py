@@ -223,3 +223,29 @@ def test_each_street_shows_the_board_so_far():
     assert (turn["name"], turn["board"]) == ("Turn", ["Ks", "7d", "2c", "9h"])
     # A call says what it added: the small blind completing puts in half a big blind.
     assert detail["streets"][0]["events"][2]["text"] == "calls $10 (0.5bb)"
+
+
+def test_an_all_in_shows_each_players_cards_and_the_pot_without_the_uncalled_bet():
+    shoved = hand(
+        5,
+        H,
+        "Your hand is J♠, K♠",
+        f"{H} posts a small blind of 10",
+        f"{D} posts a big blind of 20",
+        f"{H} raises to 1000 and go all in",
+        f"{D} calls 600 and go all in",
+        f"Uncalled bet of 400 returned to {H}",
+        "Flop:  [10♠, 7♦, A♠]",
+        "Turn: 10♠, 7♦, A♠ [5♠]",
+        "River: 10♠, 7♦, A♠, 5♠ [J♦]",
+        f"{D} shows a 6♣, K♦.",
+        f"{H} shows a J♠, K♠.",
+        f"{H} collected 1200 from pot",
+        alex=600,
+    )
+    detail = hand_detail(log_of(*shoved), "h5", HERO, {})
+    # The 400 that came back was never in the pot.
+    assert [s["pot"] for s in detail["streets"][1:]] == ["$1,200 (60bb)"] * 3
+    you, alex = detail["players"]
+    assert (you["name"], you["cards"], you["folded"]) == ("Hero", ["Js", "Ks"], False)
+    assert (alex["name"], alex["cards"], alex["position"]) == ("alex", ["6c", "Kd"], "BB")

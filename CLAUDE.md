@@ -1,6 +1,6 @@
 # VAMOS - Claude Code Project Guide
 
-VAMOS is a real-time poker assistant for PokerNow NLH cash games: a Chrome MV3 extension reads the table, a local Python backend (launched by Chrome native messaging) does the math, and Claude decides postflop and the close preflop spots with the user's opponent profiles in context.
+VAMOS is a real-time poker assistant for PokerNow NLH cash games: a Chrome MV3 extension reads the table, a local Python backend (launched by Chrome native messaging) works out the stats, and Claude decides postflop and the close preflop spots with the user's opponent profiles in context.
 The approved plan, with every design decision and the phase list, is in `~/.claude/plans/im-starting-a-new-ticklish-yao.md`; where it and this file differ, this file is current.
 Current phase: P3 (Claude decides postflop and the close preflop spots; P0 to P2 are done).
 `README.md` is the user's map of the folder; keep it current when folders or setup change.
@@ -69,7 +69,7 @@ After a backend change, the same reload restarts the backend (Chrome launches it
 - DOM seat classes (`table-player-N`) are hero-relative positions, not physical seats; join DOM to log by player ID (`/players/<id>` link).
 - Respect PokerNow's rate limit (about one log request per 2s per IP): back off on 429/503, never add parallel pollers.
 - Never advise on stale state: advice is stamped with its decision node and only shown while that node is current.
-- Every piece of advice shows its source on the card: `Preflop chart` (heads-up push/fold), `Preflop rule` (a clear fold, check, call, raise or all in), `VAMOS! AI (Claude Opus 5.5 · low)` (Claude, before or after the flop, always naming the model and effort), and plain `VAMOS!` while the hand is being read; the word "Math" is not used. Fallbacks are never silent: a failed AI call says why on the card.
+- Every piece of advice shows its source on the card: `Preflop chart` (heads-up push/fold), `Preflop rule` (a clear fold, check, call, raise or all in), `VAMOS! AI (Claude Opus 5.5 · low)` (Claude, before or after the flop, always naming the model and effort), and plain `VAMOS!` while the hand is being read. The card's numbers are "stats" wherever the user reads them (for example "AI off: stats only"); never "facts" or "math". Fallbacks are never silent: a failed AI call says why on the card.
 - Colors stay calm: only what an action says is colored, along the rainbow by how much money it puts in (orange-red fold, yellow call, blue bet, purple raise, pink all in; check stays neutral), and only on the action and the option drawn. Where advice came from is told by its label, never a color. Status (connection, warnings, errors, won or lost) keeps its own green, yellow and red; the wordmark uses the action colors as a gradient. The card (`overlay.css`) and the side panel (`panel.css`) define the same tokens.
 - "Ask deeper" adds its answer under the first one in the side panel; an earlier answer for the same decision is never replaced. A backend error on a spot shows on the card instead of "reading the hand...".
 - Prompts use pseudonyms; no real name, alias or PokerNow nickname may reach the API.

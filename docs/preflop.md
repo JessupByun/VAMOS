@@ -7,7 +7,7 @@ What answers each preflop decision, what each part approximates, and how it was 
 At the hero's preflop turn (`engine/advice.py`), in order:
 - Heads-up at 10bb or less effective (the smaller start-of-hand stack): the push/fold chart, labeled `Preflop chart` on the card.
 - Otherwise the rules in `engine/preflop_rules.py`, labeled `Preflop rule`: trash folds (or checks when free) and the strongest hands raise at a standard size.
-- Everything else goes to Claude (`VAMOS! AI (Claude Opus 5.5 · low)` on the card), or shows only the facts when the AI switch is off.
+- Everything else goes to Claude (`VAMOS! AI (Claude Opus 5.5 · low)` on the card), or shows only the stats when the AI switch is off.
 
 ## Rules
 

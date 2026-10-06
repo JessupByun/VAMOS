@@ -438,7 +438,7 @@ function ReplayAdvice({ decision }: { decision: ReplayDecision }) {
   }
   return (
     <div class="answer">
-      <p class="muted waiting">{decision.aiOff ? "AI off: facts only" : `${BRAND} was still reading the hand`}</p>
+      <p class="muted waiting">{decision.aiOff ? "AI off: stats only" : `${BRAND} was still reading the hand`}</p>
     </div>
   );
 }
@@ -476,33 +476,41 @@ function HandReplay({ gameId, handKey }: { gameId: string; handKey: string }) {
       ) : (
         <>
           <div class="hand-head">
-            <div class="cards">
-              <span class="mine">
-                <Cards cards={detail.heroCards} count={2} />
-              </span>
-              <span class="board">
-                {detail.board.map((c) => (
-                  <Card key={c} card={c} />
-                ))}
-              </span>
-              {detail.secondBoard.length > 0 && (
-                <span class="board second" title="second run">
-                  {detail.secondBoard.map((c) => (
-                    <Card key={`2-${c}`} card={c} />
+            {detail.board.length > 0 && (
+              <div class="cards">
+                <span class="board" aria-label="Board">
+                  {detail.board.map((c) => (
+                    <Card key={c} card={c} />
                   ))}
                 </span>
-              )}
-            </div>
-            <p class="hand-line">
-              <span class="muted">
-                {detail.players.map((p) => `${p.hero ? "You" : p.name} ${p.position ?? ""} ${p.stack}`).join(" · ")}
-              </span>
-              {result && (
-                <span class={`result ${tone}`}>
-                  {" "}
-                  · {result}
+                {detail.secondBoard.length > 0 && (
+                  <span class="board second" title="second run">
+                    {detail.secondBoard.map((c) => (
+                      <Card key={`2-${c}`} card={c} />
+                    ))}
+                  </span>
+                )}
+              </div>
+            )}
+            {/* Who was dealt in, each with the cards known next to the name. */}
+            <p class="replay-players">
+              {detail.players.map((p) => (
+                <span key={p.name} class={`seat${p.hero ? " hero" : ""}${p.folded ? " folded" : ""}`}>
+                  <span class="who">{p.hero ? "You" : p.name}</span>
+                  {p.position && <span class="pos">{p.position}</span>}
+                  {/* A folded opponent's stack matters little: kept short, so several share a line. */}
+                  {(p.hero || !p.folded) && <span class="stack">{p.stack}</span>}
+                  {p.cards.length > 0 && (
+                    <span class="hole">
+                      {p.cards.map((c) => (
+                        <Card key={c} card={c} />
+                      ))}
+                    </span>
+                  )}
+                  {p.folded && <span class="pos">folded</span>}
                 </span>
-              )}
+              ))}
+              {result && <span class={`result ${tone}`}>{result}</span>}
             </p>
           </div>
           {detail.partial && (
@@ -534,10 +542,8 @@ function HandReplay({ gameId, handKey }: { gameId: string; handKey: string }) {
               </ul>
             </div>
           ))}
-          {(detail.shows.length > 0 || detail.winners.length > 0) && (
+          {detail.winners.length > 0 && (
             <p class="replay-end muted small">
-              {detail.shows.map((s) => `${s.hero ? "You" : s.name} showed ${cardText(s.cards)}`).join(" · ")}
-              {detail.shows.length > 0 && detail.winners.length > 0 ? " · " : ""}
               {detail.winners.map((w) => `${w.hero ? "You" : w.name} collected ${w.amount}`).join(" · ")}
             </p>
           )}

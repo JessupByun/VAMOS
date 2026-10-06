@@ -430,6 +430,10 @@ test("an earlier hand replays in the side panel with the advice VAMOS gave", asy
   await expect(replay.locator(".advice-line .source")).toHaveText("Preflop rule");
   await expect(replay.locator(".advice-line .pick")).toHaveText("RAISE TO $0.60 (3bb)");
   await expect(replay.locator(".act-line.hero .what")).toHaveText(["posts the small blind", "raises to $0.60 (3bb)"]);
+  // Who was dealt in, with the hero's cards by "You"; the other two folded.
+  await expect(replay.locator(".replay-players .seat.hero")).toContainText("You");
+  await expect(replay.locator(".replay-players .seat.hero .pcard")).toHaveCount(2);
+  await expect(replay.locator(".replay-players .seat.folded .who")).toHaveText(["alex", "new guy"]);
   await replay.getByRole("button", { name: "Close the hand replayer" }).click();
   await expect(replay).toHaveCount(0);
   await expect(picker.locator("option:checked")).toHaveText("Replay an earlier hand (1)");

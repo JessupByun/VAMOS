@@ -948,24 +948,62 @@ details.file .body {
   margin-bottom: 4px;
 }
 
-/* The board so far on each street, smaller than the hand's own cards. */
-.street-head .board {
+/* The board so far on each street, and each player's cards: smaller than the hand's own. */
+.street-head .board,
+.replay-players .hole {
   display: flex;
   gap: 3px;
 }
 
-.street-head .pcard {
+.street-head .pcard,
+.replay-players .pcard {
   width: 21px;
   height: 29px;
   border-radius: 4px;
 }
 
-.street-head .pcard .rank {
+.street-head .pcard .rank,
+.replay-players .pcard .rank {
   font-size: 10.5px;
 }
 
-.street-head .pcard .suit {
+.street-head .pcard .suit,
+.replay-players .pcard .suit {
   font-size: 11px;
+}
+
+/* Who was dealt in: one group per player, wrapping; the folded ones quieter. */
+.replay-players {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  align-items: center;
+  margin: 8px 0 0;
+  font-size: 12.5px;
+}
+
+.replay-players .seat {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.replay-players .hero .who {
+  font-weight: 700;
+}
+
+.replay-players .pos,
+.replay-players .stack {
+  color: var(--muted);
+}
+
+.replay-players .pos {
+  font-size: 10.5px;
+}
+
+/* Your own cards stay easy to read even when you folded. */
+.replay-players .folded:not(.hero) {
+  opacity: 0.6;
 }
 
 .street-head .street {

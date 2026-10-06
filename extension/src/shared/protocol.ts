@@ -200,9 +200,17 @@ export interface HandDetail {
   heroCards: string[];
   board: string[];
   secondBoard: string[];
-  players: { name: string; position: string | null; stack: string; stackBb: number; hero: boolean }[];
+  /** The hero first, then who stayed in, then who folded; with the cards known: the hero's own, and anyone's shown. */
+  players: {
+    name: string;
+    position: string | null;
+    stack: string;
+    stackBb: number;
+    hero: boolean;
+    cards: string[];
+    folded: boolean;
+  }[];
   streets: ReplayStreet[];
-  shows: { name: string; cards: string[]; hero: boolean }[];
   /** amount: what each collected, "$0.40 (2bb)". */
   winners: { name: string; amount: string; amountBb: number; hero: boolean }[];
   /** The hero's win or loss without a sign, "$0.60 (3bb)", and in big blinds with one. */

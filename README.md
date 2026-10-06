@@ -1,7 +1,7 @@
 # VAMOS
 
 VAMOS is a real-time poker assistant for [PokerNow](https://www.pokernow.com) No-Limit Hold'em cash games.
-It reads the table from PokerNow's own game log, does the math in code, and asks Claude for the decisions that need judgment, with your opponent profiles in context.
+It reads the table from PokerNow's own game log, works out the stats in code, and asks Claude for the decisions that need judgment, with your opponent profiles in context.
 VAMOS only reads and displays; it never clicks or types into PokerNow.
 
 ## Your folders
