@@ -9,7 +9,7 @@ The answers are saved to data/replays/ next to what the hero actually did. Costs
 (about a cent a spot), recorded in the cost ledger as "replay", which "This session" leaves
 out; --dry-run only counts the spots and prints one prompt.
 Run: uv run python scripts/replay_saved_preflop.py [--games DIR] [--min-players 3]
-     [--limit N] [--dry-run]
+     [--limit N] [--first-in] [--budget DOLLARS] [--dry-run]
 """
 
 import argparse
@@ -73,6 +73,7 @@ def main() -> None:
     parser.add_argument("--preset", default="standard", choices=list(PRESETS))
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--budget", type=float, default=3.0, help="stop once this much is spent")
+    parser.add_argument("--first-in", action="store_true", help="only spots nobody has entered")
     args = parser.parse_args()
 
     names = hero_names()
@@ -104,6 +105,9 @@ def main() -> None:
                     continue
                 if preflop_advice(hand, spot, hero) is not None:
                     continue  # a rule or the chart answers; Claude is never asked
+                entered = any(a.kind in ("call", "bet", "raise") for a in hand.actions)
+                if args.first_in and entered:
+                    continue
                 if args.limit and count >= args.limit:
                     break
                 count += 1
