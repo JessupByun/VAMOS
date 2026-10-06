@@ -182,6 +182,8 @@ export interface ReplayStreet {
   name: string;
   /** The board so far, this street's cards last. */
   board: string[];
+  /** Each known hand (yours, and any shown) with what it makes on this street, yours first. */
+  holdings: { name: string; hero: boolean; cards: string[]; made: string }[];
   /** In the middle when the street began: "$0.40 (2bb)", and in big blinds. */
   pot: string;
   potBb: number;
@@ -208,6 +210,8 @@ export interface HandDetail {
     stackBb: number;
     hero: boolean;
     cards: string[];
+    /** What the hand made on the final board, when both cards are known. */
+    made: string | null;
     folded: boolean;
     /** What the player won or lost: unsigned "$0.60 (3bb)", and signed in big blinds. */
     net: string;

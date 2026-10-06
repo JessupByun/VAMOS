@@ -434,6 +434,8 @@ test("an earlier hand replays in the side panel with the advice VAMOS gave", asy
   // Who was dealt in, with the hero's cards by "You"; the other two folded.
   await expect(replay.locator(".replay-players .seat.hero")).toContainText("You");
   await expect(replay.locator(".replay-players .seat.hero .pcard")).toHaveCount(2);
+  // Each street repeats your cards with what they make there.
+  await expect(replay.locator(".holding.hero .made")).toHaveText(["AA"]);
   // Cards nobody showed stay face down.
   await expect(replay.locator(".replay-players .seat:not(.hero) .pcard.back")).toHaveCount(4);
   await expect(replay.locator(".replay-players")).not.toContainText("folded");

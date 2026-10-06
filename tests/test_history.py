@@ -249,4 +249,12 @@ def test_an_all_in_shows_each_players_cards_and_the_pot_without_the_uncalled_bet
     assert (you["name"], you["cards"], you["folded"]) == ("Hero", ["Js", "Ks"], False)
     assert (alex["name"], alex["cards"], alex["position"]) == ("alex", ["6c", "Kd"], "BB")
     assert (you["netBb"], alex["netBb"]) == (30.0, -30.0)
+    # What each known hand makes: on the final board in the summary, and street by street.
+    assert (you["made"], alex["made"]) == ("flush", "King high")
+    turn = detail["streets"][2]
+    assert [(h["name"], h["cards"], h["made"]) for h in turn["holdings"]] == [
+        ("Hero", ["Js", "Ks"], "flush + gutshot"),
+        ("alex", ["6c", "Kd"], "King high"),
+    ]
+    assert [h["made"] for h in detail["streets"][0]["holdings"]] == ["KJs", "K6o"]
     assert detail["streets"][0]["events"][2]["text"] == "raises to $1,000 (50bb), all in"

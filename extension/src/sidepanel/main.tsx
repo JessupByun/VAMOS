@@ -485,6 +485,8 @@ function ReplayLine({ event }: { event: ReplayAction }) {
   );
 }
 
+const capitalized = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
 /** Who was dealt in: their cards, their stack, and what each won or lost. */
 function ReplayPlayers({ players }: { players: HandDetail["players"] }) {
   return (
@@ -492,8 +494,11 @@ function ReplayPlayers({ players }: { players: HandDetail["players"] }) {
       {players.map((p) => (
         <div key={`${p.name}-${p.position}`} class={`seat${p.hero ? " hero" : ""}`}>
           <span class="who" title={p.name}>
-            {p.hero ? "You" : p.name}
-            {p.position && <span class="pos">{p.position}</span>}
+            <span>
+              {p.hero ? "You" : p.name}
+              {p.position && <span class="pos">{p.position}</span>}
+            </span>
+            {p.made && <span class="made">{capitalized(p.made)}</span>}
           </span>
           {/* Cards never shown stay face down. */}
           <span class="hole">
@@ -580,6 +585,21 @@ function HandReplay({ gameId, handKey }: { gameId: string; handKey: string }) {
                   )}
                   {street.potBb > 0 && <span class="pot">pot {street.pot}</span>}
                 </div>
+                {street.holdings.length > 0 && (
+                  <div class="holdings">
+                    {street.holdings.map((h) => (
+                      <span key={h.name} class={`holding${h.hero ? " hero" : ""}`}>
+                        <span class="who">{h.hero ? "You" : h.name}</span>
+                        <span class="hole">
+                          {h.cards.map((c) => (
+                            <Card key={c} card={c} />
+                          ))}
+                        </span>
+                        <span class="made">{capitalized(h.made)}</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
                 {street.events.map((event, i) =>
                   silent(event) ? null : event.kind === "action" ? (
                     <ReplayLine key={i} event={event} />

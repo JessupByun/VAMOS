@@ -22,6 +22,7 @@ from vamos.brain.answer import Answer, Choice, Spot, tidy
 from vamos.brain.provider import PRESETS
 from vamos.brain.pseudonyms import HERO, reveal
 from vamos.engine.facts import format_money
+from vamos.engine.madehand import describe
 from vamos.engine.state import positions
 from vamos.log.hands import Action, Hand, HandLog, Street
 
@@ -271,6 +272,28 @@ def hand_detail(
             "facts": record.get("facts") or {},
         }
 
+    # The hole cards known: the hero's own and anyone's shown (both cards), hero first.
+    order = sorted(hand.seats, key=lambda s: s.player.id != pid)
+    cards = {
+        s.player.id: list(
+            hand.hero_cards if s.player.id == pid else hand.shows.get(s.player.id, ())
+        )
+        for s in order
+    }
+    known = [p for p, c in cards.items() if len(c) == 2]
+
+    def holdings(board: list[str]) -> list[Message]:
+        """Each known hand on `board`: its cards and what it makes there (draws included)."""
+        return [
+            {
+                "name": names.get(p, p),
+                "hero": p == pid,
+                "cards": cards[p],
+                "made": describe(cards[p], board),
+            }
+            for p in known
+        ]
+
     streets: list[Message] = []
     pot = 0
     # An uncalled bet comes back on the last street anyone put chips in: nobody can bet after it.
@@ -307,6 +330,7 @@ def hand_detail(
                 "name": STREET_NAMES[street],
                 # The board so far, this street's cards last.
                 "board": hand.board[:end],
+                "holdings": holdings(hand.board[:end]),
                 "pot": format_money(pot, bb),
                 "potBb": _bb(pot, bb),
                 "events": events,
@@ -333,15 +357,15 @@ def hand_detail(
                 "stack": format_money(s.stack, bb),
                 "stackBb": _bb(s.stack, bb),
                 "hero": s.player.id == pid,
-                "cards": list(
-                    hand.hero_cards if s.player.id == pid else hand.shows.get(s.player.id, ())
-                ),
+                "cards": cards[s.player.id],
+                # What the hand made on the final board, when both cards are known.
+                "made": describe(cards[s.player.id], hand.board) if s.player.id in known else None,
                 "folded": s.player.id in folded,
                 # What the player won or lost: unsigned "$0.60 (3bb)", and signed in big blinds.
                 "net": format_money(abs(net(hand, s.player.id)), bb),
                 "netBb": _bb(net(hand, s.player.id), bb),
             }
-            for s in sorted(hand.seats, key=lambda s: (s.player.id != pid, s.player.id in folded))
+            for s in sorted(order, key=lambda s: (s.player.id != pid, s.player.id in folded))
         ],
         "streets": streets,
         "result": None if result is None else format_money(abs(result), bb),

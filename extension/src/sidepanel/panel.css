@@ -939,6 +939,7 @@ details.file .body {
 
 /* Small cards: the board so far on each street, and each player's own. */
 .timeline .board,
+.timeline .hole,
 .replay-players .hole {
   display: flex;
   gap: 3px;
@@ -991,10 +992,23 @@ details.file .body {
 }
 
 .replay-players .who {
-  gap: 5px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
   min-width: 0;
   overflow: hidden;
+  line-height: 1.25;
   white-space: nowrap;
+}
+
+.replay-players .who .pos {
+  margin-left: 5px;
+}
+
+.replay-players .made {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--muted);
 }
 
 .replay-players .hero .who {
@@ -1065,6 +1079,35 @@ details.file .body {
   margin-left: 4px;
   font-size: 12.5px;
   color: var(--muted);
+}
+
+/* Under each street's head: the known hands and what each makes there. */
+.timeline .holdings {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 2px 0 4px;
+}
+
+.timeline .holding {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.timeline .holding .who {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.timeline .holding.hero .who {
+  font-weight: 700;
+  color: var(--fg);
+}
+
+.timeline .holding .made {
+  font-size: 12.5px;
 }
 
 .act-line {
