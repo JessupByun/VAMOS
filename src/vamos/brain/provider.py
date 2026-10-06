@@ -3,8 +3,9 @@ Claude calls for advice, before and after the flop.
 
 A call streams, so a decision that has already passed can stop it: the stream is closed
 from a watcher thread, since thinking streams no events while it runs (its text is omitted
-by default). In practice the blocked read can take until the 60 s request timeout to
-return, and whether billing stops at the close is unverified (2026-10-06 review). Failures
+by default). The socket is shut down first: closing alone left a read that was waiting for
+data blocked until the 60 s request timeout. Whether the API bills tokens it generated
+after the connection dropped is unverified; the ledger records the usage seen so far. Failures
 come back as `CallFailed` with a short reason for the card. The SDK's own retries are off:
 the advisor owns the deadline and decides whether there is time to try again.
 
@@ -14,6 +15,7 @@ The API key comes from ANTHROPIC_API_KEY in the environment or in the repo's .en
 
 import contextlib
 import os
+import socket
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -182,8 +184,19 @@ def _close_when(cancelled: threading.Event, finished: threading.Event, stream: A
     while not finished.is_set():
         if cancelled.wait(0.1):
             with contextlib.suppress(Exception):  # already closing or closed
+                _shut(stream)
+            with contextlib.suppress(Exception):
                 stream.close()
             return
+
+
+def _shut(stream: Any) -> None:
+    """Shut the stream's socket down, which wakes a read blocked on it (closing does not)."""
+    response = getattr(getattr(stream, "_raw_stream", None), "response", None)
+    network = response.extensions.get("network_stream") if response is not None else None
+    sock = network.get_extra_info("socket") if network is not None else None
+    if sock is not None:
+        sock.shutdown(socket.SHUT_RDWR)
 
 
 def _failure(error: Exception, usage: dict[str, Any]) -> CallFailed:

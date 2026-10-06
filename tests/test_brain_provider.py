@@ -173,3 +173,43 @@ def test_a_passed_decision_closes_a_quiet_stream():
         AnthropicProvider(client_with(stream)).run(request(), cancelled)
     assert stream.close_called.is_set()
     assert error.value.usage["cache_read_input_tokens"] == 9000
+
+
+def test_a_passed_decision_stops_a_real_connection_at_once():
+    # A local stand-in for the API that starts its answer and then goes quiet, as Claude
+    # does while it thinks: the real HTTP stack must give up the read as soon as the
+    # decision passes, not when the request times out.
+    import socket
+    import time
+
+    server = socket.create_server(("127.0.0.1", 0))
+    port = server.getsockname()[1]
+
+    def serve():
+        conn, _ = server.accept()
+        conn.recv(65536)
+        start = (
+            b'event: message_start\ndata: {"type": "message_start", "message": {"id": "m",'
+            b' "type": "message", "role": "assistant", "model": "claude-opus-5-5",'
+            b' "content": [], "stop_reason": null, "stop_sequence": null,'
+            b' "usage": {"input_tokens": 500, "output_tokens": 1}}}\n\n'
+        )
+        conn.sendall(
+            b"HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\n"
+            b"transfer-encoding: chunked\r\n\r\n" + f"{len(start):x}\r\n".encode() + start + b"\r\n"
+        )
+        time.sleep(15)  # thinking: nothing more is sent
+        conn.close()
+
+    threading.Thread(target=serve, daemon=True).start()
+    client = anthropic.Anthropic(
+        api_key="test", base_url=f"http://127.0.0.1:{port}", max_retries=0, timeout=10
+    )
+    cancelled = threading.Event()
+    threading.Timer(0.5, cancelled.set).start()
+    began = time.monotonic()
+    with pytest.raises(CallFailed, match="decision passed") as error:
+        AnthropicProvider(client).run(request(), cancelled)
+    assert time.monotonic() - began < 3
+    assert error.value.usage["input_tokens"] == 500
+    server.close()
