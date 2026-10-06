@@ -70,9 +70,12 @@ class Call:
 
 
 def _label(call: "Call") -> str:
+    return model_label(call.model, call.job.request.preset.effort)
+
+
+def model_label(model: str, effort: str | None) -> str:
     """The model and its effort, e.g. "Claude Opus 5.5 · low"."""
-    name = MODEL_NAMES.get(call.model, call.model)
-    effort = call.job.request.preset.effort
+    name = MODEL_NAMES.get(model, model)
     return f"{name} · {effort}" if effort else name
 
 
@@ -94,7 +97,10 @@ def _answer_fields(call: "Call | None") -> dict[str, Any]:
         return dict.fromkeys(("action", "mix", "pick", "pickPct", "why", "plan")) | {
             "deviation": False
         }
-    spot, answer = call.job.spot, call.answer
+    return answer_fields(call.answer, call.job.spot)
+
+
+def answer_fields(answer: Answer, spot: Spot) -> dict[str, Any]:
     return {
         "action": describe(answer.chosen, spot),
         "mix": [f"{_short(c, spot)} {round(100 * c.freq)}%" for c in answer.mix],
@@ -309,6 +315,7 @@ class Advisor:
             "node": call.job.node,
             "kind": call.job.kind,
             "model": call.model,
+            "preset": call.job.request.preset.name,
             "state": call.state,
             "reason": call.reason,
             # From the call's start: how long it took, and how long it was allowed.

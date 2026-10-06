@@ -224,7 +224,7 @@ function waiting(answer: ClaudeAnswer, live: boolean, later: boolean): string {
 function AnswerView(props: { answer: ClaudeAnswer; deeper: boolean; live: boolean; later: boolean }) {
   const { answer, deeper, live, later } = props;
   return (
-    <div class={`answer ${answer.preset}${deeper ? " deeper" : ""}`}>
+    <div class={`answer ${answer.preset ?? ""}${deeper ? " deeper" : ""}`}>
       {deeper && <p class="asked">Asked deeper</p>}
       <div class="source">
         <span class="dot" />
@@ -505,6 +505,9 @@ function HandReplay({ gameId, handKey }: { gameId: string; handKey: string }) {
               )}
             </p>
           </div>
+          {detail.partial && (
+            <p class="muted small">Only Claude's answers were saved for this hand, not the preflop rule and chart answers.</p>
+          )}
           {detail.streets.map((street) => (
             <div key={street.name} class="street-block">
               <p class="street-head">

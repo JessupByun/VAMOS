@@ -87,13 +87,14 @@ class Backend:
         self.emit: Callable[[Message], None] = lambda message: None
         self.clock = clock
         self.ledger = Ledger(data_dir / "costs.jsonl")
+        self.advice_log = data_dir / "advice.jsonl"
         self.advisor = Advisor(
             provider or AnthropicProvider(),
             self.ledger,
             self._advice_changed,
             self._cost_changed,
             clock=clock,
-            advice_log=data_dir / "advice.jsonl",
+            advice_log=self.advice_log,
         )
         # data/settings.json: the dial, and the hero's own names (real name, nicknames) so
         # they are kept out of prompts like everyone else's.
@@ -116,6 +117,9 @@ class Backend:
         # Per game, what the card showed at each of the hero's decisions (node -> record), for
         # the side panel's replayer; saved next to the game's log so a restart keeps it.
         self._decisions: dict[str, dict[str, Message]] = {}
+        # Per game, its Claude calls in the advice log as they stood when the game was loaded:
+        # the replayer's answers for hands played before decisions were recorded.
+        self._logged: dict[str, list[Message]] = {}
         self._history_sent: dict[str, list[Message]] = {}
         # One set of pseudonyms for the whole session, so the notes (shared by every table)
         # hide a name seen at any table.
@@ -307,6 +311,7 @@ class Backend:
             )
             self._load_notes(game_id)
             self._load_decisions(game_id)
+            self._logged[game_id] = self._load_logged(game_id)
         return session
 
     def _load_decisions(self, game_id: str) -> None:
@@ -321,6 +326,22 @@ class Backend:
                 continue  # a line cut short by a crash
             if isinstance(record, dict) and isinstance(record.get("node"), str):
                 held[record["node"]] = record  # the last record of a node is what was shown
+
+    def _load_logged(self, game_id: str) -> list[Message]:
+        if not self.advice_log.exists():
+            return []
+        found = []
+        with self.advice_log.open() as f:
+            for line in f:
+                if game_id not in line:
+                    continue  # most lines are other games: skip parsing them
+                try:
+                    entry = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(entry, dict) and entry.get("game") == game_id:
+                    found.append(entry)
+        return found
 
     def _record_decision(self, game_id: str, payload: Message) -> None:
         """What the card shows at the hero's decision, kept for the replayer when it changes."""
@@ -353,7 +374,12 @@ class Backend:
         hero = self._hero_id(game_id)
         if hero is None:
             return []
-        hands = hand_list(self._session(game_id).log, hero, self._decisions.get(game_id, {}))
+        hands = hand_list(
+            self._session(game_id).log,
+            hero,
+            self._decisions.get(game_id, {}),
+            self._logged.get(game_id, []),
+        )
         if self._history_sent.get(game_id, []) == hands:
             return []  # unchanged, or still empty
         self._history_sent[game_id] = hands
@@ -365,7 +391,11 @@ class Backend:
         if hero is None:
             return []
         detail = hand_detail(
-            self._session(game_id).log, key, hero, self._decisions.get(game_id, {})
+            self._session(game_id).log,
+            key,
+            hero,
+            self._decisions.get(game_id, {}),
+            self._logged.get(game_id, []),
         )
         if detail is None:
             return []

@@ -865,3 +865,46 @@ def test_earlier_hands_replay_with_the_advice_given_even_after_a_restart(tmp_pat
     again.handle({**SEATS, "hero": {"id": "heroid0001", "name": "Hero"}})
     again.handle(page(*finished))
     assert replay(again) == expected
+
+
+def test_hands_played_before_the_record_replay_claudes_answers_from_the_advice_log(tmp_path):
+    sent = {
+        "players": [
+            {"name": "Hero", "position": "BTN", "stack_bb": 50.0, "behind_bb": 49.5},
+            {"name": "Player A", "position": "BB", "stack_bb": 50.0, "behind_bb": 49.0},
+        ],
+        "facts": {"to_call_bb": 0.5},
+    }
+    entry = {
+        "game": GAME,
+        "node": "h2:0:2",
+        "kind": "preflop",
+        "model": "claude-opus-5-5",
+        "state": "done",
+        "spot": f"Hand so far (amounts in big blinds):\n{json.dumps(sent)}\n",
+        "answer": json.dumps({"reason": "Player A folds too often.", "plan": ""}),
+        "mix": [["raise", 5000, 1.0]],
+        "chosen": ["raise", 5000],
+    }
+    other_game = {**entry, "game": "pgl999"}
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data" / "advice.jsonl").write_text(
+        json.dumps(other_game) + "\n" + json.dumps(entry) + "\n"
+    )
+    backend, _, _ = claude_backend(tmp_path, [])
+    backend.handle({**SEATS, "hero": {"id": "heroid0001", "name": "Hero"}})
+    finished = [
+        *HERO_HAND,
+        (205, '"Hero @ heroid0001" raises to 50'),
+        (206, '"alex @ Qw3rTy7UiO" folds'),
+        (207, 'Uncalled bet of 30 returned to "Hero @ heroid0001"'),
+        (208, '"Hero @ heroid0001" collected 40 from pot'),
+        (209, "-- ending hand #2 --"),
+    ]
+    [history] = [m for m in backend.handle(page(*finished)) if m["type"] == "history"]
+    assert [h["decisions"] for h in history["hands"]] == [1]
+    [detail] = backend.handle({"type": "hand_detail_request", "gameId": GAME, "key": "h2"})
+    [decision] = [e for e in detail["streets"][0]["events"] if e["kind"] == "decision"]
+    [answer] = decision["advice"]["answers"]
+    assert (answer["action"], answer["why"]) == ("RAISE TO 50 (2.5bb)", "alex folds too often.")
+    assert detail["partial"] is True

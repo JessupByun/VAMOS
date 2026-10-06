@@ -210,6 +210,6 @@ def test_answers_and_failures_are_logged_under_pseudonyms(rig):
     first, second = (json.loads(line) for line in r.advice_log.read_text().splitlines())
     assert (first["node"], first["state"], first["chosen"]) == ("h1:1:8", "done", ["bet", 90])
     assert (first["seconds"], first["allowed"]) == (0, 20)  # the test clock stands still
-    assert first["model"] == "claude-opus-5-5"
+    assert (first["model"], first["preset"]) == ("claude-opus-5-5", "standard")
     assert "Player A calls too much" in first["answer"]  # as Claude wrote it
     assert (second["state"], second["reason"], second["answer"]) == ("failed", "rate limited", None)

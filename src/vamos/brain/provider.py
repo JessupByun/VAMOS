@@ -1,10 +1,12 @@
 """
 Claude calls for advice, before and after the flop.
 
-A call streams, so a decision that has already passed can stop it: the stream is closed
-from a watcher thread, since thinking streams no events while it runs (its text is omitted
-by default). The socket is shut down first: closing alone left a read that was waiting for
-data blocked until the 60 s request timeout. Whether the API bills tokens it generated
+A call streams, so a decision that has already passed can stop it from a watcher thread,
+since thinking streams no events while it runs (its text is omitted by default). The watcher
+shuts the socket down, which wakes the read waiting on it; the read then fails and the call
+closes its own stream. The watcher does not close it too: on macOS a socket closed by another
+thread while a read waits on it could leave that read blocked until the 60 s request timeout,
+and closing alone always did. Whether the API bills tokens it generated
 after the connection dropped is unverified; the ledger records the usage seen so far. Failures
 come back as `CallFailed` with a short reason for the card. The SDK's own retries are off:
 the advisor owns the deadline and decides whether there is time to try again.
@@ -183,20 +185,25 @@ STOPPED = "stopped: the decision passed"
 def _close_when(cancelled: threading.Event, finished: threading.Event, stream: Any) -> None:
     while not finished.is_set():
         if cancelled.wait(0.1):
+            shut = False
             with contextlib.suppress(Exception):  # already closing or closed
-                _shut(stream)
-            with contextlib.suppress(Exception):
-                stream.close()
+                shut = _shut(stream)
+            if not shut:
+                # No socket to reach (the SDK changed?): closing still ends the call, if late.
+                with contextlib.suppress(Exception):
+                    stream.close()
             return
 
 
-def _shut(stream: Any) -> None:
+def _shut(stream: Any) -> bool:
     """Shut the stream's socket down, which wakes a read blocked on it (closing does not)."""
     response = getattr(getattr(stream, "_raw_stream", None), "response", None)
     network = response.extensions.get("network_stream") if response is not None else None
     sock = network.get_extra_info("socket") if network is not None else None
-    if sock is not None:
-        sock.shutdown(socket.SHUT_RDWR)
+    if sock is None:
+        return False
+    sock.shutdown(socket.SHUT_RDWR)
+    return True
 
 
 def _failure(error: Exception, usage: dict[str, Any]) -> CallFailed:

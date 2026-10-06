@@ -192,16 +192,19 @@ def settle(text: str, spot: Spot, seed: str, reveal=lambda s: s) -> Answer:
             if roll < 0:
                 chosen = choice
                 break
-    return Answer(mix, chosen, reveal(_tidy(reason)), reveal(_tidy(plan)))
+    return Answer(mix, chosen, reveal(tidy(reason)), reveal(tidy(plan)))
 
 
 # Structured output sometimes leaves a stray closing character on the text ("light.'",
-# "club.}"); a closing bracket stays when the text opened one.
+# "club.}") or a doubled final period ("turns.."); a closing bracket stays when the text
+# opened one, and an ellipsis stays.
 _STRAY = "\"'}]\u00bb\u201d\u2019\u300d"  # plus closing quotes and brackets in other scripts
 
 
-def _tidy(text: str) -> str:
+def tidy(text: str) -> str:
     text = text.strip()
     while text and (text[-1] in _STRAY or (text[-1] == ")" and text.count(")") > text.count("("))):
         text = text[:-1].rstrip()
+    if text.endswith("..") and not text.endswith("..."):
+        text = text[:-1]
     return text

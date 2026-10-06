@@ -25,7 +25,7 @@ At the hero's preflop turn (`engine/advice.py`), in order:
 Where the lists come from, and their limits (VAMOS's rule: nothing from a source whose terms forbid real-time assistance or reuse may set advice):
 - The trash list was frozen from VAMOS's retired 3-handed solves: hands folding 99% or more both opening on the button and in the big blind facing a 2.5bb button open, at every depth from 35 to 100bb.
   Those solves' flop model was tuned on numbers read from a GTO Wizard article, so the list's exact boundary is not from an allowed source.
-  Each hand has allowed backing of its own: all 46 are in Sklansky and Malmuth's group 9, the hands to fold (54o, the one in group 8, was taken out on 2026-10-06); facing a raise, our own equity tables decide most of them; and in the saved games only 15-17% of opens at 4 or more handed win the blinds uncontested, so stealing with trash rarely works in this pool.
+  Each hand has allowed backing of its own: all 46 are in Sklansky and Malmuth's group 9, the hands to fold (54o, the one in group 8, was taken out on 2026-10-05); facing a raise, our own equity tables decide most of them; and in the saved games only 15-17% of opens at 4 or more handed win the blinds uncontested, so stealing with trash rarely works in this pool.
 - Without rake the big blind defends wider against small raises, which is why trash folds only at the source spot's price or steeper.
 - The open set is exactly Sklansky and Malmuth's groups 1 and 2 plus AQo.
   The 3-bet set holds at least 63% equity against a top-15% opening range and 67% against a top-30% one (our own tables; QQ 68% and 71%).

@@ -101,16 +101,15 @@ class Pseudonyms:
 
     def reveal(self, text: str) -> str:
         """Claude's answer with pseudonyms turned back into names for the card."""
-        for person in sorted(self._labels, key=lambda p: -len(self._labels[p])):
-            # A function, so a name with a backslash is not read as an escape.
-            text = re.sub(
-                rf"\b{re.escape(self._labels[person])}\b",
-                lambda _, shown=self._shown[person]: shown,
-                text,
-            )
-        # Claude is asked to say "you"; this covers the times it says "Hero" anyway.
-        text = re.sub(rf"\b{HERO}'s\b", "your", text)
-        text = re.sub(rf"\b{HERO}\b", "you", text)
-        return re.sub(
-            r"(^|[.!?]\s+)(you|your)\b", lambda m: m.group(1) + m.group(2).capitalize(), text
-        )
+        return reveal(text, {self._labels[p]: self._shown[p] for p in self._labels})
+
+
+def reveal(text: str, shown: dict[str, str]) -> str:
+    """`text` with each pseudonym in `shown` ("Player A") turned into its name."""
+    for label in sorted(shown, key=len, reverse=True):
+        # A function, so a name with a backslash is not read as an escape.
+        text = re.sub(rf"\b{re.escape(label)}\b", lambda _, name=shown[label]: name, text)
+    # Claude is asked to say "you"; this covers the times it says "Hero" anyway.
+    text = re.sub(rf"\b{HERO}'s\b", "your", text)
+    text = re.sub(rf"\b{HERO}\b", "you", text)
+    return re.sub(r"(^|[.!?]\s+)(you|your)\b", lambda m: m.group(1) + m.group(2).capitalize(), text)

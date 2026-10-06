@@ -3,7 +3,7 @@ import json
 import pytest
 
 from vamos.brain.advisor import describe
-from vamos.brain.answer import BadAnswer, Choice, Spot, settle
+from vamos.brain.answer import BadAnswer, Choice, Spot, settle, tidy
 
 # Facing a 0.40 bet into 1.20 (pot 1.60 with the bet), 9.40 behind, blinds 0.10/0.20.
 FACING = Spot(pot=160, to_call=40, street_bet=0, price=40, min_raise=40, behind=940, big_blind=20)
@@ -190,6 +190,8 @@ def test_stray_closing_characters_are_trimmed_from_the_text():
     )
     a = settle(text, FACING, "n")
     assert (a.reason, a.plan) == ("He barrels light.", "Check behind if the turn is a club.")
+    assert tidy("Slow down on 9/5/4 turns..") == "Slow down on 9/5/4 turns."
+    assert tidy("He might fold...") == "He might fold..."
     keeps = json.dumps(
         {
             "strategy": [{"action": "call", "size_pct_pot": 0, "freq": 1}],

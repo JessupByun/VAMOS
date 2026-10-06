@@ -184,6 +184,7 @@ def test_a_passed_decision_stops_a_real_connection_at_once():
 
     server = socket.create_server(("127.0.0.1", 0))
     port = server.getsockname()[1]
+    started = threading.Event()
 
     def serve():
         conn, _ = server.accept()
@@ -198,6 +199,7 @@ def test_a_passed_decision_stops_a_real_connection_at_once():
             b"HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\n"
             b"transfer-encoding: chunked\r\n\r\n" + f"{len(start):x}\r\n".encode() + start + b"\r\n"
         )
+        started.set()
         time.sleep(15)  # thinking: nothing more is sent
         conn.close()
 
@@ -206,10 +208,18 @@ def test_a_passed_decision_stops_a_real_connection_at_once():
         api_key="test", base_url=f"http://127.0.0.1:{port}", max_retries=0, timeout=10
     )
     cancelled = threading.Event()
-    threading.Timer(0.5, cancelled.set).start()
-    began = time.monotonic()
+    passed: list[float] = []
+
+    def pass_the_decision():
+        # Once the answer has begun (a fixed delay raced a busy machine's first read).
+        started.wait(10)
+        time.sleep(0.5)
+        passed.append(time.monotonic())
+        cancelled.set()
+
+    threading.Thread(target=pass_the_decision, daemon=True).start()
     with pytest.raises(CallFailed, match="decision passed") as error:
         AnthropicProvider(client).run(request(), cancelled)
-    assert time.monotonic() - began < 3
+    assert time.monotonic() - passed[0] < 2
     assert error.value.usage["input_tokens"] == 500
     server.close()

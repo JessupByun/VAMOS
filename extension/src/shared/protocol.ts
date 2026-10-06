@@ -190,6 +190,8 @@ export interface HandDetail {
   key: string;
   number: number;
   ended: boolean;
+  /** Played before every decision was recorded: only Claude's answers were kept. */
+  partial: boolean;
   heroCards: string[];
   board: string[];
   secondBoard: string[];
@@ -249,9 +251,9 @@ export interface SpotFacts {
 
 /** One call's answer about a decision; a decision has a second one after "Ask deeper". */
 export interface ClaudeAnswer {
-  /** e.g. "Claude Opus 5.5 · low". */
+  /** e.g. "Claude Opus 5.5 · low"; without the effort for answers logged before it was kept. */
   model: string;
-  preset: Preset;
+  preset: Preset | null;
   state: "thinking" | "done" | "failed" | "cancelled";
   /** Why this call gave no answer, e.g. "timed out". */
   reason: string | null;

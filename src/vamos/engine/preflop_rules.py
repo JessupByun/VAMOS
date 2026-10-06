@@ -8,7 +8,7 @@ TRASH is frozen from VAMOS's own 3-handed solves at 35, 50, 75 and 100bb (retire
 blind facing a 2.5bb button open, at every one of those depths. Those solves' flop model was
 tuned on a GTO Wizard article's numbers, so the boundary is not from an allowed source; each
 hand is backed separately (docs/preflop.md: Sklansky-Malmuth group 9, our equity tables);
-54o, the one hand outside group 9, was taken out on 2026-10-06.
+54o, the one hand outside group 9, was taken out on 2026-10-05.
 This game has no rake, and without rake the big blind defends wider against small raises.
 So trash folds only at a price at
 least as steep as the spot the list comes from, and never heads-up or blind against blind,
