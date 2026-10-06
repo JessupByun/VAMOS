@@ -178,3 +178,23 @@ def test_a_raise_short_of_a_full_raise_is_all_in_and_nothing_owed_is_a_check():
     # The big blind's option: "call" and "fold" both mean checking.
     a = settle(answer(("call", 0, 0.6), ("fold", 0, 0.4)), BB_OPTION, seed="n")
     assert [(c.action, round(c.freq, 2)) for c in a.mix] == [("check", 1.0)]
+
+
+def test_stray_closing_characters_are_trimmed_from_the_text():
+    text = json.dumps(
+        {
+            "strategy": [{"action": "call", "size_pct_pot": 0, "freq": 1}],
+            "reason": "He barrels light.'",
+            "plan": "Check behind if the turn is a club.}",
+        }
+    )
+    a = settle(text, FACING, "n")
+    assert (a.reason, a.plan) == ("He barrels light.", "Check behind if the turn is a club.")
+    keeps = json.dumps(
+        {
+            "strategy": [{"action": "call", "size_pct_pot": 0, "freq": 1}],
+            "reason": "Call (he bluffs often)",
+            "plan": "",
+        }
+    )
+    assert settle(keeps, FACING, "n").reason == "Call (he bluffs often)"

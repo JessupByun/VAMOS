@@ -158,11 +158,15 @@ class Read:
     showdowns: tuple[Showdown, ...]
 
     def summary(self) -> dict:
-        """The read as Claude gets it: exact counts. Hands shown go only into drafts."""
+        """
+        The read as Claude gets it: exact counts, each as x/y where it has a base, so a count
+        is never read as a percentage ("vpip": 8 was read as 8% when it was 8 of 25 hands).
+        Hands shown go only into drafts.
+        """
         return {
             "hands": self.hands,
-            "vpip": self.vpip,
-            "pfr": self.pfr,
+            "vpip": f"{self.vpip}/{self.hands}",
+            "pfr": f"{self.pfr}/{self.hands}",
             "three_bet": f"{self.three_bets}/{self.three_bet_chances}",
             "cbet": f"{self.cbets}/{self.cbet_chances}",
             "postflop_bets_and_raises": self.bets_raises,

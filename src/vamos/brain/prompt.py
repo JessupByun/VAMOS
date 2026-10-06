@@ -45,16 +45,17 @@ Answer (the JSON shape is enforced):
 - strategy: the actions with their frequencies. Give one action at 100% unless another is
   about as good; then give both, and let the reason explain the more frequent one.
   Before the flop use the house sizes, the same the rules use, so a size never tells the
-  table what Hero holds: open to 3bb (2.5bb heads-up); over limpers 4bb plus 1bb per
-  limper (4bb heads-up); a 3-bet to 3 times the raise in position or 4 times out of
-  position, plus one raise per caller.
+  table what Hero holds: open to 3bb (2.5bb only when two players are dealt in); over
+  limpers 4bb plus 1bb per limper (4bb when two are dealt in); a 3-bet to 3 times the raise
+  in position or 4 times out of position, plus one raise per caller.
   For a bet or raise, to_bb is Hero's total on this street after it, in big blinds (opening
   to 3bb is 3). size_pct_pot is the same size as a percentage: a bet of the pot, or a raise
   on top of calling of the pot after calling (raising a 1bb bet into 6bb to 3bb is 25). Use
   0 for both with fold, check, call and allin. Only use actions listed as legal.
 - plan: one sentence, at most 20 words: what to do next if the hand goes on. Empty when this
   action ends Hero's part.
-- Speak to Hero as "you" and to everyone else by the names given (Player A, Player B, ...).
+- Speak to Hero as "you" and to everyone else by the names given (Player A, Player B, ...),
+  always in full: "Player A", never the letter alone.
 """
 
 

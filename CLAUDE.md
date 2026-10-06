@@ -56,7 +56,7 @@ After a backend change, the same reload restarts the backend (Chrome launches it
 - This session's read is counted from the current game's log only; it is the one stats count in v1. "This session" API cost runs back to the last 3-hour pause between calls, so restarts do not reset it.
 - The extension closes the backend 15 s after the last table tab goes away, so a refresh keeps the same backend.
 - The action card always sits at the top middle of the table, just above the pot, even over a seat.
-- No log ingestion, stats engine, or automatic learning in v1. Deferred features (range tables, HRC tables, review mode, training mode) are built only when the user asks.
+- No log ingestion, stats engine, or automatic learning in v1. Deferred features (range tables, HRC tables, review mode's adherence stats, training mode) are built only when the user asks; the hand replayer was built on request (2026-10-06).
 - Claude runs on Opus 5.5 only, before and after the flop: effort low by default, medium as the deeper option. Sonnet 5.5 and Haiku 4.5 were dropped after blind comparisons on logged spots; never Claude Fable 5.1.
 - Ask the user before any non-trivial design choice the plan does not cover.
 

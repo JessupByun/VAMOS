@@ -390,7 +390,7 @@ def test_claude_answers_postflop_under_pseudonyms(tmp_path):
     reads_sent = {p["name"]: p.get("this_session") for p in spot["players"]}
     assert reads_sent["Hero"] is None
     # Finished hands only: alex's call in the hand being played is not yet history.
-    assert (reads_sent["Player A"]["hands"], reads_sent["Player A"]["vpip"]) == (1, 0)
+    assert (reads_sent["Player A"]["hands"], reads_sent["Player A"]["vpip"]) == (1, "0/1")
 
     gate.set()
     update = sent.get(timeout=3)
