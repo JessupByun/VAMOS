@@ -46,39 +46,39 @@ def advise(lines, hero, players="AB", stacks=None, tables=None):
 
 def test_heads_up_short_stacks_use_the_push_fold_chart():
     advice = advise(["Your hand is A♠, A♦", *HU], "A", stacks=(200, 200), tables=pushfold_tables())
-    assert (advice["source"], advice["action"]) == ("Chart", "ALL IN 200 (10bb)")
+    assert (advice["source"], advice["action"]) == ("Chart", "ALL IN $200 (10bb)")
 
 
 def test_the_strongest_hands_raise_at_a_standard_size():
     # Heads-up the small blind opens 2.5bb; three-handed first in, 3bb.
     assert advise(["Your hand is A♠, A♦", *HU], "A") == {
         "source": "Rule",
-        "action": "RAISE TO 50 (2.5bb)",
-        "mix": ["raise 2.5bb 100%"],
+        "action": "RAISE TO $50 (2.5bb)",
+        "mix": ["raise $50 (2.5bb) 100%"],
         "pick": 0,
         "pickPct": 100,
         "deviation": False,
     }
-    assert advise(["Your hand is A♠, Q♦", *THREE], "A", "ABC")["action"] == "RAISE TO 60 (3bb)"
+    assert advise(["Your hand is A♠, Q♦", *THREE], "A", "ABC")["action"] == "RAISE TO $60 (3bb)"
     # Over a limp the big blind isolates to 5bb; heads-up, 4bb over the small blind's limp.
     limped = ["Your hand is A♠, A♦", *THREE, f"{P['A']} calls 20", f"{P['B']} folds"]
-    assert advise(limped, "C", "ABC")["action"] == "RAISE TO 100 (5bb)"
+    assert advise(limped, "C", "ABC")["action"] == "RAISE TO $100 (5bb)"
     limped_hu = ["Your hand is A♠, A♦", *HU, f"{P['A']} calls 20"]
-    assert advise(limped_hu, "B")["action"] == "RAISE TO 80 (4bb)"
+    assert advise(limped_hu, "B")["action"] == "RAISE TO $80 (4bb)"
 
 
 def test_a_three_bet_is_3x_in_position_and_4x_out_of_it():
     opened = ["Your hand is K♠, K♦", *THREE, f"{P['A']} raises to 60"]
     # The small blind is out of position against the button.
-    assert advise(opened, "B", "ABC")["action"] == "RAISE TO 240 (12bb)"
+    assert advise(opened, "B", "ABC")["action"] == "RAISE TO $240 (12bb)"
     heads_up = ["Your hand is Q♠, Q♦", *HU, f"{P['A']} raises to 60"]
-    assert advise(heads_up, "B")["action"] == "RAISE TO 240 (12bb)"
+    assert advise(heads_up, "B")["action"] == "RAISE TO $240 (12bb)"
 
 
 def test_a_raise_of_much_of_the_stack_goes_all_in():
     opened = ["Your hand is A♠, K♦", *THREE, f"{P['A']} raises to 60"]
     advice = advise(opened, "C", "ABC", stacks=(1000, 1000, 300))
-    assert advice["action"] == "ALL IN 300 (15bb)"
+    assert advice["action"] == "ALL IN $300 (15bb)"
 
 
 def test_facing_an_all_in_nobody_else_can_match_the_strong_hands_call():
@@ -88,7 +88,7 @@ def test_facing_an_all_in_nobody_else_can_match_the_strong_hands_call():
         f"{P['A']} raises to 1000 and go all in",
         f"{P['B']} folds",
     ]
-    assert advise(jammed, "C", "ABC")["action"] == "CALL 980 (49bb)"
+    assert advise(jammed, "C", "ABC")["action"] == "CALL $980 (49bb)"
 
 
 def test_trash_folds_checks_when_free_and_waits_for_claude_heads_up_or_blind_against_blind():
@@ -132,7 +132,7 @@ def test_a_re_raise_of_the_hero_goes_to_claude_but_a_limp_then_raise_is_one_rais
         f"{P['B']} folds",
         f"{P['C']} raises to 80",
     ]
-    assert advise(limp_raise, "A", "ABC")["action"] == "RAISE TO 240 (12bb)"
+    assert advise(limp_raise, "A", "ABC")["action"] == "RAISE TO $240 (12bb)"
 
 
 def test_trash_does_not_fold_at_a_cheap_price():
@@ -159,7 +159,7 @@ def test_trash_never_folds_to_an_all_in():
 
 def test_facing_one_all_in_only_aces_and_kings_answer_by_rule():
     jam = [*THREE, f"{P['A']} raises to 1000 and go all in", f"{P['B']} folds"]
-    assert advise(["Your hand is K♠, K♦", *jam], "C", "ABC")["action"] == "CALL 980 (49bb)"
+    assert advise(["Your hand is K♠, K♦", *jam], "C", "ABC")["action"] == "CALL $980 (49bb)"
     assert advise(["Your hand is Q♠, Q♦", *jam], "C", "ABC") is None
     assert advise(["Your hand is A♠, K♦", *jam], "C", "ABC") is None
 
@@ -191,13 +191,13 @@ def test_a_raise_of_much_of_what_others_can_match_goes_all_in():
     # The big blind covers everyone: a 4x 3-bet (12bb) is most of the opener's 10bb stack.
     short_open = ["Your hand is A♠, A♦", *THREE, f"{P['A']} raises to 60", f"{P['B']} folds"]
     advice = advise(short_open, "C", "ABC", stacks=(200, 1000, 3000))
-    assert advice["action"] == "ALL IN 3,000 (150bb)"
+    assert advice["action"] == "ALL IN $3,000 (150bb)"
 
 
 def test_below_the_shallowest_chart_the_rules_answer():
     # The chart starts at 10bb here; at 5bb the push/fold spot falls to the rules.
     advice = advise(["Your hand is A♠, A♦", *HU], "A", stacks=(100, 100), tables=pushfold_tables())
-    assert (advice["source"], advice["action"]) == ("Rule", "ALL IN 100 (5bb)")
+    assert (advice["source"], advice["action"]) == ("Rule", "ALL IN $100 (5bb)")
 
 
 def test_an_all_in_re_raised_by_a_deeper_player_is_a_plain_raise_to_fold_to():
@@ -221,7 +221,7 @@ def test_a_min_raise_from_a_short_stack_is_read_as_the_jam():
     # At 4bb a raise to 2bb commits half the stack: the shipped chart answers it as a jam.
     min_raise = ["Your hand is K♠, 2♦", *HU, f"{P['A']} raises to 40"]
     advice = advise(min_raise, "B", stacks=(80, 80))
-    assert (advice["source"], advice["action"]) == ("Chart", "CALL 20 (1bb)")
+    assert (advice["source"], advice["action"]) == ("Chart", "CALL $20 (1bb)")
 
 
 def test_the_chart_stops_at_10bb():

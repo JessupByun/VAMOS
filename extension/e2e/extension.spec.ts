@@ -331,8 +331,8 @@ test("the action card shows facts on the hero's turn only once the log has caugh
   // ATo in the small blind, folded to: neither a clear fold nor a clear raise, so Claude
   // decides preflop too (the canned answer's bet becomes the minimum raise).
   await expect(card.locator(".source")).toHaveText("VAMOS! AI (Claude Opus 5.5 · low)");
-  await expect(card.locator(".action")).toHaveText("RAISE TO 0.40 (2bb)");
-  await expect(card.locator(".facts")).toHaveText(/^SB · pot 1\.5bb · need 25% · ATo$/);
+  await expect(card.locator(".action")).toHaveText("RAISE TO $0.40 (2bb)");
+  await expect(card.locator(".facts")).toHaveText(/^SB · pot \$0\.30 \(1\.5bb\) · need 25% · ATo$/);
   // The card sits at the top of the table, centered just above the pot.
   const pot = await page.locator(".table-pot-size").boundingBox();
   const abovePot = async () => {
@@ -390,8 +390,8 @@ test("a clear preflop spot is answered at once by a rule, with no Claude call", 
   );
   harness.addLogLines([`"new guy @ ${STRANGER_ID}" folds`]);
   await expect(card.locator(".source")).toHaveText("Preflop rule");
-  await expect(card.locator(".action")).toHaveText("RAISE TO 0.60 (3bb)");
-  await expect(card.locator(".chip.picked")).toHaveText("raise 3bb 100%");
+  await expect(card.locator(".action")).toHaveText("RAISE TO $0.60 (3bb)");
+  await expect(card.locator(".chip.picked")).toHaveText("raise $0.60 (3bb) 100%");
   // Nothing was asked of Claude for this decision.
   await page.waitForTimeout(500);
   expect(existsSync(join(harness.dataDir, "advice.jsonl"))).toBe(false);
@@ -420,7 +420,7 @@ test("an earlier hand replays in the side panel with the advice VAMOS gave", asy
   ]);
   // The menu sits in the Current hand header; nothing else shows until a hand is picked.
   const picker = panel.getByRole("combobox", { name: "Replay an earlier hand" });
-  await expect(picker.locator("option")).toHaveText(["Replay an earlier hand (1)", "#1 · A♠ A♦ · SB · won 1bb"]);
+  await expect(picker.locator("option")).toHaveText(["Replay an earlier hand (1)", "#1 · A♠ A♦ · SB · won $0.20 (1bb)"]);
   const replay = panel.locator("section.replay");
   await expect(replay).toHaveCount(0);
   await picker.selectOption({ index: 1 });
@@ -428,8 +428,8 @@ test("an earlier hand replays in the side panel with the advice VAMOS gave", asy
   await expect(picker.locator("option:checked")).toHaveText("Replaying #1 · A♠ A♦");
   await expect(replay.locator("h2")).toHaveText("Hand replayer · #1");
   await expect(replay.locator(".advice-line .source")).toHaveText("Preflop rule");
-  await expect(replay.locator(".advice-line .pick")).toHaveText("RAISE TO 0.60 (3bb)");
-  await expect(replay.locator(".act-line.hero .what")).toHaveText(["posts the small blind", "raises to 3bb"]);
+  await expect(replay.locator(".advice-line .pick")).toHaveText("RAISE TO $0.60 (3bb)");
+  await expect(replay.locator(".act-line.hero .what")).toHaveText(["posts the small blind", "raises to $0.60 (3bb)"]);
   await replay.getByRole("button", { name: "Close the hand replayer" }).click();
   await expect(replay).toHaveCount(0);
   await expect(picker.locator("option:checked")).toHaveText("Replay an earlier hand (1)");
@@ -457,10 +457,10 @@ test("after the flop the card shows Claude's answer and the panel its reasoning"
       .join("");
   });
   await expect(card.locator(".source")).toHaveText("VAMOS! AI (Claude Opus 5.5 · low)");
-  await expect(card.locator(".action")).toHaveText("BET 0.20 (1bb)");
+  await expect(card.locator(".action")).toHaveText("BET $0.20 (1bb)");
   // Colored by what it says (a bet); who said it is in the label.
   await expect(card.locator(".action")).toHaveClass(/act-bet/);
-  await expect(card.locator(".facts")).toHaveText(/^SB · pot 2bb · Ace high$/);
+  await expect(card.locator(".facts")).toHaveText(/^SB · pot \$0\.40 \(2bb\) · Ace high$/);
 
   await expect(panel.locator(".advice .why")).toHaveText("alex folds to small bets.");
   await expect(panel.locator(".advice .plan")).toHaveText("Next: Check behind if alex calls and the turn is a club.");
@@ -500,11 +500,11 @@ test("after the flop the card shows Claude's answer and the panel its reasoning"
   const answers = panel.locator(".decision.live .answer");
   await expect(answers).toHaveCount(2);
   await expect(answers.nth(0).locator(".source")).toHaveText("VAMOS! AI (Claude Opus 5.5 · low)");
-  await expect(answers.nth(0).locator(".pick")).toHaveText("BET 0.20 (1bb)");
+  await expect(answers.nth(0).locator(".pick")).toHaveText("BET $0.20 (1bb)");
   await expect(answers.nth(1)).toHaveClass(/deeper/);
   await expect(answers.nth(1).locator(".asked")).toHaveText("Asked deeper");
   await expect(answers.nth(1).locator(".source")).toHaveText("VAMOS! AI (Claude Opus 5.5 · medium)");
-  await expect(answers.nth(1).locator(".pick")).toHaveText("BET 0.20 (1bb)");
+  await expect(answers.nth(1).locator(".pick")).toHaveText("BET $0.20 (1bb)");
   await expect(panel.getByRole("button", { name: "Ask deeper" })).toHaveCount(0);
   await expect(card.locator(".source")).toHaveText("VAMOS! AI (Claude Opus 5.5 · medium)");
 
@@ -527,7 +527,7 @@ test("after the flop the card shows Claude's answer and the panel its reasoning"
       ?.insertAdjacentHTML("beforeend", '<div class="card-container card-h card-s-9 flipped"></div>');
     document.querySelector(".you-player")?.classList.add("decision-current");
   });
-  await expect(card.locator(".action")).toHaveText("BET 0.40 (2bb)");
+  await expect(card.locator(".action")).toHaveText("BET $0.40 (2bb)");
   await expect(panel.locator(".decision .street")).toHaveText(["Flop", "Turn"]);
   await expect(panel.locator(".decision.live .street")).toHaveText("Turn");
 });
@@ -575,7 +575,8 @@ test("screenshots of the card and the side panel", async () => {
       .map((cls) => `<div class="card-container ${cls} flipped"></div>`)
       .join("");
   });
-  await expect(card.locator(".source")).toContainText("low");
+  // The flop's answer (bet, check or all in), not the preflop one still up.
+  await expect(card.locator(".chip")).toHaveCount(3);
   await card.screenshot({ path: `${dir}/3-claude-card.png` });
   await badge(page, STRANGER_ID).screenshot({ path: `${dir}/3-match-badge.png` });
   await panel.screenshot({ path: `${dir}/4-panel-dark.png`, fullPage: true });
@@ -591,6 +592,9 @@ test("screenshots of the card and the side panel", async () => {
   await page.screenshot({ path: `${dir}/6-waiting-table.png` });
   // The hand ends, and the side panel replays it with Claude's answer.
   harness.addLogLines([
+    `"TestHero @ ${HERO_ID}" checks`,
+    `"alex @ ${KNOWN_ID}" checks`,
+    "Turn: K♠, 7♦, 2♣ [9♥]",
     `"TestHero @ ${HERO_ID}" bets 0.20`,
     `"alex @ ${KNOWN_ID}" folds`,
     `Uncalled bet of 0.20 returned to "TestHero @ ${HERO_ID}"`,

@@ -21,7 +21,7 @@ from vamos.brain.advisor import answer_fields, model_label
 from vamos.brain.answer import Answer, Choice, Spot, tidy
 from vamos.brain.provider import PRESETS
 from vamos.brain.pseudonyms import HERO, reveal
-from vamos.engine.facts import format_bb, format_chips
+from vamos.engine.facts import format_money
 from vamos.engine.state import positions
 from vamos.log.hands import Action, Hand, HandLog, Street
 
@@ -82,6 +82,8 @@ def hand_list(
                 "heroCards": list(hand.hero_cards),
                 "position": positions(hand).get(pid),
                 "resultBb": round(net(hand, pid) / (hand.big_blind or 1), 2),
+                # Won or lost, without the sign: "$0.60 (3bb)".
+                "result": format_money(abs(net(hand, pid)), hand.big_blind or 1),
                 "folded": pid in hand.folded(),
                 "decisions": advised[key],
             }
@@ -104,15 +106,16 @@ def _text(action: Action, bb: int) -> str:
     if action.kind in POSTS:
         text = POSTS[action.kind]
     elif action.kind == "post_straddle":
-        text = f"straddles to {format_bb(action.to or 0, bb)}"
+        text = f"straddles to {format_money(action.to or 0, bb)}"
     elif action.kind in ("fold", "check"):
         text = f"{action.kind}s"
     elif action.kind == "call":
-        text = f"calls {format_bb(action.to or 0, bb)}"
+        # What the call added, as the card's CALL reads; a raise says its total ("to").
+        text = f"calls {format_money(action.added, bb)}"
     elif action.kind == "bet":
-        text = f"bets {format_bb(action.to or 0, bb)}"
+        text = f"bets {format_money(action.to or 0, bb)}"
     elif action.kind == "raise":
-        text = f"raises to {format_bb(action.to or 0, bb)}"
+        text = f"raises to {format_money(action.to or 0, bb)}"
     else:
         text = action.kind.replace("_", " ")
     return f"{text} (all in)" if action.all_in else text
@@ -278,8 +281,8 @@ def hand_detail(
             if i >= len(hand.actions) and record.get("street") == street
         ]
         start, end = DEALT.get(street, (0, 0))
-        board = hand.board[start:end]
-        if not indexed and not tail and (street == Street.PREFLOP or len(board) < end - start):
+        dealt = hand.board[start:end]
+        if not indexed and not tail and (street == Street.PREFLOP or len(dealt) < end - start):
             continue
         events: list[Message] = []
         for i, action in indexed:
@@ -297,7 +300,14 @@ def hand_detail(
             )
         events += [decision(i) for i in sorted(tail)]
         streets.append(
-            {"name": STREET_NAMES[street], "board": board, "potBb": _bb(pot, bb), "events": events}
+            {
+                "name": STREET_NAMES[street],
+                # The board so far, this street's cards last.
+                "board": hand.board[:end],
+                "pot": format_money(pot, bb),
+                "potBb": _bb(pot, bb),
+                "events": events,
+            }
         )
         pot += sum(a.added for _, a in indexed)
     result = net(hand, pid) if pid is not None else None
@@ -313,6 +323,7 @@ def hand_detail(
             {
                 "name": s.player.name,
                 "position": labels.get(s.player.id),
+                "stack": format_money(s.stack, bb),
                 "stackBb": _bb(s.stack, bb),
                 "hero": s.player.id == pid,
             }
@@ -326,13 +337,13 @@ def hand_detail(
         "winners": [
             {
                 "name": names.get(p, p),
-                "amount": format_chips(amount, bb),
+                "amount": format_money(amount, bb),
                 "amountBb": _bb(amount, bb),
                 "hero": p == pid,
             }
             for p, amount in hand.collected.items()
             if amount
         ],
-        "result": None if result is None else format_chips(abs(result), bb),
+        "result": None if result is None else format_money(abs(result), bb),
         "resultBb": None if result is None else _bb(result, bb),
     }

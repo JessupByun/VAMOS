@@ -31,6 +31,7 @@ Everything else is maintained by Claude:
 - The side panel's Current hand has a "Replay an earlier hand" menu: pick one of this session's hands to open the hand replayer, street by street, with what VAMOS advised next to what you did (x closes it).
   Hands are kept on this Mac only (in `data/games/`, about 0.6 MB per session) and deleted 3 days after the game; the replayer makes no AI calls.
 - The side panel's switches: AI Advice (with it off no Claude call is made; the preflop rules and chart still answer), VAMOS! HUD (the card on the table) and Per-Player Stats (the badges under each seat).
+- Amounts show in dollars and big blinds, e.g. `RAISE TO $0.60 (3bb)`.
 - Claude sees opponents only under pseudonyms (Player A, Player B, ...); no real name or nickname is sent.
 
 ## Setup (once)

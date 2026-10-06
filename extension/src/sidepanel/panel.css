@@ -910,7 +910,9 @@ details.file .body {
   margin: 0;
 }
 
+/* As wide as the hand shown, not the longest one in the menu. */
 .history-pick {
+  field-sizing: content;
   min-width: 0;
   max-width: 62%;
   font-size: 11.5px;
@@ -942,8 +944,28 @@ details.file .body {
 .street-head {
   display: flex;
   gap: 8px;
-  align-items: baseline;
-  margin-bottom: 3px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+/* The board so far on each street, smaller than the hand's own cards. */
+.street-head .board {
+  display: flex;
+  gap: 3px;
+}
+
+.street-head .pcard {
+  width: 21px;
+  height: 29px;
+  border-radius: 4px;
+}
+
+.street-head .pcard .rank {
+  font-size: 10.5px;
+}
+
+.street-head .pcard .suit {
+  font-size: 11px;
 }
 
 .street-head .street {
@@ -951,10 +973,6 @@ details.file .body {
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-}
-
-.street-head .dealt {
-  font-weight: 700;
 }
 
 .events {

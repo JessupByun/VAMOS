@@ -134,6 +134,8 @@ export interface HandInfo {
   ended: boolean;
   /** Won or lost, in big blinds, once the hand is over. */
   resultBb: number | null;
+  /** The same without its sign, in dollars and big blinds: "$0.60 (3bb)". */
+  result: string | null;
 }
 
 /** One of this session's finished hands, in the side panel's "Replay an earlier hand" menu. */
@@ -143,6 +145,8 @@ export interface HistoryEntry {
   heroCards: string[];
   position: string | null;
   resultBb: number;
+  /** Won or lost without its sign: "$0.60 (3bb)". */
+  result: string;
   folded: boolean;
   /** Decisions VAMOS answered in the hand. */
   decisions: number;
@@ -162,7 +166,7 @@ export interface ReplayAction {
   hero: boolean;
   /** fold, check, call, bet, raise, allin, or post (blinds and antes), for its color. */
   verb: string;
-  /** e.g. "raises to 3bb", "calls 2.5bb (all in)". */
+  /** e.g. "raises to $0.60 (3bb)", "calls $0.40 (2bb) (all in)": a call says what it added. */
   text: string;
 }
 
@@ -176,9 +180,10 @@ export interface ReplayDecision {
 
 export interface ReplayStreet {
   name: string;
-  /** The cards dealt on this street. */
+  /** The board so far, this street's cards last. */
   board: string[];
-  /** In the middle when the street began. */
+  /** In the middle when the street began: "$0.40 (2bb)", and in big blinds. */
+  pot: string;
   potBb: number;
   events: (ReplayAction | ReplayDecision)[];
 }
@@ -195,11 +200,12 @@ export interface HandDetail {
   heroCards: string[];
   board: string[];
   secondBoard: string[];
-  players: { name: string; position: string | null; stackBb: number; hero: boolean }[];
+  players: { name: string; position: string | null; stack: string; stackBb: number; hero: boolean }[];
   streets: ReplayStreet[];
   shows: { name: string; cards: string[]; hero: boolean }[];
+  /** amount: what each collected, "$0.40 (2bb)". */
   winners: { name: string; amount: string; amountBb: number; hero: boolean }[];
-  /** The hero's win or loss, in chips without a sign, and in big blinds with one. */
+  /** The hero's win or loss without a sign, "$0.60 (3bb)", and in big blinds with one. */
   result: string | null;
   resultBb: number | null;
 }
@@ -235,9 +241,9 @@ export interface HeroTurn {
 export interface SpotFacts {
   node: string;
   position: string | null;
-  /** In big blinds, e.g. "8bb". */
+  /** In dollars and big blinds, e.g. "$1.60 (8bb)". */
   pot: string | null;
-  /** Chips and big blinds, e.g. "0.40 (2bb)"; null when nothing is owed. */
+  /** In dollars and big blinds, e.g. "$0.40 (2bb)"; null when nothing is owed. */
   toCall: string | null;
   /** Equity needed to call, in percent. */
   need: number | null;
@@ -268,7 +274,7 @@ export interface ClaudeAnswer {
 
 export interface ClaudeAdvice {
   source: "Claude";
-  /** e.g. "BET 1.20 (6bb)"; null until Claude answers. */
+  /** e.g. "BET $1.20 (6bb)"; null until Claude answers. */
   action: string | null;
   /** Every option Claude gave with its frequency, most frequent first. */
   mix: string[] | null;
@@ -302,9 +308,9 @@ export function isClaude(advice: SpotFacts["advice"]): advice is ClaudeAdvice {
 export interface PreflopAdvice {
   /** "Chart" (heads-up push/fold) or "Rule" (a clear fold, check or raise). */
   source: string;
-  /** e.g. "RAISE TO 0.60 (3bb)", drawn from the mix. */
+  /** e.g. "RAISE TO $0.60 (3bb)", drawn from the mix. */
   action: string | null;
-  /** Every option with its frequency, most frequent first, e.g. ["raise 3bb 60%", "call 40%"]. */
+  /** Every option with its frequency, most frequent first, e.g. ["raise $0.60 (3bb) 60%", "call 40%"]. */
   mix: string[] | null;
   /** Which entry of mix was drawn, and its frequency in percent. */
   pick: number | null;

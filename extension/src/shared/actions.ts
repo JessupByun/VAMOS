@@ -1,4 +1,4 @@
-/** What kind of move an action reads as, e.g. "RAISE TO 0.60 (3bb)" or "call 40%", for its color. */
+/** What kind of move an action reads as, e.g. "RAISE TO $0.60 (3bb)" or "call 40%", for its color. */
 export type ActionKind = "fold" | "check" | "call" | "bet" | "raise" | "allin";
 
 export function actionKind(text: string | null | undefined): ActionKind | null {

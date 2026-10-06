@@ -185,7 +185,7 @@ function useWorkerState() {
 
 const send = (message: PanelToWorker) => port?.postMessage(message);
 
-/** "BET 0.20 (1bb)": the move large in its action's color, its size in big blinds quieter. */
+/** "BET $0.20 (1bb)": the move and its dollars large in its action's color, its size in big blinds quieter. */
 function Pick({ text }: { text: string }) {
   const split = text.match(/^(.*?)( \([^)]*\))$/);
   return (
@@ -312,16 +312,7 @@ function Cards({ cards, count }: { cards: string[]; count: number }) {
 }
 
 function HandHeader({ info }: { info: HandInfo }) {
-  const result =
-    info.resultBb === null
-      ? info.folded
-        ? "folded"
-        : null
-      : info.resultBb > 0
-        ? `won ${info.resultBb}bb`
-        : info.resultBb < 0
-          ? `lost ${-info.resultBb}bb`
-          : "even";
+  const result = info.resultBb === null ? (info.folded ? "folded" : null) : resultText(info.resultBb, info.result);
   const tone = info.resultBb === null ? "" : info.resultBb > 0 ? "won" : info.resultBb < 0 ? "lost" : "";
   return (
     <div class="hand-head">
@@ -371,16 +362,20 @@ function CurrentHand({ hand }: { hand: Hand }) {
 
 const cardText = (cards: string[]) => cards.map((c) => `${c[0] === "T" ? "10" : c[0]}${SUITS[c[1] ?? ""] ?? ""}`).join(" ");
 
-function resultText(resultBb: number | null): string | null {
+/** "won $0.60 (3bb)": `result` is the amount without its sign, `resultBb` gives the sign. */
+function resultText(resultBb: number | null, result: string | null): string | null {
   if (resultBb === null) return null;
-  if (resultBb > 0) return `won ${resultBb}bb`;
-  if (resultBb < 0) return `lost ${-resultBb}bb`;
+  if (resultBb > 0) return `won ${result ?? `${resultBb}bb`}`;
+  if (resultBb < 0) return `lost ${result ?? `${-resultBb}bb`}`;
   return "even";
 }
 
 function historyLabel(entry: HistoryEntry): string {
   const cards = entry.heroCards.length ? cardText(entry.heroCards) : "no cards";
-  const result = entry.folded && entry.resultBb <= 0 ? `folded${entry.resultBb < 0 ? ` (${entry.resultBb}bb)` : ""}` : resultText(entry.resultBb);
+  const result =
+    entry.folded && entry.resultBb <= 0
+      ? `folded${entry.resultBb < 0 ? `, lost ${entry.result}` : ""}`
+      : resultText(entry.resultBb, entry.result);
   return [`#${entry.number}`, cards, entry.position, result].filter(Boolean).join(" · ");
 }
 
@@ -466,7 +461,7 @@ function HandReplay({ gameId, handKey }: { gameId: string; handKey: string }) {
     pickedHand.delete(gameId);
     notifyAll();
   };
-  const result = detail ? resultText(detail.resultBb) : null;
+  const result = detail ? resultText(detail.resultBb, detail.result) : null;
   const tone = detail?.resultBb ? (detail.resultBb > 0 ? "won" : "lost") : "";
   return (
     <section class="card replay" aria-label="Hand replayer">
@@ -500,13 +495,12 @@ function HandReplay({ gameId, handKey }: { gameId: string; handKey: string }) {
             </div>
             <p class="hand-line">
               <span class="muted">
-                {detail.players.map((p) => `${p.hero ? "You" : p.name} ${p.position ?? ""} ${p.stackBb}bb`).join(" · ")}
+                {detail.players.map((p) => `${p.hero ? "You" : p.name} ${p.position ?? ""} ${p.stack}`).join(" · ")}
               </span>
               {result && (
                 <span class={`result ${tone}`}>
                   {" "}
                   · {result}
-                  {detail.result && detail.resultBb ? ` (${detail.resultBb > 0 ? "+" : "-"}${detail.result})` : ""}
                 </span>
               )}
             </p>
@@ -516,11 +510,17 @@ function HandReplay({ gameId, handKey }: { gameId: string; handKey: string }) {
           )}
           {detail.streets.map((street) => (
             <div key={street.name} class="street-block">
-              <p class="street-head">
+              <div class="street-head">
                 <span class="street">{street.name}</span>
-                {street.board.length > 0 && <span class="dealt">{cardText(street.board)}</span>}
-                {street.potBb > 0 && <span class="muted">pot {street.potBb}bb</span>}
-              </p>
+                {street.board.length > 0 && (
+                  <span class="board">
+                    {street.board.map((c) => (
+                      <Card key={c} card={c} />
+                    ))}
+                  </span>
+                )}
+                {street.potBb > 0 && <span class="muted">pot {street.pot}</span>}
+              </div>
               <ul class="events">
                 {street.events.map((event, i) =>
                   event.kind === "action" ? (
@@ -538,7 +538,7 @@ function HandReplay({ gameId, handKey }: { gameId: string; handKey: string }) {
             <p class="replay-end muted small">
               {detail.shows.map((s) => `${s.hero ? "You" : s.name} showed ${cardText(s.cards)}`).join(" · ")}
               {detail.shows.length > 0 && detail.winners.length > 0 ? " · " : ""}
-              {detail.winners.map((w) => `${w.hero ? "You" : w.name} collected ${w.amount} (${w.amountBb}bb)`).join(" · ")}
+              {detail.winners.map((w) => `${w.hero ? "You" : w.name} collected ${w.amount}`).join(" · ")}
             </p>
           )}
         </>

@@ -32,7 +32,7 @@ from vamos.brain.pseudonyms import HERO, LeakError, Pseudonyms
 from vamos.brain.spot import betting, claude_facts, legal
 from vamos.config import DATA_DIR, PROFILES_DIR, VERSION
 from vamos.engine.advice import preflop_advice
-from vamos.engine.facts import TableView, current_spot, facts
+from vamos.engine.facts import TableView, current_spot, facts, format_money
 from vamos.engine.madehand import describe
 from vamos.engine.state import Decision, positions
 from vamos.history import hand_detail, hand_list, net
@@ -515,8 +515,9 @@ class Backend:
             "madeHand": describe(hand.hero_cards, hand.board) if hand.hero_cards else None,
             "folded": hero in hand.folded(),
             "ended": hand.ended,
-            # Won or lost, in big blinds, once the hand is over.
+            # Won or lost once the hand is over: in big blinds, and as "$0.60 (3bb)" unsigned.
             "resultBb": round(net(hand, hero) / bb, 2) if hand.ended else None,
+            "result": format_money(abs(net(hand, hero)), bb) if hand.ended else None,
         }
         if self._hand_sent.get(game_id) == summary:
             return []

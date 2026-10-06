@@ -43,8 +43,8 @@ def current_spot(log: HandLog, view: TableView) -> Decision | None:
 
 
 def format_chips(cents: Cents, big_blind: Cents) -> str:
-    """An amount the way the table shows it: with cents only when the blinds use them."""
-    if big_blind % 100:
+    """An amount the way the table shows it: with cents when the blinds or the amount use them."""
+    if big_blind % 100 or cents % 100:
         return f"{cents / 100:.2f}"
     return f"{cents // 100:,}"
 
@@ -53,17 +53,22 @@ def format_bb(cents: Cents, big_blind: Cents) -> str:
     return f"{cents / big_blind:.2f}".rstrip("0").rstrip(".") + "bb"
 
 
+def format_money(cents: Cents, big_blind: Cents) -> str:
+    """An amount in dollars and big blinds, e.g. "$0.60 (3bb)": PokerNow chips are dollars here."""
+    return f"${format_chips(cents, big_blind)} ({format_bb(cents, big_blind)})"
+
+
 def facts(spot: Decision) -> dict:
     bb = spot.big_blind
     to_call = None
     need = None
     if spot.to_call and bb:
-        to_call = f"{format_chips(spot.to_call, bb)} ({format_bb(spot.to_call, bb)})"
+        to_call = format_money(spot.to_call, bb)
         need = round(100 * spot.to_call / spot.winnable)
     return {
         "node": spot.node,
         "position": spot.position,
-        "pot": format_bb(spot.pot, bb) if bb else None,
+        "pot": format_money(spot.pot, bb) if bb else None,
         "toCall": to_call,
         "need": need,
         "madeHand": describe(spot.hero_cards, spot.board),

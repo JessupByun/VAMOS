@@ -254,8 +254,8 @@ def test_turn_facts_wait_for_the_log_then_follow_it(backend):
     found = reply["facts"]
     assert (found["position"], found["pot"], found["toCall"], found["need"]) == (
         "BTN",
-        "1.5bb",
-        "10 (0.5bb)",
+        "$30 (1.5bb)",
+        "$10 (0.5bb)",
         25,
     )
     assert found["madeHand"] == "AA"
@@ -309,7 +309,7 @@ def test_a_broken_preflop_rule_hands_the_spot_to_claude_and_keeps_the_facts(tmp_
     backend.handle(page(*HERO_HAND))
     [reply] = backend.handle(TURN)
     found = reply["facts"]
-    assert (found["pot"], found["toCall"]) == ("1.5bb", "10 (0.5bb)")
+    assert (found["pot"], found["toCall"]) == ("$30 (1.5bb)", "$10 (0.5bb)")
     assert found["advice"]["source"] == "Claude"
     assert [r.preset.name for r in fake.requests] == ["standard"]
 
@@ -401,14 +401,14 @@ def test_claude_answers_postflop_under_pseudonyms(tmp_path):
     advice = update["facts"]["advice"]
     assert (advice["source"], advice["action"], advice["why"]) == (
         "Claude",
-        "BET 60 (3bb)",
+        "BET $60 (3bb)",
         "alex calls too wide.",
     )
     assert backend.ledger.totals(datetime.now())["allTime"] > 0
 
     # Later log pages keep the answer and never ask again.
     again = backend.handle({**FLOP_TURN, "key": "k3"})[0]
-    assert again["facts"]["advice"]["action"] == "BET 60 (3bb)"
+    assert again["facts"]["advice"]["action"] == "BET $60 (3bb)"
     assert len(fake.requests) == 1
 
     # Asking deeper adds one call with the deep preset for the same decision.
@@ -857,8 +857,8 @@ def test_earlier_hands_replay_with_the_advice_given_even_after_a_restart(tmp_pat
     expected = [
         "posts the small blind",
         "posts the big blind",
-        "RAISE TO 50 (2.5bb)",
-        "raises to 2.5bb",
+        "RAISE TO $50 (2.5bb)",
+        "raises to $50 (2.5bb)",
         "folds",
     ]
     assert replay(backend) == expected
@@ -918,7 +918,7 @@ def test_hands_played_before_the_record_replay_claudes_answers_from_the_advice_l
     [detail] = backend.handle({"type": "hand_detail_request", "gameId": GAME, "key": "h2"})
     [decision] = [e for e in detail["streets"][0]["events"] if e["kind"] == "decision"]
     [answer] = decision["advice"]["answers"]
-    assert (answer["action"], answer["why"]) == ("RAISE TO 50 (2.5bb)", "alex folds too often.")
+    assert (answer["action"], answer["why"]) == ("RAISE TO $50 (2.5bb)", "alex folds too often.")
     assert detail["partial"] is True
     # Replaying reads local files only: Claude is never asked and nothing is billed.
     assert fake.requests == [] and not (tmp_path / "data" / "costs.jsonl").exists()

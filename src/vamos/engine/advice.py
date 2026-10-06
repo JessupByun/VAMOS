@@ -10,7 +10,7 @@ full-depth tables were retired on 2026-10-05 (docs/preflop.md).
 from vamos.brain.answer import snap
 from vamos.brain.spot import legal
 from vamos.engine import preflop_rules
-from vamos.engine.facts import format_bb, format_chips
+from vamos.engine.facts import format_money
 from vamos.engine.state import Decision
 from vamos.log.hands import Hand, Street
 from vamos.preflop import lookup, tables
@@ -79,16 +79,16 @@ def _push_fold(
         if action in ("fold", "check"):
             return action.upper()
         if action == "call":
-            return f"CALL {format_chips(spot.to_call, bb)} ({format_bb(spot.to_call, bb)})"
+            return f"CALL {format_money(spot.to_call, bb)}"
         to = raise_to(action)
         verb = "ALL IN" if to >= all_in else "RAISE TO"
-        return f"{verb} {format_chips(to, bb)} ({format_bb(to, bb)})"
+        return f"{verb} {format_money(to, bb)}"
 
     def short(action: str) -> str:
         if action in ("fold", "check", "call"):
             return action
         to = raise_to(action)
-        return "all in" if to >= all_in else f"raise {format_bb(to, bb)}"
+        return "all in" if to >= all_in else f"raise {format_money(to, bb)}"
 
     # Options that read the same on the card (two raises that both reach the stack) are one
     # option; the drawn one stays even if tiny, so the card always shows what was drawn.

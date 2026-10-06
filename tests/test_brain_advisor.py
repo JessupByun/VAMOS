@@ -5,7 +5,7 @@ from datetime import datetime
 
 import pytest
 
-from vamos.brain.advisor import Advisor, Job
+from vamos.brain.advisor import Advisor, Job, with_dollars
 from vamos.brain.answer import Spot
 from vamos.brain.costs import Ledger
 from vamos.brain.provider import PRESETS, CallFailed, FakeProvider, Reply, Request
@@ -68,8 +68,8 @@ def test_an_answer_reaches_the_card_with_real_names(rig):
     assert r.updated() == "g"
     view = r.advisor.view("g", "h1:1:8")
     assert view["source"] == "Claude" and view["state"] == "done"
-    assert view["action"] == "BET 0.90 (4.5bb)"
-    assert (view["mix"], view["pick"], view["pickPct"]) == (["bet 4.5bb 100%"], 0, 100)
+    assert view["action"] == "BET $0.90 (4.5bb)"
+    assert (view["mix"], view["pick"], view["pickPct"]) == (["bet $0.90 (4.5bb) 100%"], 0, 100)
     assert (view["why"], view["plan"]) == ("alex calls too much", "Bet again on blanks.")
     assert view["model"] == "Claude Opus 5.5 · low"
     assert r.ledger.totals(datetime(2026, 10, 2, 14))["session"] > 0
@@ -80,7 +80,7 @@ def test_a_mixed_answer_shows_its_mix(rig):
     r = rig([answer(("bet", 33, 0.6), ("check", 0, 0.4))])
     r.advisor.start("g", r.job(), r.clock.t + 20)
     r.updated()
-    assert r.advisor.view("g", "h1:1:8")["mix"] == ["bet 3bb 60%", "check 40%"]
+    assert r.advisor.view("g", "h1:1:8")["mix"] == ["bet $0.60 (3bb) 60%", "check 40%"]
 
 
 def test_one_call_per_node_and_preset(rig):
@@ -137,7 +137,7 @@ def test_a_passing_failure_is_tried_again_while_there_is_time(rig):
     r = rig([CallFailed("Claude unavailable (529)"), BET])
     r.advisor.start("g", r.job(), r.clock.t + 20)
     r.updated()
-    assert r.advisor.view("g", "h1:1:8")["action"] == "BET 0.90 (4.5bb)"
+    assert r.advisor.view("g", "h1:1:8")["action"] == "BET $0.90 (4.5bb)"
     assert len(r.provider.requests) == 2
 
 
@@ -162,7 +162,7 @@ def test_asking_opus_keeps_the_first_answer_up_meanwhile(rig):
     r.advisor.start("g", r.job(preset="deep"), r.clock.t + 20)
     view = r.advisor.view("g", "h1:1:8")
     assert (view["action"], view["model"], view["asked"], view["state"]) == (
-        "BET 0.90 (4.5bb)",
+        "BET $0.90 (4.5bb)",
         "Claude Opus 5.5 · low",
         "Claude Opus 5.5 · medium",
         "thinking",
@@ -177,7 +177,7 @@ def test_asking_opus_keeps_the_first_answer_up_meanwhile(rig):
     )
     # The panel keeps both: the first answer, then the deeper one under it.
     assert [(a["preset"], a["model"], a["action"]) for a in view["answers"]] == [
-        ("standard", "Claude Opus 5.5 · low", "BET 0.90 (4.5bb)"),
+        ("standard", "Claude Opus 5.5 · low", "BET $0.90 (4.5bb)"),
         ("deep", "Claude Opus 5.5 · medium", "CHECK"),
     ]
     assert view["answers"][1]["why"] == "alex traps"
@@ -213,3 +213,13 @@ def test_answers_and_failures_are_logged_under_pseudonyms(rig):
     assert (first["model"], first["preset"]) == ("claude-opus-5-5", "standard")
     assert "Player A calls too much" in first["answer"]  # as Claude wrote it
     assert (second["state"], second["reason"], second["answer"]) == ("failed", "rate limited", None)
+
+
+def test_sizes_in_claudes_text_also_show_in_dollars():
+    assert with_dollars("a 1bb bet into 28.5bb, then jam 3 bb", 20) == (
+        "a $0.20 (1bb) bet into $5.70 (28.5bb), then jam $0.60 (3bb)"
+    )
+    # Already shown as "(3bb)", a range, a position and a 3-bet stay as written.
+    kept = "call $0.60 (3bb), open 2-3bb, the BB 3-bets"
+    assert with_dollars(kept, 20) == kept
+    assert with_dollars("a 0.25bb chip", 20) == "a $0.05 (0.25bb) chip"

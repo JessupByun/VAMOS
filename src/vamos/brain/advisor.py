@@ -19,18 +19,20 @@ through a changed prompt (scripts/replay_advice.py; it cannot be rebuilt afterwa
 import hashlib
 import json
 import logging
+import re
 import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 from typing import Any
 
 from vamos.brain.answer import Answer, BadAnswer, Choice, Spot, settle
 from vamos.brain.costs import Ledger, price
 from vamos.brain.provider import CallFailed, Provider, Request
-from vamos.engine.facts import format_bb, format_chips
+from vamos.engine.facts import format_chips, format_money
 
 log = logging.getLogger("vamos.brain")
 
@@ -80,15 +82,15 @@ def model_label(model: str, effort: str | None) -> str:
 
 
 def describe(choice: Choice, spot: Spot) -> str:
-    """The action as the card shows it, e.g. "BET 1.20 (6bb)"."""
+    """The action as the card shows it, e.g. "BET $1.20 (6bb)"."""
     bb = spot.big_blind
     if choice.action in ("fold", "check"):
         return choice.action.upper()
     if choice.action == "call":
         amount = min(spot.to_call, spot.behind)
-        return f"CALL {format_chips(amount, bb)} ({format_bb(amount, bb)})"
+        return f"CALL {format_money(amount, bb)}"
     verb = {"bet": "BET", "raise": "RAISE TO", "allin": "ALL IN"}[choice.action]
-    return f"{verb} {format_chips(choice.to, bb)} ({format_bb(choice.to, bb)})"
+    return f"{verb} {format_money(choice.to, bb)}"
 
 
 def _answer_fields(call: "Call | None") -> dict[str, Any]:
@@ -108,14 +110,35 @@ def answer_fields(answer: Answer, spot: Spot) -> dict[str, Any]:
         "pickPct": round(100 * answer.chosen.freq),
         # Drawn from a less frequent option than the top one.
         "deviation": answer.chosen.freq < answer.mix[0].freq - 1e-9,
-        "why": answer.reason,
-        "plan": answer.plan or None,
+        "why": with_dollars(answer.reason, spot.big_blind),
+        "plan": with_dollars(answer.plan, spot.big_blind) or None,
     }
+
+
+# A size in Claude's text, "28.5bb": not one already shown as "(3bb)", nor the end of a
+# range ("2-3bb"), which reads worse with a dollar figure in the middle.
+_BB_SIZE = re.compile(r"(?<![\w.$(\-\u2013])(\d+(?:\.\d+)?) ?bb\b")
+
+
+def with_dollars(text: str, big_blind: int) -> str:
+    """
+    Claude's text with each size in big blinds also in dollars, as the card shows amounts:
+    "a 1bb bet into 28.5bb" reads "a $0.20 (1bb) bet into $5.70 (28.5bb)". Claude is sent
+    big blinds only, so it writes them; only what is shown changes.
+    """
+    if not text or not big_blind:
+        return text
+
+    def money(m: re.Match[str]) -> str:
+        cents = int((Decimal(m[1]) * big_blind).to_integral_value(ROUND_HALF_UP))
+        return f"${format_chips(cents, big_blind)} ({m[1]}bb)"
+
+    return _BB_SIZE.sub(money, text)
 
 
 def _short(choice: Choice, spot: Spot) -> str:
     if choice.action in ("bet", "raise"):
-        return f"{choice.action} {format_bb(choice.to, spot.big_blind)}"
+        return f"{choice.action} {format_money(choice.to, spot.big_blind)}"
     return "all in" if choice.action == "allin" else choice.action
 
 

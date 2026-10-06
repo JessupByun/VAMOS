@@ -27,7 +27,7 @@ straddle or dead money, Claude decides.
 
 from vamos.brain.answer import snap
 from vamos.cards import hand_class
-from vamos.engine.facts import format_bb, format_chips
+from vamos.engine.facts import format_money
 from vamos.engine.state import Decision, positions, seat_order
 from vamos.log.hands import Hand, Street
 
@@ -165,22 +165,18 @@ def rule(hand: Hand, spot: Decision, hero: str, legal: list[str]) -> dict | None
     if cls not in strong:
         return None
     all_in = hand.street_bets.get(hero, 0) + spot.behind
-    shove = _advice(f"ALL IN {format_chips(all_in, bb)} ({format_bb(all_in, bb)})", "all in")
+    shove = _advice(f"ALL IN {format_money(all_in, bb)}", "all in")
     if "raise" not in legal and "bet" not in legal:
         # Short of a full raise PokerNow offers only all in; with the raiser all in and
         # nobody left to raise, calling is the play.
         if "allin" in legal:
             return shove
         if "call" in legal:
-            return _advice(
-                f"CALL {format_chips(spot.to_call, bb)} ({format_bb(spot.to_call, bb)})", "call"
-            )
+            return _advice(f"CALL {format_money(spot.to_call, bb)}", "call")
         return None
     # Never below the smallest raise PokerNow accepts. A raise of much of what the others can
     # still match (the hero may be far deeper than all of them) is all in.
     to = max(snap(_raise_to(hand, hero, spot), bb), snap(hand.price + hand.min_raise, bb, up=True))
     if to >= _reach(hand, hero, spot) * ALL_IN_SHARE:
         return shove
-    return _advice(
-        f"RAISE TO {format_chips(to, bb)} ({format_bb(to, bb)})", f"raise {format_bb(to, bb)}"
-    )
+    return _advice(f"RAISE TO {format_money(to, bb)}", f"raise {format_money(to, bb)}")

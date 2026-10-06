@@ -62,6 +62,7 @@ After a backend change, the same reload restarts the backend (Chrome launches it
 
 ### Correctness
 - Amounts are parsed with `money.parse_chips` into integer cents; never use `float()` on PokerNow values. It returns `None` for non-amounts such as "All In"; handle `None` explicitly.
+- Every amount the user sees reads in dollars and big blinds, "$0.60 (3bb)" (`facts.format_money`; sizes in Claude's text get the same through `advisor.with_dollars`), and a call shows what it adds. Claude is sent big blinds only.
 - Cards are two-character strings ("As", "Th"). Convert log cards with `cards.parse_log_card`.
 - Log amounts are the player's street total, not the increment. Unrecognized lines become `unknown` events and are surfaced, never guessed; extend the grammar only from real examples.
 - The PokerNow game log is the authoritative action stream; the DOM is only for whose turn it is, legal actions, hero cards, seats and the countdown.

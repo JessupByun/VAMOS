@@ -131,7 +131,7 @@ function Source({ kind, label }: { kind: string; label: string }) {
   );
 }
 
-/** "BET 0.20 (1bb)": the move large, its size in big blinds a step quieter. */
+/** "BET $0.20 (1bb)": the move and its dollars large, its size in big blinds a step quieter. */
 function Action({ text, thinking = false }: { text: string; thinking?: boolean }) {
   if (thinking) {
     return (

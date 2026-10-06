@@ -69,7 +69,7 @@ def test_to_bb_sizes_a_raise_and_a_raise_with_no_bet_standing_is_a_bet():
     # The big blind's option: nothing owed, but going over the big blind is a raise.
     option = settle(rows(("bet", 3.5)), BB_OPTION, "n").chosen
     assert (option.action, option.to) == ("raise", 70)
-    assert describe(option, BB_OPTION) == "RAISE TO 0.70 (3.5bb)"
+    assert describe(option, BB_OPTION) == "RAISE TO $0.70 (3.5bb)"
     # More than the stack is all in.
     assert settle(rows(("raise", 500)), FACING, "n").chosen.action == "allin"
 

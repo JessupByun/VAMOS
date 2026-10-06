@@ -33,7 +33,7 @@ def test_facts_once_the_log_matches_the_table():
     assert spot is not None
     result = facts(spot)
     assert result["position"] == "BTN"
-    assert (result["pot"], result["toCall"], result["need"]) == ("8bb", "0.40 (2bb)", 20)
+    assert (result["pot"], result["toCall"], result["need"]) == ("$1.60 (8bb)", "$0.40 (2bb)", 20)
     assert result["madeHand"] == "top pair, top kicker"
     # Equity against random hands is not shown: it misleads more than it tells.
     assert "equity" not in result
@@ -97,7 +97,7 @@ def test_no_facts_for_an_empty_log_or_a_spectator():
 
 @pytest.mark.parametrize(
     ("cents", "big_blind", "expected"),
-    [(40, 20, "0.40"), (2000, 2000, "20"), (123400, 2000, "1,234")],
+    [(40, 20, "0.40"), (2000, 2000, "20"), (123400, 2000, "1,234"), (150, 200, "1.50")],
 )
 def test_chips_are_shown_the_way_the_table_shows_them(cents, big_blind, expected):
     assert format_chips(cents, big_blind) == expected

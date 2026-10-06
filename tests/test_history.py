@@ -60,6 +60,7 @@ def test_the_menu_lists_finished_hands_newest_first():
             "heroCards": ["7s", "2d"],
             "position": "BB",
             "resultBb": -1.0,
+            "result": "$20 (1bb)",
             "folded": True,
             "decisions": 0,
         },
@@ -69,6 +70,7 @@ def test_the_menu_lists_finished_hands_newest_first():
             "heroCards": ["As", "Ad"],
             "position": "BTN",
             "resultBb": 2.5,
+            "result": "$50 (2.5bb)",
             "folded": False,
             "decisions": 2,
         },
@@ -76,7 +78,7 @@ def test_the_menu_lists_finished_hands_newest_first():
 
 
 def test_a_hand_replays_street_by_street_with_advice_before_the_heros_action():
-    advice = {"source": "Rule", "action": "RAISE TO 50 (2.5bb)"}
+    advice = {"source": "Rule", "action": "RAISE TO $50 (2.5bb)"}
     decisions = {
         "h1:0:2": {"street": 0, "advice": advice, "facts": {"pot": "1.5bb"}},
         "h1:1:5": {"street": 1, "advice": None, "aiOff": True},
@@ -87,20 +89,25 @@ def test_a_hand_replays_street_by_street_with_advice_before_the_heros_action():
         "posts the small blind",
         "posts the big blind",
         "decision",
-        "raises to 2.5bb",
-        "calls 2.5bb",
+        "raises to $50 (2.5bb)",
+        "calls $30 (1.5bb)",  # what the big blind added
     ]
     assert preflop["events"][2]["advice"] == advice and preflop["events"][3]["hero"] is True
-    assert (flop["name"], flop["board"], flop["potBb"]) == ("Flop", ["Ks", "7d", "2c"], 5.0)
+    assert (flop["name"], flop["board"]) == ("Flop", ["Ks", "7d", "2c"])
+    assert (flop["pot"], flop["potBb"]) == ("$100 (5bb)", 5.0)
     assert [e.get("text") or e["kind"] for e in flop["events"]] == [
         "checks",
         "decision",
-        "bets 2.5bb",
+        "bets $50 (2.5bb)",
         "folds",
     ]
     assert flop["events"][1]["aiOff"] is True
-    assert (detail["result"], detail["resultBb"]) == ("50", 2.5)  # whole chips at 10/20
-    assert detail["winners"] == [{"name": "Hero", "amount": "100", "amountBb": 5.0, "hero": True}]
+    # Whole chips at 10/20.
+    assert (detail["result"], detail["resultBb"]) == ("$50 (2.5bb)", 2.5)
+    assert detail["winners"] == [
+        {"name": "Hero", "amount": "$100 (5bb)", "amountBb": 5.0, "hero": True}
+    ]
+    assert detail["players"][0]["stack"] == "$1,000 (50bb)"
 
 
 def test_a_decision_the_hero_never_acted_on_ends_its_street():
@@ -154,7 +161,7 @@ def test_hands_from_before_the_record_show_claudes_logged_answers_with_real_name
     advice = decision["advice"]
     assert (advice["source"], advice["action"], advice["state"]) == (
         "Claude",
-        "BET 50 (2.5bb)",
+        "BET $50 (2.5bb)",
         "failed",
     )
     first, ask = advice["answers"]
@@ -162,7 +169,7 @@ def test_hands_from_before_the_record_show_claudes_logged_answers_with_real_name
     assert first["why"] == "alex checks too much; your top pair is ahead."
     assert first["plan"] == "Fold if alex raises."
     assert (first["mix"], first["pick"], first["deviation"]) == (
-        ["bet 2.5bb 80%", "check 20%"],
+        ["bet $50 (2.5bb) 80%", "check 20%"],
         0,
         False,
     )
@@ -190,3 +197,29 @@ def test_what_the_card_recorded_wins_over_the_advice_log():
     detail = hand_detail(log_of(*WON), "h1", HERO, recorded, [logged("h1:1:5", "BB")])
     [decision] = [e for e in detail["streets"][1]["events"] if e["kind"] == "decision"]
     assert decision["advice"]["action"] == "CHECK" and detail["partial"] is False
+
+
+def test_each_street_shows_the_board_so_far():
+    turned = hand(
+        4,
+        H,
+        "Your hand is Q♠, Q♦",
+        f"{H} posts a small blind of 10",
+        f"{D} posts a big blind of 20",
+        f"{H} calls 20",
+        f"{D} checks",
+        "Flop:  [K♠, 7♦, 2♣]",
+        f"{D} checks",
+        f"{H} checks",
+        "Turn: K♠, 7♦, 2♣ [9♥]",
+        f"{D} bets 40",
+        f"{H} folds",
+        f"Uncalled bet of 40 returned to {D}",
+        f"{D} collected 40 from pot",
+    )
+    detail = hand_detail(log_of(*turned), "h4", HERO, {})
+    flop, turn = detail["streets"][1:]
+    assert flop["board"] == ["Ks", "7d", "2c"]
+    assert (turn["name"], turn["board"]) == ("Turn", ["Ks", "7d", "2c", "9h"])
+    # A call says what it added: the small blind completing puts in half a big blind.
+    assert detail["streets"][0]["events"][2]["text"] == "calls $10 (0.5bb)"
