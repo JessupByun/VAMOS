@@ -427,13 +427,16 @@ test("an earlier hand replays in the side panel with the advice VAMOS gave", asy
   // The closed menu says which hand is being replayed.
   await expect(picker.locator("option:checked")).toHaveText("Replaying #1 · A♠ A♦");
   await expect(replay.locator("h2")).toHaveText("Hand replayer · #1");
-  await expect(replay.locator(".advice-line .source")).toHaveText("Preflop rule");
-  await expect(replay.locator(".advice-line .pick")).toHaveText("RAISE TO $0.60 (3bb)");
+  // What VAMOS said is its own line, just before what you did.
+  await expect(replay.locator(".vamos .src")).toHaveText("Preflop rule");
+  await expect(replay.locator(".vamos .move")).toHaveText("RAISE TO $0.60 (3bb)");
   await expect(replay.locator(".act-line.hero .what")).toHaveText(["posts the small blind", "raises to $0.60 (3bb)"]);
   // Who was dealt in, with the hero's cards by "You"; the other two folded.
   await expect(replay.locator(".replay-players .seat.hero")).toContainText("You");
   await expect(replay.locator(".replay-players .seat.hero .pcard")).toHaveCount(2);
-  await expect(replay.locator(".replay-players .seat.folded .who")).toHaveText(["alex", "new guy"]);
+  await expect(replay.locator(".replay-players .seat.folded .who")).toHaveText([/^alex/, /^new guy/]);
+  // What each won or lost: you the blinds, the big blind its 1bb.
+  await expect(replay.locator(".replay-players .net")).toHaveText(["+$0.20 (1bb)", "-$0.20 (1bb)", "even"]);
   await replay.getByRole("button", { name: "Close the hand replayer" }).click();
   await expect(replay).toHaveCount(0);
   await expect(picker.locator("option:checked")).toHaveText("Replay an earlier hand (1)");
@@ -609,7 +612,7 @@ test("screenshots of the card and the side panel", async () => {
   await expect(picker).toBeVisible();
   await panel.locator(".section-head").first().screenshot({ path: `${dir}/7-replay-menu-closed.png` });
   await picker.selectOption({ index: 1 });
-  await expect(panel.locator("section.replay .advice-line .answer").first()).toBeVisible();
+  await expect(panel.locator("section.replay .vamos").first()).toBeVisible();
   await panel.locator(".section-head").first().screenshot({ path: `${dir}/7-replay-menu-picked.png` });
   await panel.screenshot({ path: `${dir}/7-replay-light.png`, fullPage: true });
   await panel.emulateMedia({ colorScheme: "dark" });

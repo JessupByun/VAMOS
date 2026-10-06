@@ -118,7 +118,7 @@ def _text(action: Action, bb: int) -> str:
         text = f"raises to {format_money(action.to or 0, bb)}"
     else:
         text = action.kind.replace("_", " ")
-    return f"{text} (all in)" if action.all_in else text
+    return f"{text}, all in" if action.all_in else text
 
 
 def _index(node: object, key: str) -> int | None:
@@ -337,20 +337,13 @@ def hand_detail(
                     hand.hero_cards if s.player.id == pid else hand.shows.get(s.player.id, ())
                 ),
                 "folded": s.player.id in folded,
+                # What the player won or lost: unsigned "$0.60 (3bb)", and signed in big blinds.
+                "net": format_money(abs(net(hand, s.player.id)), bb),
+                "netBb": _bb(net(hand, s.player.id), bb),
             }
             for s in sorted(hand.seats, key=lambda s: (s.player.id != pid, s.player.id in folded))
         ],
         "streets": streets,
-        "winners": [
-            {
-                "name": names.get(p, p),
-                "amount": format_money(amount, bb),
-                "amountBb": _bb(amount, bb),
-                "hero": p == pid,
-            }
-            for p, amount in hand.collected.items()
-            if amount
-        ],
         "result": None if result is None else format_money(abs(result), bb),
         "resultBb": None if result is None else _bb(result, bb),
     }

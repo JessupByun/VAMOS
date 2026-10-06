@@ -1,4 +1,4 @@
-import { render } from "preact";
+import { Fragment, render } from "preact";
 import { useEffect, useState } from "preact/hooks";
 
 import { actionClass } from "../shared/actions";
@@ -411,46 +411,103 @@ function HistoryPicker({ gameId }: { gameId: string }) {
   );
 }
 
+type Verdict = {
+  action: string | null;
+  mix: string[] | null;
+  pick: number | null;
+  pickPct: number | null;
+  deviation: boolean;
+  why?: string | null;
+  plan?: string | null;
+};
+
+/** One thing VAMOS said at a decision, as its own line just before what you did. */
+function VamosLine({ verdict, none, source }: { verdict?: Verdict; none?: string; source: string }) {
+  const split = verdict?.action?.match(/^(.*?)( \([^)]*\))$/);
+  return (
+    <div class="vamos">
+      <p class="vamos-head">
+        <span class="brand">{BRAND}</span>
+        {verdict?.action ? (
+          <span class={`move ${actionClass(verdict.action)}`}>
+            {split ? split[1] : verdict.action}
+            {split && <span class="bb">{split[2]}</span>}
+          </span>
+        ) : (
+          <span class="none">{none}</span>
+        )}
+        {source && <span class="src">{source}</span>}
+      </p>
+      {verdict && (verdict.mix?.length ?? 0) > 1 && <Options answer={verdict} />}
+      {verdict?.why && <p class="vamos-text">{verdict.why}</p>}
+      {verdict?.plan && (
+        <p class="vamos-text">
+          <span class="label">Next:</span> {verdict.plan}
+        </p>
+      )}
+    </div>
+  );
+}
+
 /** What VAMOS showed at one of the hero's decisions in an earlier hand. */
 function ReplayAdvice({ decision }: { decision: ReplayDecision }) {
   const { advice } = decision;
   if (advice && isClaude(advice)) {
+    const last = advice.answers.length - 1;
     return (
       <>
         {advice.answers.map((answer, i) => (
-          <AnswerView key={i} answer={answer} deeper={i > 0} live={false} later={i < advice.answers.length - 1} />
+          <VamosLine
+            key={i}
+            verdict={answer.action ? answer : undefined}
+            none={waiting(answer, false, i < last).replace(/\.$/, "")}
+            source={`${answer.model}${i > 0 ? ", asked deeper" : ""}`}
+          />
         ))}
       </>
     );
   }
   const preflop = advice as PreflopAdvice | null;
   if (preflop?.action) {
-    return (
-      <div class="answer">
-        <div class="source">
-          <span class="dot" />
-          {preflop.source === "Rule" ? "Preflop rule" : "Preflop chart"}
-        </div>
-        <Pick text={preflop.action} />
-        <Options answer={preflop} />
-      </div>
-    );
+    return <VamosLine verdict={preflop} source={preflop.source === "Rule" ? "Preflop rule" : "Preflop chart"} />;
   }
-  return (
-    <div class="answer">
-      <p class="muted waiting">{decision.aiOff ? "AI off: stats only" : `${BRAND} was still reading the hand`}</p>
-    </div>
-  );
+  return <VamosLine none={decision.aiOff ? "AI off: stats only" : "still reading the hand"} source="" />;
 }
 
 function ReplayLine({ event }: { event: ReplayAction }) {
   const colored = event.hero && event.verb !== "post";
   return (
-    <li class={`act-line${event.hero ? " hero" : ""}${event.verb === "post" ? " post" : ""}`}>
+    <div class={`act-line${event.hero ? " hero" : ""}${event.verb === "post" ? " post" : ""}`}>
       <span class="who">{event.hero ? "You" : event.player}</span>
-      {event.position && <span class="pos">{event.position}</span>}
+      <span class="pos">{event.position}</span>
       <span class={colored ? `what act-${event.verb}` : "what"}>{event.text}</span>
-    </li>
+    </div>
+  );
+}
+
+/** Who was dealt in: their cards, their stack, and what each won or lost. */
+function ReplayPlayers({ players }: { players: HandDetail["players"] }) {
+  return (
+    <div class="replay-players">
+      {players.map((p) => (
+        <div key={`${p.name}-${p.position}`} class={`seat${p.hero ? " hero" : ""}${p.folded ? " folded" : ""}`}>
+          <span class="who" title={p.name}>
+            {p.hero ? "You" : p.name}
+            {p.position && <span class="pos">{p.position}</span>}
+          </span>
+          <span class="hole">
+            {p.cards.map((c) => (
+              <Card key={c} card={c} />
+            ))}
+            {p.folded && <span class="pos">folded</span>}
+          </span>
+          <span class="stack">{p.stack}</span>
+          <span class={`net${p.netBb > 0 ? " won" : p.netBb < 0 ? " lost" : ""}`}>
+            {p.netBb > 0 ? `+${p.net}` : p.netBb < 0 ? `-${p.net}` : "even"}
+          </span>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -461,8 +518,6 @@ function HandReplay({ gameId, handKey }: { gameId: string; handKey: string }) {
     pickedHand.delete(gameId);
     notifyAll();
   };
-  const result = detail ? resultText(detail.resultBb, detail.result) : null;
-  const tone = detail?.resultBb ? (detail.resultBb > 0 ? "won" : "lost") : "";
   return (
     <section class="card replay" aria-label="Hand replayer">
       <div class="section-head">
@@ -475,8 +530,8 @@ function HandReplay({ gameId, handKey }: { gameId: string; handKey: string }) {
         <p class="muted small">Loading...</p>
       ) : (
         <>
-          <div class="hand-head">
-            {detail.board.length > 0 && (
+          {detail.board.length > 0 && (
+            <div class="hand-head">
               <div class="cards">
                 <span class="board" aria-label="Board">
                   {detail.board.map((c) => (
@@ -491,62 +546,36 @@ function HandReplay({ gameId, handKey }: { gameId: string; handKey: string }) {
                   </span>
                 )}
               </div>
-            )}
-            {/* Who was dealt in, each with the cards known next to the name. */}
-            <p class="replay-players">
-              {detail.players.map((p) => (
-                <span key={p.name} class={`seat${p.hero ? " hero" : ""}${p.folded ? " folded" : ""}`}>
-                  <span class="who">{p.hero ? "You" : p.name}</span>
-                  {p.position && <span class="pos">{p.position}</span>}
-                  {/* A folded opponent's stack matters little: kept short, so several share a line. */}
-                  {(p.hero || !p.folded) && <span class="stack">{p.stack}</span>}
-                  {p.cards.length > 0 && (
-                    <span class="hole">
-                      {p.cards.map((c) => (
+            </div>
+          )}
+          <ReplayPlayers players={detail.players} />
+          {detail.partial && (
+            <p class="muted small">Only Claude's answers were saved for this hand, not the preflop rule and chart answers.</p>
+          )}
+          <div class="timeline">
+            {detail.streets.map((street) => (
+              <Fragment key={street.name}>
+                <div class="street-head">
+                  <span class="street">{street.name}</span>
+                  {street.board.length > 0 && (
+                    <span class="board">
+                      {street.board.map((c) => (
                         <Card key={c} card={c} />
                       ))}
                     </span>
                   )}
-                  {p.folded && <span class="pos">folded</span>}
-                </span>
-              ))}
-              {result && <span class={`result ${tone}`}>{result}</span>}
-            </p>
-          </div>
-          {detail.partial && (
-            <p class="muted small">Only Claude's answers were saved for this hand, not the preflop rule and chart answers.</p>
-          )}
-          {detail.streets.map((street) => (
-            <div key={street.name} class="street-block">
-              <div class="street-head">
-                <span class="street">{street.name}</span>
-                {street.board.length > 0 && (
-                  <span class="board">
-                    {street.board.map((c) => (
-                      <Card key={c} card={c} />
-                    ))}
-                  </span>
-                )}
-                {street.potBb > 0 && <span class="muted">pot {street.pot}</span>}
-              </div>
-              <ul class="events">
+                  {street.potBb > 0 && <span class="pot">pot {street.pot}</span>}
+                </div>
                 {street.events.map((event, i) =>
                   event.kind === "action" ? (
                     <ReplayLine key={i} event={event} />
                   ) : (
-                    <li key={i} class="advice-line">
-                      <ReplayAdvice decision={event} />
-                    </li>
+                    <ReplayAdvice key={i} decision={event} />
                   ),
                 )}
-              </ul>
-            </div>
-          ))}
-          {detail.winners.length > 0 && (
-            <p class="replay-end muted small">
-              {detail.winners.map((w) => `${w.hero ? "You" : w.name} collected ${w.amount}`).join(" · ")}
-            </p>
-          )}
+              </Fragment>
+            ))}
+          </div>
         </>
       )}
     </section>

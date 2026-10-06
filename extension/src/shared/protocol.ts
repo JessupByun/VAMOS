@@ -166,7 +166,7 @@ export interface ReplayAction {
   hero: boolean;
   /** fold, check, call, bet, raise, allin, or post (blinds and antes), for its color. */
   verb: string;
-  /** e.g. "raises to $0.60 (3bb)", "calls $0.40 (2bb) (all in)": a call says what it added. */
+  /** e.g. "raises to $0.60 (3bb)", "calls $0.40 (2bb), all in": a call says what it added. */
   text: string;
 }
 
@@ -209,10 +209,11 @@ export interface HandDetail {
     hero: boolean;
     cards: string[];
     folded: boolean;
+    /** What the player won or lost: unsigned "$0.60 (3bb)", and signed in big blinds. */
+    net: string;
+    netBb: number;
   }[];
   streets: ReplayStreet[];
-  /** amount: what each collected, "$0.40 (2bb)". */
-  winners: { name: string; amount: string; amountBb: number; hero: boolean }[];
   /** The hero's win or loss without a sign, "$0.60 (3bb)", and in big blinds with one. */
   result: string | null;
   resultBb: number | null;

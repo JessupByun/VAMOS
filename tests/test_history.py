@@ -104,10 +104,9 @@ def test_a_hand_replays_street_by_street_with_advice_before_the_heros_action():
     assert flop["events"][1]["aiOff"] is True
     # Whole chips at 10/20.
     assert (detail["result"], detail["resultBb"]) == ("$50 (2.5bb)", 2.5)
-    assert detail["winners"] == [
-        {"name": "Hero", "amount": "$100 (5bb)", "amountBb": 5.0, "hero": True}
-    ]
-    assert detail["players"][0]["stack"] == "$1,000 (50bb)"
+    you, alex = detail["players"]
+    assert (you["stack"], you["net"], you["netBb"]) == ("$1,000 (50bb)", "$50 (2.5bb)", 2.5)
+    assert (alex["net"], alex["netBb"], alex["folded"]) == ("$50 (2.5bb)", -2.5, True)
 
 
 def test_a_decision_the_hero_never_acted_on_ends_its_street():
@@ -249,3 +248,5 @@ def test_an_all_in_shows_each_players_cards_and_the_pot_without_the_uncalled_bet
     you, alex = detail["players"]
     assert (you["name"], you["cards"], you["folded"]) == ("Hero", ["Js", "Ks"], False)
     assert (alex["name"], alex["cards"], alex["position"]) == ("alex", ["6c", "Kd"], "BB")
+    assert (you["netBb"], alex["netBb"]) == (30.0, -30.0)
+    assert detail["streets"][0]["events"][2]["text"] == "raises to $1,000 (50bb), all in"

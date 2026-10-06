@@ -932,107 +932,145 @@ details.file .body {
   color: var(--fg);
 }
 
-.street-block {
-  margin-top: 10px;
-}
-
 /* A replay's cards are already dealt: no deal animation. */
 .replay .pcard {
   animation: none;
 }
 
-.street-head {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 4px;
-}
-
-/* The board so far on each street, and each player's cards: smaller than the hand's own. */
-.street-head .board,
+/* Small cards: the board so far on each street, and each player's own. */
+.timeline .board,
 .replay-players .hole {
   display: flex;
   gap: 3px;
+  align-items: center;
 }
 
-.street-head .pcard,
+.timeline .pcard,
 .replay-players .pcard {
   width: 21px;
   height: 29px;
   border-radius: 4px;
 }
 
-.street-head .pcard .rank,
+.timeline .pcard .rank,
 .replay-players .pcard .rank {
   font-size: 10.5px;
 }
 
-.street-head .pcard .suit,
+.timeline .pcard .suit,
 .replay-players .pcard .suit {
   font-size: 11px;
 }
 
-/* Who was dealt in: one group per player, wrapping; the folded ones quieter. */
+/* Who was dealt in: a small table, a line between players, columns lined up. */
 .replay-players {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 14px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   align-items: center;
-  margin: 8px 0 0;
-  font-size: 12.5px;
+  margin-top: 10px;
+  font-size: 12px;
 }
 
 .replay-players .seat {
-  display: inline-flex;
-  gap: 5px;
+  display: contents;
+}
+
+.replay-players .seat > * {
+  min-height: 29px;
+  padding: 4px 0 4px 12px;
+  display: flex;
   align-items: center;
+}
+
+.replay-players .seat > :first-child {
+  padding-left: 0;
+}
+
+.replay-players .seat + .seat > * {
+  border-top: 1px solid var(--border);
+}
+
+.replay-players .who {
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .replay-players .hero .who {
   font-weight: 700;
 }
 
-.replay-players .pos,
-.replay-players .stack {
+.replay-players .folded:not(.hero) .who {
   color: var(--muted);
 }
 
-.replay-players .pos {
+.replay-players .stack {
+  justify-content: flex-end;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.replay-players .net {
+  justify-content: flex-end;
+  white-space: nowrap;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.replay-players .net.won {
+  color: var(--ok);
+}
+
+.replay-players .net.lost {
+  color: var(--bad);
+}
+
+.replay .pos {
   font-size: 10.5px;
+  font-weight: 500;
+  color: var(--muted);
 }
 
-/* Your own cards stay easy to read even when you folded. */
-.replay-players .folded:not(.hero) {
-  opacity: 0.6;
+/* The hand in order, one grid for every street so names and actions line up. */
+.timeline {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  column-gap: 8px;
+  row-gap: 3px;
+  align-items: baseline;
+  margin-top: 4px;
+  font-size: 12.5px;
 }
 
-.street-head .street {
+.timeline .street-head {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid var(--border);
+}
+
+.timeline .street-head .street {
   font-size: 11px;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
 
-.events {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.act-line {
-  display: flex;
-  gap: 6px;
-  align-items: baseline;
-  padding: 1px 0;
-  font-size: 12.5px;
-}
-
-.act-line .pos {
-  font-size: 10.5px;
+.timeline .street-head .pot {
+  margin-left: auto;
+  font-size: 11.5px;
   color: var(--muted);
 }
 
-.act-line.post {
+.act-line {
+  display: contents;
+}
+
+.act-line.post > * {
   color: var(--muted);
 }
 
@@ -1041,10 +1079,66 @@ details.file .body {
   font-weight: 700;
 }
 
-.advice-line {
-  margin: 4px 0 6px;
+/* What VAMOS advised, across the whole width just before what you did. */
+.vamos {
+  grid-column: 1 / -1;
+  margin: 3px 0 4px;
+  padding: 5px 9px 6px;
+  border-radius: 8px;
+  background: var(--soft);
 }
 
-.replay-end {
-  margin-top: 10px;
+.vamos-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  align-items: baseline;
+  margin: 0;
+}
+
+.vamos-head .brand {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.vamos-head .move {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.vamos-head .move .bb {
+  margin-left: 3px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.vamos-head .none {
+  color: var(--muted);
+}
+
+.vamos-head .src {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
+.vamos .chips {
+  margin: 5px 0 0;
+}
+
+.vamos .chip {
+  font-size: 11px;
+}
+
+.vamos-text {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.vamos-text .label {
+  font-weight: 700;
+  color: var(--muted);
 }
