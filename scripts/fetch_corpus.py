@@ -8,6 +8,9 @@ Run: uv run python scripts/fetch_corpus.py
 """
 
 import json
+import os
+import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -17,8 +20,25 @@ DEST = Path(__file__).resolve().parents[1] / "tests" / "corpus" / "jaaaayden"
 
 
 def get(url: str) -> bytes:
-    with urllib.request.urlopen(url, timeout=60) as response:
-        return response.read()
+    """
+    The file at `url`, tried up to three times. GitHub's API allows 60 requests an hour per
+    IP without a token, and CI runners share IPs; CI passes its own GITHUB_TOKEN.
+    """
+    headers = {}
+    token = os.environ.get("GITHUB_TOKEN")
+    if token and url.startswith("https://api.github.com/"):
+        headers["Authorization"] = f"Bearer {token}"
+    for attempt in range(3):
+        try:
+            request = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(request, timeout=60) as response:
+                return response.read()
+        except (urllib.error.URLError, TimeoutError) as error:
+            if attempt == 2:
+                raise
+            print(f"[VAMOS] {url}: {error}; trying again")
+            time.sleep(5 * (attempt + 1))
+    raise AssertionError("unreachable")
 
 
 def main() -> None:
