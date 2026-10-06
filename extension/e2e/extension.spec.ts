@@ -648,4 +648,48 @@ test("screenshots of the card and the side panel", async () => {
   // A wide side panel: nothing pinned far from what it belongs to.
   await panel.setViewportSize({ width: 600, height: 900 });
   await panel.locator("section.replay").screenshot({ path: `${dir}/7-replay-wide.png` });
+  // Two more hands, one without action and one all in, for the menu's marks.
+  const H = `"TestHero @ ${HERO_ID}"`;
+  const D = `"alex @ ${KNOWN_ID}"`;
+  const N = `"new guy @ ${STRANGER_ID}"`;
+  harness.addLogLines([
+    `-- starting hand #2 (id: e2eh2)  No Limit Texas Hold'em (dealer: ${H}) --`,
+    `Player stacks: #1 ${H} (10.20) | #2 ${D} (9.80) | #3 ${N} (10.00)`,
+    "Your hand is 7♠, 2♦",
+    `${D} posts a small blind of 0.10`,
+    `${N} posts a big blind of 0.20`,
+    `${H} folds`,
+    `${D} folds`,
+    `Uncalled bet of 0.10 returned to ${N}`,
+    `${N} collected 0.20 from pot`,
+    "-- ending hand #2 --",
+    `-- starting hand #3 (id: e2eh3)  No Limit Texas Hold'em (dealer: ${D}) --`,
+    `Player stacks: #1 ${H} (10.20) | #2 ${D} (9.70) | #3 ${N} (10.10)`,
+    "Your hand is K♠, K♦",
+    `${N} posts a small blind of 0.10`,
+    `${H} posts a big blind of 0.20`,
+    `${D} raises to 0.60`,
+    `${N} folds`,
+    `${H} raises to 10.20 and go all in`,
+    `${D} calls 9.70 and go all in`,
+    `Uncalled bet of 0.50 returned to ${H}`,
+    "Flop:  [Q♣, 6♥, 8♦]",
+    "Turn: Q♣, 6♥, 8♦ [2♠]",
+    "River: Q♣, 6♥, 8♦, 2♠ [3♣]",
+    `${D} shows a A♠, J♣.`,
+    `${H} shows a K♠, K♦.`,
+    `${H} collected 19.50 from pot`,
+    "-- ending hand #3 --",
+  ]);
+  await expect(picker.locator("option")).toHaveCount(4);
+  await expect(picker.locator("option.big")).toHaveCount(1);
+  await expect(picker.locator("option.quiet")).toHaveCount(1);
+  await panel.setViewportSize({ width: 380, height: 900 });
+  await picker.click();
+  await panel.screenshot({ path: `${dir}/8-menu-open-dark.png` });
+  await panel.keyboard.press("Escape");
+  await panel.emulateMedia({ colorScheme: "light" });
+  await picker.click();
+  await panel.screenshot({ path: `${dir}/8-menu-open-light.png` });
+  await panel.keyboard.press("Escape");
 });

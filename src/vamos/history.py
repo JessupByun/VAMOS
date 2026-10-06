@@ -13,6 +13,7 @@ never logged there.
 """
 
 import json
+import math
 from collections import Counter
 from collections.abc import Sequence
 from typing import Any
@@ -30,6 +31,10 @@ type Message = dict[str, Any]
 
 STREET_NAMES = ("Preflop", "Flop", "Turn", "River")
 DEALT = {Street.FLOP: (0, 3), Street.TURN: (3, 4), Street.RIVER: (4, 5)}
+# The menu marks the session's biggest pots among the hands the hero played: the top tenth,
+# never under this many big blinds (so the first few hands of a session are not all "big").
+BIG_SHARE = 0.10
+BIG_FLOOR_BB = 10.0
 POSTS = {
     "post_sb": "posts the small blind",
     "post_bb": "posts the big blind",
@@ -76,6 +81,8 @@ def hand_list(
         if pid is None or not hand.ended:
             continue
         key = hand_key(hand)
+        bb = hand.big_blind or 1
+        pot = sum(hand.put_in.values()) - sum(hand.returned.values())
         out.append(
             {
                 "key": key,
@@ -87,8 +94,18 @@ def hand_list(
                 "result": format_money(abs(net(hand, pid)), hand.big_blind or 1),
                 "folded": pid in hand.folded(),
                 "decisions": advised[key],
+                "pot": format_money(pot, bb),
+                "potBb": _bb(pot, bb),
+                # No call, bet or raise of the hero's own: blinds posted, then folded or checked.
+                "quiet": not any(
+                    a.player == pid and a.kind in ("call", "bet", "raise") for a in hand.actions
+                ),
             }
         )
+    played = sorted(e["potBb"] for e in out if not e["quiet"])
+    line = max(BIG_FLOOR_BB, played[-math.ceil(len(played) * BIG_SHARE)] if played else 0.0)
+    for entry in out:
+        entry["big"] = not entry["quiet"] and entry["potBb"] >= line
     return out[::-1]
 
 

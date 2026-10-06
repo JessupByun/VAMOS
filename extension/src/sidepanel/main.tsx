@@ -370,13 +370,29 @@ function resultText(resultBb: number | null, result: string | null): string | nu
   return "even";
 }
 
-function historyLabel(entry: HistoryEntry): string {
+/**
+ * One hand in the menu: number, cards and seat, then the result in won/lost colors; one of
+ * the session's biggest pots also gives its pot (bold), a hand without action is quieter.
+ */
+function HistoryLabel({ entry }: { entry: HistoryEntry }) {
   const cards = entry.heroCards.length ? cardText(entry.heroCards) : "no cards";
   const result =
     entry.folded && entry.resultBb <= 0
       ? `folded${entry.resultBb < 0 ? `, lost ${entry.result}` : ""}`
       : resultText(entry.resultBb, entry.result);
-  return [`#${entry.number}`, cards, entry.position, result].filter(Boolean).join(" · ");
+  const tone = entry.resultBb > 0 ? "won" : entry.resultBb < 0 ? "lost" : "";
+  return (
+    <>
+      {[`#${entry.number}`, cards, entry.position].filter(Boolean).join(" · ")}
+      {result && (
+        <>
+          {" · "}
+          <span class={`res ${tone}`}>{result}</span>
+        </>
+      )}
+      {entry.big && <span class="potmark"> · pot {entry.pot}</span>}
+    </>
+  );
 }
 
 function pickedLabel(entry: HistoryEntry): string {
@@ -402,9 +418,9 @@ function HistoryPicker({ gameId }: { gameId: string }) {
     <select class="history-pick" aria-label="Replay an earlier hand" value={picked ?? ""} onChange={pick}>
       <option value="">Replay an earlier hand ({entries.length})</option>
       {entries.map((entry) => (
-        <option key={entry.key} value={entry.key}>
+        <option key={entry.key} value={entry.key} class={entry.big ? "big" : entry.quiet ? "quiet" : undefined}>
           {/* The closed menu shows the picked hand, short: the replayer below has the rest. */}
-          {entry.key === picked ? pickedLabel(entry) : historyLabel(entry)}
+          {entry.key === picked ? pickedLabel(entry) : <HistoryLabel entry={entry} />}
         </option>
       ))}
     </select>

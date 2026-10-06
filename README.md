@@ -29,6 +29,7 @@ Everything else is maintained by Claude:
 - Preflop, clear spots: simple rules (`Preflop rule`). Trash folds when 3 or more players are dealt in and the price is normal or steeper (not blind against blind, not facing an all-in); the strongest hands raise.
 - Everything else, before or after the flop: Claude Opus 5.5 at low effort (`VAMOS! AI (Claude Opus 5.5 · low)`), with Ask deeper for a medium-effort second answer.
 - The side panel's Current hand has a "Replay an earlier hand" menu: pick one of this session's hands to open the hand replayer, street by street, with what VAMOS advised next to what you did (x closes it).
+  In the menu the session's biggest pots are bold with their pot, results are green or red, and hands where you never called, bet or raised are dimmed.
   Hands are kept on this Mac only (in `data/games/`, about 0.6 MB per session) and deleted 3 days after the game; the replayer makes no AI calls.
 - The side panel's switches: AI Advice (with it off no Claude call is made; the preflop rules and chart still answer), VAMOS! HUD (the card on the table) and Per-Player Stats (the badges under each seat).
 - Amounts show in dollars and big blinds, e.g. `RAISE TO $0.60 (3bb)`.

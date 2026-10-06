@@ -910,12 +910,85 @@ details.file .body {
   margin: 0;
 }
 
-/* As wide as the hand shown, not the longest one in the menu. */
+/* As wide as the hand shown, not the longest one in the menu. Chrome's styleable select
+   (135+), so the menu can mark hands: big pots bold, hands without action quieter. */
+.history-pick,
+.history-pick::picker(select) {
+  appearance: base-select;
+}
+
 .history-pick {
   field-sizing: content;
   min-width: 0;
   max-width: 62%;
+  padding: 3px 8px;
   font-size: 11.5px;
+  color: var(--fg);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+/* The menu opens under the button and grows leftward from its right edge (the button sits at
+   the right of the header), as wide as its longest entry up to the panel's width. */
+.history-pick::picker(select) {
+  position-area: block-end span-inline-start;
+  width: max-content;
+  max-width: calc(100vw - 16px);
+  max-height: min(60vh, 520px);
+  padding: 4px;
+  overflow-y: auto;
+  color: var(--fg);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+}
+
+/* Plain text flow (the styleable select lays an option's parts out in a row), so a long
+   entry wraps inside the menu instead of running past it. */
+.history-pick option {
+  display: block;
+  white-space: normal;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+
+.history-pick option[value=""] {
+  color: var(--muted);
+}
+
+.history-pick option::checkmark {
+  display: none;
+}
+
+.history-pick option:hover,
+.history-pick option:focus-visible {
+  outline: none;
+  background: var(--soft);
+}
+
+.history-pick option.big {
+  font-weight: 800;
+}
+
+.history-pick option.quiet {
+  color: var(--muted);
+}
+
+.history-pick .res.won {
+  color: var(--ok);
+}
+
+.history-pick .res.lost {
+  color: var(--bad);
+}
+
+.history-pick option.quiet .res {
+  color: inherit;
 }
 
 .replay .close {

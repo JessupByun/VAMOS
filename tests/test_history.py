@@ -63,6 +63,10 @@ def test_the_menu_lists_finished_hands_newest_first():
             "result": "$20 (1bb)",
             "folded": True,
             "decisions": 0,
+            "pot": "$40 (2bb)",
+            "potBb": 2.0,
+            "quiet": True,
+            "big": False,
         },
         {
             "key": "h1",
@@ -73,6 +77,10 @@ def test_the_menu_lists_finished_hands_newest_first():
             "result": "$50 (2.5bb)",
             "folded": False,
             "decisions": 2,
+            "pot": "$100 (5bb)",
+            "potBb": 5.0,
+            "quiet": False,
+            "big": False,
         },
     ]
 
@@ -258,3 +266,25 @@ def test_an_all_in_shows_each_players_cards_and_the_pot_without_the_uncalled_bet
     ]
     assert [h["made"] for h in detail["streets"][0]["holdings"]] == ["KJs", "K6o"]
     assert detail["streets"][0]["events"][2]["text"] == "raises to $1,000 (50bb), all in"
+
+
+def test_the_menu_marks_the_sessions_biggest_pots_and_the_hands_without_action():
+    shoved = hand(
+        3,
+        H,
+        "Your hand is J♠, K♠",
+        f"{H} posts a small blind of 10",
+        f"{D} posts a big blind of 20",
+        f"{H} raises to 1000 and go all in",
+        f"{D} calls 1000 and go all in",
+        "Flop:  [10♠, 7♦, A♠]",
+        "Turn: 10♠, 7♦, A♠ [5♠]",
+        "River: 10♠, 7♦, A♠, 5♠ [J♦]",
+        f"{H} collected 2000 from pot",
+    )
+    marks = {
+        e["number"]: (e["quiet"], e["big"])
+        for e in hand_list(log_of(*WON, *FOLDED, *shoved), HERO, {})
+    }
+    # The 100bb all in is the session's biggest pot; folding the big blind had no action.
+    assert marks == {1: (False, False), 2: (True, False), 3: (False, True)}

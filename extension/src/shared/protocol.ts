@@ -150,6 +150,13 @@ export interface HistoryEntry {
   folded: boolean;
   /** Decisions VAMOS answered in the hand. */
   decisions: number;
+  /** The final pot, "$11.20 (56bb)", and in big blinds. */
+  pot: string;
+  potBb: number;
+  /** No call, bet or raise of the hero's own: blinds posted, then folded or checked. */
+  quiet: boolean;
+  /** One of this session's biggest pots among the hands the hero played. */
+  big: boolean;
 }
 
 /** The hero's finished hands this session, newest first; sent when the list changes. */
