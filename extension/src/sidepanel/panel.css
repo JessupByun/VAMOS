@@ -947,28 +947,28 @@ details.file .body {
 
 .timeline .pcard,
 .replay-players .pcard {
-  width: 21px;
-  height: 29px;
+  width: 23px;
+  height: 32px;
   border-radius: 4px;
 }
 
 .timeline .pcard .rank,
 .replay-players .pcard .rank {
-  font-size: 10.5px;
+  font-size: 11.5px;
 }
 
 .timeline .pcard .suit,
 .replay-players .pcard .suit {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 /* Who was dealt in: a small table, a line between players, columns lined up. */
 .replay-players {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  grid-template-columns: minmax(0, max-content) max-content max-content 1fr;
   align-items: center;
-  margin-top: 10px;
-  font-size: 12px;
+  margin-top: 12px;
+  font-size: 13px;
 }
 
 .replay-players .seat {
@@ -976,8 +976,8 @@ details.file .body {
 }
 
 .replay-players .seat > * {
-  min-height: 29px;
-  padding: 4px 0 4px 12px;
+  min-height: 32px;
+  padding: 6px 0 6px 16px;
   display: flex;
   align-items: center;
 }
@@ -1001,19 +1001,20 @@ details.file .body {
   font-weight: 700;
 }
 
-.replay-players .folded:not(.hero) .who {
-  color: var(--muted);
+.replay-players .money {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  line-height: 1.25;
+  white-space: nowrap;
 }
 
 .replay-players .stack {
-  justify-content: flex-end;
-  white-space: nowrap;
+  font-size: 11.5px;
   color: var(--muted);
 }
 
 .replay-players .net {
-  justify-content: flex-end;
-  white-space: nowrap;
   font-weight: 700;
   color: var(--muted);
 }
@@ -1027,7 +1028,7 @@ details.file .body {
 }
 
 .replay .pos {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 500;
   color: var(--muted);
 }
@@ -1036,33 +1037,33 @@ details.file .body {
 .timeline {
   display: grid;
   grid-template-columns: auto auto minmax(0, 1fr);
-  column-gap: 8px;
-  row-gap: 3px;
+  column-gap: 10px;
+  row-gap: 6px;
   align-items: baseline;
-  margin-top: 4px;
-  font-size: 12.5px;
+  margin-top: 6px;
+  font-size: 13.5px;
 }
 
 .timeline .street-head {
   grid-column: 1 / -1;
   display: flex;
-  gap: 8px;
+  gap: 10px;
   align-items: center;
-  margin-top: 10px;
-  padding-top: 9px;
+  margin-top: 12px;
+  padding-top: 12px;
   border-top: 1px solid var(--border);
 }
 
 .timeline .street-head .street {
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
 
 .timeline .street-head .pot {
-  margin-left: auto;
-  font-size: 11.5px;
+  margin-left: 4px;
+  font-size: 12.5px;
   color: var(--muted);
 }
 
@@ -1082,8 +1083,8 @@ details.file .body {
 /* What VAMOS advised, across the whole width just before what you did. */
 .vamos {
   grid-column: 1 / -1;
-  margin: 3px 0 4px;
-  padding: 5px 9px 6px;
+  margin: 3px 0 5px;
+  padding: 8px 11px 9px;
   border-radius: 8px;
   background: var(--soft);
 }
@@ -1097,14 +1098,14 @@ details.file .body {
 }
 
 .vamos-head .brand {
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 800;
   letter-spacing: 0.06em;
   color: var(--muted);
 }
 
 .vamos-head .move {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 800;
 }
 
@@ -1119,9 +1120,16 @@ details.file .body {
 }
 
 .vamos-head .src {
-  margin-left: auto;
-  font-size: 10.5px;
+  font-size: 11.5px;
   color: var(--muted);
+}
+
+/* With the AI off for the hand: said once, above it. */
+.vamos-off {
+  margin-top: 12px;
+  padding: 8px 11px;
+  border-radius: 8px;
+  background: var(--soft);
 }
 
 .vamos .chips {
@@ -1129,13 +1137,13 @@ details.file .body {
 }
 
 .vamos .chip {
-  font-size: 11px;
+  font-size: 11.5px;
 }
 
 .vamos-text {
-  margin: 4px 0 0;
-  font-size: 12px;
-  line-height: 1.4;
+  margin: 5px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .vamos-text .label {

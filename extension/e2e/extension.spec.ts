@@ -434,12 +434,38 @@ test("an earlier hand replays in the side panel with the advice VAMOS gave", asy
   // Who was dealt in, with the hero's cards by "You"; the other two folded.
   await expect(replay.locator(".replay-players .seat.hero")).toContainText("You");
   await expect(replay.locator(".replay-players .seat.hero .pcard")).toHaveCount(2);
-  await expect(replay.locator(".replay-players .seat.folded .who")).toHaveText([/^alex/, /^new guy/]);
+  // Cards nobody showed stay face down.
+  await expect(replay.locator(".replay-players .seat:not(.hero) .pcard.back")).toHaveCount(4);
+  await expect(replay.locator(".replay-players")).not.toContainText("folded");
   // What each won or lost: you the blinds, the big blind its 1bb.
   await expect(replay.locator(".replay-players .net")).toHaveText(["+$0.20 (1bb)", "-$0.20 (1bb)", "even"]);
   await replay.getByRole("button", { name: "Close the hand replayer" }).click();
   await expect(replay).toHaveCount(0);
   await expect(picker.locator("option:checked")).toHaveText("Replay an earlier hand (1)");
+});
+
+test("with the AI off, the replayer says so once instead of at every decision", async () => {
+  const page = await openTable();
+  const panel = await harness.context.newPage();
+  await panel.goto(PANEL_URL);
+  await panel.getByRole("switch", { name: /AI Advice/ }).click();
+  const card = page.locator("#vamos-root .action-card");
+  harness.addLogLines(HAND_START);
+  await heroTurn(page);
+  harness.addLogLines([`"new guy @ ${STRANGER_ID}" folds`]);
+  await expect(card).toContainText("AI off: stats only");
+  await page.evaluate(() => document.querySelector(".you-player")?.classList.remove("decision-current"));
+  harness.addLogLines([
+    `"TestHero @ ${HERO_ID}" folds`,
+    `Uncalled bet of 0.10 returned to "alex @ ${KNOWN_ID}"`,
+    `"alex @ ${KNOWN_ID}" collected 0.20 from pot`,
+    "-- ending hand #1 --",
+  ]);
+  await panel.getByRole("combobox", { name: "Replay an earlier hand" }).selectOption({ index: 1 });
+  const replay = panel.locator("section.replay");
+  await expect(replay.locator(".vamos-off")).toHaveText(/AI was off for this hand/);
+  await expect(replay.locator(".timeline .vamos")).toHaveCount(0);
+  await expect(replay.locator(".act-line.hero .what")).toHaveText(["posts the small blind", "folds"]);
 });
 
 test("after the flop the card shows Claude's answer and the panel its reasoning", async () => {
@@ -617,4 +643,7 @@ test("screenshots of the card and the side panel", async () => {
   await panel.screenshot({ path: `${dir}/7-replay-light.png`, fullPage: true });
   await panel.emulateMedia({ colorScheme: "dark" });
   await panel.screenshot({ path: `${dir}/7-replay-dark.png`, fullPage: true });
+  // A wide side panel: nothing pinned far from what it belongs to.
+  await panel.setViewportSize({ width: 600, height: 900 });
+  await panel.locator("section.replay").screenshot({ path: `${dir}/7-replay-wide.png` });
 });

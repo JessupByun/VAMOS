@@ -471,7 +471,7 @@ function ReplayAdvice({ decision }: { decision: ReplayDecision }) {
   if (preflop?.action) {
     return <VamosLine verdict={preflop} source={preflop.source === "Rule" ? "Preflop rule" : "Preflop chart"} />;
   }
-  return <VamosLine none={decision.aiOff ? "AI off: stats only" : "still reading the hand"} source="" />;
+  return <VamosLine none="still reading the hand" source="" />;
 }
 
 function ReplayLine({ event }: { event: ReplayAction }) {
@@ -490,21 +490,26 @@ function ReplayPlayers({ players }: { players: HandDetail["players"] }) {
   return (
     <div class="replay-players">
       {players.map((p) => (
-        <div key={`${p.name}-${p.position}`} class={`seat${p.hero ? " hero" : ""}${p.folded ? " folded" : ""}`}>
+        <div key={`${p.name}-${p.position}`} class={`seat${p.hero ? " hero" : ""}`}>
           <span class="who" title={p.name}>
             {p.hero ? "You" : p.name}
             {p.position && <span class="pos">{p.position}</span>}
           </span>
+          {/* Cards never shown stay face down. */}
           <span class="hole">
-            {p.cards.map((c) => (
-              <Card key={c} card={c} />
-            ))}
-            {p.folded && <span class="pos">folded</span>}
+            {p.cards.length > 0
+              ? p.cards.map((c) => <Card key={c} card={c} />)
+              : [0, 1].map((i) => <span key={i} class="pcard back" role="img" aria-label="card not shown" />)}
           </span>
-          <span class="stack">{p.stack}</span>
-          <span class={`net${p.netBb > 0 ? " won" : p.netBb < 0 ? " lost" : ""}`}>
-            {p.netBb > 0 ? `+${p.net}` : p.netBb < 0 ? `-${p.net}` : "even"}
+          {/* What they won or lost, over the stack they started with. */}
+          <span class="money">
+            <span class={`net${p.netBb > 0 ? " won" : p.netBb < 0 ? " lost" : ""}`}>
+              {p.netBb > 0 ? `+${p.net}` : p.netBb < 0 ? `-${p.net}` : "even"}
+            </span>
+            <span class="stack">stack {p.stack}</span>
           </span>
+          {/* Carries the line between players across the rest of the width. */}
+          <span class="fill" />
         </div>
       ))}
     </div>
@@ -518,6 +523,9 @@ function HandReplay({ gameId, handKey }: { gameId: string; handKey: string }) {
     pickedHand.delete(gameId);
     notifyAll();
   };
+  // With the AI off, a decision no rule answered has nothing to show: said once, above the hand.
+  const silent = (event: ReplayAction | ReplayDecision) => event.kind === "decision" && event.aiOff && !event.advice?.action;
+  const aiOff = detail?.streets.some((street) => street.events.some(silent)) ?? false;
   return (
     <section class="card replay" aria-label="Hand replayer">
       <div class="section-head">
@@ -552,6 +560,12 @@ function HandReplay({ gameId, handKey }: { gameId: string; handKey: string }) {
           {detail.partial && (
             <p class="muted small">Only Claude's answers were saved for this hand, not the preflop rule and chart answers.</p>
           )}
+          {aiOff && (
+            <p class="vamos-head vamos-off">
+              <span class="brand">{BRAND}</span>
+              <span class="none">AI was off for this hand: stats only</span>
+            </p>
+          )}
           <div class="timeline">
             {detail.streets.map((street) => (
               <Fragment key={street.name}>
@@ -567,7 +581,7 @@ function HandReplay({ gameId, handKey }: { gameId: string; handKey: string }) {
                   {street.potBb > 0 && <span class="pot">pot {street.pot}</span>}
                 </div>
                 {street.events.map((event, i) =>
-                  event.kind === "action" ? (
+                  silent(event) ? null : event.kind === "action" ? (
                     <ReplayLine key={i} event={event} />
                   ) : (
                     <ReplayAdvice key={i} decision={event} />
