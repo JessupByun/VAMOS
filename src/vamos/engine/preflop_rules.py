@@ -7,7 +7,8 @@ TRASH is frozen from VAMOS's own 3-handed solves at 35, 50, 75 and 100bb (retire
 2026-10-05): the hands that fold at least 99% both opening on the button and in the big
 blind facing a 2.5bb button open, at every one of those depths. Those solves' flop model was
 tuned on a GTO Wizard article's numbers, so the boundary is not from an allowed source; each
-hand is backed separately (docs/preflop.md: Sklansky-Malmuth group 9, our equity tables).
+hand is backed separately (docs/preflop.md: Sklansky-Malmuth group 9, our equity tables);
+54o, the one hand outside group 9, was taken out on 2026-10-06.
 This game has no rake, and without rake the big blind defends wider against small raises.
 So trash folds only at a price at
 least as steep as the spot the list comes from, and never heads-up or blind against blind,
@@ -37,8 +38,8 @@ def _hands(text: str) -> frozenset[str]:
 
 TRASH = _hands(
     "K4o K3o K2o Q7o Q6o Q5o Q4o Q3o Q2o J7o J6o J5o J4o J3o J2o T7o T6o T5o T4o T3o T2o "
-    "96o 95o 94o 93o 92o 86o 85o 84o 83s 83o 82s 82o 75o 74o 73o 72s 72o 64o 63o 62o 54o "
-    "53o 52o 43o 42o 32o"
+    "96o 95o 94o 93o 92o 86o 85o 84o 83s 83o 82s 82o 75o 74o 73o 72s 72o 64o 63o 62o 53o "
+    "52o 43o 42o 32o"
 )
 OPEN_ALWAYS = _hands("AA KK QQ JJ TT AKs AQs AJs KQs AKo AQo")
 THREE_BET_ALWAYS = _hands("AA KK QQ AKs AKo")
@@ -103,8 +104,9 @@ def _reach(hand: Hand, hero: str, spot: Decision) -> int:
 
 
 def _raise_to(hand: Hand, hero: str, spot: Decision) -> int:
-    """A standard raise: open 3bb (2.5bb heads-up), isolate limpers at 4bb plus 1bb per extra
-    limper, 3-bet 3x in position or 4x out of position, plus one raise per caller."""
+    """A standard raise: open 3bb (2.5bb heads-up); isolate limpers at 4bb plus 1bb per
+    limper (5bb over one: these pools call larger raises too), heads-up 4bb over the small
+    blind's limp; 3-bet 3x in position or 4x out of position, plus one raise per caller."""
     bb = spot.big_blind or 0
     preflop = [a for a in hand.actions if a.street == Street.PREFLOP and a.player != hero]
     raises = [a for a in preflop if a.kind == "raise"]
@@ -112,7 +114,7 @@ def _raise_to(hand: Hand, hero: str, spot: Decision) -> int:
         limpers = len({a.player for a in preflop if a.kind == "call"})
         if limpers == 0:
             return 5 * bb // 2 if spot.players_dealt == 2 else 3 * bb
-        return 4 * bb + (limpers - 1) * bb
+        return 4 * bb if spot.players_dealt == 2 else 4 * bb + limpers * bb
     raiser = raises[0]
     callers = len({a.player for a in preflop if a.kind == "call" and a.order > raiser.order})
     order = seat_order(hand)

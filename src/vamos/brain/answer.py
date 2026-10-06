@@ -10,7 +10,14 @@ the model, makes the answer legal: a bet where only raising is possible counts a
 and the other way round, actions the spot does not allow are dropped (an all in where only
 calling is allowed counts as a call), frequencies are renormalized, sizes are snapped
 between the minimum and the stack (within 10% of the stack becomes all in), and one action
-is sampled per decision.
+is chosen per decision: the most frequent one, unless it is under 60%, when Claude is close
+to indifferent and the action is drawn from the mix.
+
+Claude's frequencies are its confidence, not a solved mix: it gives 80/20 or 85/15 with a
+reason that argues for the top option. Mixing only pays when the options are worth the same,
+so drawing the 20% there gives away value, and against opponents who rarely study Hero's
+frequencies the unpredictability buys little. Near 50/50 the options are close, so a draw
+costs almost nothing and keeps Hero from always taking the same line.
 """
 
 import json
@@ -46,6 +53,7 @@ SCHEMA = {
 }
 
 ALL_IN_WITHIN = 0.10  # a size within 10% of the stack is played as all in
+DRAW_BELOW = 0.60  # a top option under this share counts as close: draw from the mix
 
 
 def snap(cents: Cents, big_blind: Cents, up: bool = False) -> Cents:
@@ -140,7 +148,7 @@ def _legal(spot: Spot, action: str, pct: float, to_bb: float = 0.0) -> Choice | 
 
 
 def settle(text: str, spot: Spot, seed: str, reveal=lambda s: s) -> Answer:
-    """Turn Claude's JSON into a legal mix and one sampled action."""
+    """Turn Claude's JSON into a legal mix and the one action the card shows."""
     try:
         data = json.loads(text)
         rows = data["strategy"]
@@ -175,11 +183,13 @@ def settle(text: str, spot: Spot, seed: str, reveal=lambda s: s) -> Answer:
             key=lambda c: -c.freq,
         )
     )
-    roll = random.Random(seed).random()
-    chosen = mix[-1]
-    for choice in mix:
-        roll -= choice.freq
-        if roll < 0:
-            chosen = choice
-            break
+    chosen = mix[0]
+    if chosen.freq < DRAW_BELOW:
+        roll = random.Random(seed).random()
+        chosen = mix[-1]
+        for choice in mix:
+            roll -= choice.freq
+            if roll < 0:
+                chosen = choice
+                break
     return Answer(mix, chosen, reveal(reason), reveal(plan))

@@ -60,9 +60,11 @@ def test_the_strongest_hands_raise_at_a_standard_size():
         "deviation": False,
     }
     assert advise(["Your hand is A♠, Q♦", *THREE], "A", "ABC")["action"] == "RAISE TO 60 (3bb)"
-    # Over a limp the big blind isolates to 4bb.
+    # Over a limp the big blind isolates to 5bb; heads-up, 4bb over the small blind's limp.
     limped = ["Your hand is A♠, A♦", *THREE, f"{P['A']} calls 20", f"{P['B']} folds"]
-    assert advise(limped, "C", "ABC")["action"] == "RAISE TO 80 (4bb)"
+    assert advise(limped, "C", "ABC")["action"] == "RAISE TO 100 (5bb)"
+    limped_hu = ["Your hand is A♠, A♦", *HU, f"{P['A']} calls 20"]
+    assert advise(limped_hu, "B")["action"] == "RAISE TO 80 (4bb)"
 
 
 def test_a_three_bet_is_3x_in_position_and_4x_out_of_it():
@@ -228,3 +230,9 @@ def test_the_chart_stops_at_10bb():
     first_in = ["Your hand is K♠, 5♦", *HU]
     assert advise(first_in, "A", stacks=(200, 200))["source"] == "Chart"
     assert advise(first_in, "A", stacks=(240, 240)) is None
+
+
+def test_54o_is_no_longer_trash():
+    # The one trash hand outside Sklansky-Malmuth's fold group now goes to Claude.
+    facing = ["Your hand is 5♠, 4♦", *THREE, f"{P['A']} raises to 60", f"{P['B']} folds"]
+    assert advise(facing, "C", "ABC") is None

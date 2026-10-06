@@ -42,7 +42,8 @@ player's total on the street so far, not the amount added.
 
 Answer (the JSON shape is enforced):
 - reason: one sentence, at most 25 words: what decides this spot.
-- strategy: the actions with their frequencies; mix two actions only when they are close.
+- strategy: the actions with their frequencies. Give one action at 100% unless another is
+  about as good; then give both, and let the reason explain the more frequent one.
   For a bet or raise, to_bb is Hero's total on this street after it, in big blinds (opening
   to 3bb is 3). size_pct_pot is the same size as a percentage: a bet of the pot, or a raise
   on top of calling of the pot after calling (raising a 1bb bet into 6bb to 3bb is 25). Use

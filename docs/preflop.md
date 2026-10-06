@@ -11,13 +11,13 @@ At the hero's preflop turn (`engine/advice.py`), in order:
 
 ## Rules
 
-- Trash (47 hand types, 41% of deals) folds when all of these hold, and checks whenever checking is free:
+- Trash (46 hand types, 40% of deals) folds when all of these hold, and checks whenever checking is free:
   - 3 or more players were dealt in, and it is not a blind battle (folded to the blinds with no one else putting a chip in);
   - calling costs at least 27% of the pot after the call, the price the list was derived at (the big blind facing a 2.5bb button open);
   - the bet faced was not made all in (facing any all-in, whatever the price, Claude decides: the call turns on raw equity against the shover's range, which the profile informs).
 - The open set (AA-TT, AKs, AQs, AJs, KQs, AKo, AQo) raises first in or over limpers, at any table size.
 - The 3-bet set (AA-QQ, AK) 3-bets exactly one raise by someone else; facing a single all-in only AA and KK answer (call or re-raise), since a call with QQ or AK depends on the shover.
-- Sizes: open 3bb (2.5bb heads-up); over limpers 4bb plus 1bb per extra limper; a 3-bet 3x the raise in position and 4x out of position, plus one raise per caller; never below PokerNow's minimum.
+- Sizes: open 3bb (2.5bb heads-up); over limpers 4bb plus 1bb per limper (5bb over one; heads-up 4bb over the small blind's limp), since loose pools call bigger isolation raises too; a 3-bet 3x the raise in position and 4x out of position, plus one raise per caller; never below PokerNow's minimum.
 - A raise of 40% or more of what the others can still match goes all in instead (measured against the deepest opponent still in, not the hero's own stack).
 - Claude decides facing a 3-bet or more (the hero's own raise counts), with a straddle or dead money posted, and in every spot above that no rule covers.
   Trash still folds facing a 3-bet, a straddle or dead money at a normal price.
@@ -25,7 +25,7 @@ At the hero's preflop turn (`engine/advice.py`), in order:
 Where the lists come from, and their limits (VAMOS's rule: nothing from a source whose terms forbid real-time assistance or reuse may set advice):
 - The trash list was frozen from VAMOS's retired 3-handed solves: hands folding 99% or more both opening on the button and in the big blind facing a 2.5bb button open, at every depth from 35 to 100bb.
   Those solves' flop model was tuned on numbers read from a GTO Wizard article, so the list's exact boundary is not from an allowed source.
-  Each hand has allowed backing of its own: 46 of the 47 are in Sklansky and Malmuth's group 9, the hands to fold (54o is group 8); facing a raise, our own equity tables decide most of them; and in the saved games only 15-17% of opens at 4 or more handed win the blinds uncontested, so stealing with trash rarely works in this pool.
+  Each hand has allowed backing of its own: all 46 are in Sklansky and Malmuth's group 9, the hands to fold (54o, the one in group 8, was taken out on 2026-10-06); facing a raise, our own equity tables decide most of them; and in the saved games only 15-17% of opens at 4 or more handed win the blinds uncontested, so stealing with trash rarely works in this pool.
 - Without rake the big blind defends wider against small raises, which is why trash folds only at the source spot's price or steeper.
 - The open set is exactly Sklansky and Malmuth's groups 1 and 2 plus AQo.
   The 3-bet set holds at least 63% equity against a top-15% opening range and 67% against a top-30% one (our own tables; QQ 68% and 71%).

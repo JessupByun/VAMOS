@@ -94,11 +94,18 @@ def test_equal_actions_after_snapping_merge():
     assert [(c.action, round(c.freq, 2)) for c in a.mix] == [("allin", 0.6), ("check", 0.4)]
 
 
-def test_the_sample_follows_the_frequencies_and_is_stable_per_decision():
-    mixed = answer(("call", 0, 0.5), ("fold", 0, 0.5))
+def test_a_close_mix_is_drawn_from_and_stable_per_decision():
+    mixed = answer(("call", 0, 0.55), ("fold", 0, 0.45))
     picks = {settle(mixed, FACING, seed=f"node{k}").chosen.action for k in range(40)}
     assert picks == {"call", "fold"}
     assert settle(mixed, FACING, "same").chosen == settle(mixed, FACING, "same").chosen
+
+
+def test_a_clear_favorite_is_always_the_card():
+    # 80/20 is Claude's confidence, not a solved mix: the top option every time.
+    leaning = answer(("call", 0, 0.8), ("fold", 0, 0.2))
+    picks = {settle(leaning, FACING, seed=f"node{k}").chosen.action for k in range(40)}
+    assert picks == {"call"}
 
 
 def test_unusable_answers():
