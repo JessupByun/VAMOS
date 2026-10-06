@@ -79,7 +79,9 @@
   --accent: var(--vamos-muted);
   box-sizing: border-box;
   min-width: 250px;
-  max-width: 340px;
+  /* As wide as what it says, up to where every logged answer and to-call line fits on one
+     row; a narrow window keeps more of the table in view. */
+  max-width: min(400px, 40vw);
   padding: 11px 16px 12px 18px;
   border-radius: 14px;
   font: 14px/1.4 var(--vamos-font);

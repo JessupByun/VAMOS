@@ -28,7 +28,7 @@ export interface Spot {
 }
 
 /** A full answer card, the largest the card usually gets. */
-export const RESERVED = { width: 340, height: 125 };
+export const RESERVED = { width: 400, height: 125 };
 const MARGIN = 8; // from the window's edges
 const GAP = 10; // from the pot
 
