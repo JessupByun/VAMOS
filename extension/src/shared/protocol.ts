@@ -136,6 +136,72 @@ export interface HandInfo {
   resultBb: number | null;
 }
 
+/** One of this session's finished hands, in the side panel's "Earlier hands" menu. */
+export interface HistoryEntry {
+  key: string;
+  number: number;
+  heroCards: string[];
+  position: string | null;
+  resultBb: number;
+  folded: boolean;
+  /** Decisions VAMOS answered in the hand. */
+  decisions: number;
+}
+
+/** The hero's finished hands this session, newest first; sent when the list changes. */
+export interface HandHistory {
+  type: "history";
+  gameId: string;
+  hands: HistoryEntry[];
+}
+
+export interface ReplayAction {
+  kind: "action";
+  player: string;
+  position: string | null;
+  hero: boolean;
+  /** fold, check, call, bet, raise, allin, or post (blinds and antes), for its color. */
+  verb: string;
+  /** e.g. "raises to 3bb", "calls 2.5bb (all in)". */
+  text: string;
+}
+
+/** What VAMOS showed at one of the hero's decisions, just before the hero's action. */
+export interface ReplayDecision {
+  kind: "decision";
+  advice: PreflopAdvice | ClaudeAdvice | null;
+  aiOff: boolean;
+  facts: { position?: string | null; pot?: string | null; toCall?: string | null; madeHand?: string | null };
+}
+
+export interface ReplayStreet {
+  name: string;
+  /** The cards dealt on this street. */
+  board: string[];
+  /** In the middle when the street began. */
+  potBb: number;
+  events: (ReplayAction | ReplayDecision)[];
+}
+
+/** One earlier hand for the replayer, street by street. */
+export interface HandDetail {
+  type: "hand_detail";
+  gameId: string;
+  key: string;
+  number: number;
+  ended: boolean;
+  heroCards: string[];
+  board: string[];
+  secondBoard: string[];
+  players: { name: string; position: string | null; stackBb: number; hero: boolean }[];
+  streets: ReplayStreet[];
+  shows: { name: string; cards: string[]; hero: boolean }[];
+  winners: { name: string; amount: string; amountBb: number; hero: boolean }[];
+  /** The hero's win or loss, in chips without a sign, and in big blinds with one. */
+  result: string | null;
+  resultBb: number | null;
+}
+
 export interface Players {
   type: "players";
   gameId: string;
@@ -340,7 +406,9 @@ export type PanelToWorker =
   /** Re-run the decision on the table with another preset ("Ask deeper"). */
   | { type: "ask"; gameId: string; preset: Preset }
   /** Write this session's read and notes on a player to drafts/ for the user to review. */
-  | { type: "save_draft"; gameId: string; playerId: string };
+  | { type: "save_draft"; gameId: string; playerId: string }
+  /** One earlier hand for the replayer. */
+  | { type: "hand_detail_request"; gameId: string; key: string };
 export type WorkerToPanel =
   | BackendStatus
   | HostAck
@@ -349,7 +417,9 @@ export type WorkerToPanel =
   | Settings
   | Costs
   | HandInfo
-  | DraftSaved;
+  | DraftSaved
+  | HandHistory
+  | HandDetail;
 export type HostToWorker =
   | { type: "ready"; version: string; recording: boolean }
   | HostAck
@@ -359,4 +429,6 @@ export type HostToWorker =
   | Costs
   | HandInfo
   | DraftSaved
+  | HandHistory
+  | HandDetail
   | Resume;

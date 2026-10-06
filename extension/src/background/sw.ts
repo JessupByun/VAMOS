@@ -31,6 +31,7 @@ const latest = new Map<string, WorkerToPanel>();
 interface TableMemory {
   players?: WorkerToPanel;
   hand?: HandInfo;
+  history?: WorkerToPanel;
   decisions: Map<string, WorkerToPanel>;
   last?: WorkerToPanel;
 }
@@ -48,6 +49,7 @@ function table(gameId: string): TableMemory {
 function remember(message: HostToWorker) {
   if (message.type === "settings" || message.type === "costs") latest.set(message.type, message);
   else if (message.type === "players") table(message.gameId).players = message;
+  else if (message.type === "history") table(message.gameId).history = message;
   else if (message.type === "hand") {
     const memory = table(message.gameId);
     if (memory.hand?.key !== message.key) memory.decisions.clear();
@@ -65,6 +67,7 @@ function replay(port: chrome.runtime.Port) {
   for (const memory of tables.values()) {
     if (memory.players) port.postMessage(memory.players);
     if (memory.hand) port.postMessage(memory.hand);
+    if (memory.history) port.postMessage(memory.history);
     const nodes = [...memory.decisions.keys()].sort((a, b) => a.localeCompare(b, "en", { numeric: true }));
     for (const node of nodes) port.postMessage(memory.decisions.get(node));
     if (memory.last) port.postMessage(memory.last);

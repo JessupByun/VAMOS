@@ -7,12 +7,17 @@ import {
   type ClaudeAdvice,
   type ClaudeAnswer,
   type Costs,
+  type HandDetail,
   type HandInfo,
+  type HistoryEntry,
   type HostAck,
   isClaude,
   type PanelToWorker,
   type PlayerInfo,
   type Players,
+  type PreflopAdvice,
+  type ReplayAction,
+  type ReplayDecision,
   type ProfileView,
   type Settings,
   type TonightRead,
@@ -53,6 +58,11 @@ interface Hand {
   live: string | null;
 }
 const hands = new Map<string, Hand>();
+// Per table: this session's finished hands for the replayer, the one picked (by hand key),
+// and the replays received, by "<game>:<hand key>".
+const histories = new Map<string, HistoryEntry[]>();
+const pickedHand = new Map<string, string>();
+const replays = new Map<string, HandDetail>();
 // Where each player's draft was last saved this session.
 const savedDrafts = new Map<string, string>();
 const playersByGame = new Map<string, Players>();
@@ -121,6 +131,9 @@ function connect() {
         // No table is open: nothing shown about one is current any more.
         hands.clear();
         playersByGame.clear();
+        histories.clear();
+        pickedHand.clear();
+        replays.clear();
       }
       if (becameReady) resendNotes();
     } else if (message.type === "players") {
@@ -135,7 +148,9 @@ function connect() {
       lastGame = message.gameId;
     } else if (message.type === "facts") {
       onFacts(message.gameId, message.facts?.node ?? null, message.facts?.advice ?? null);
-    } else acks = [message, ...acks].slice(0, 20);
+    } else if (message.type === "history") histories.set(message.gameId, message.hands);
+    else if (message.type === "hand_detail") replays.set(`${message.gameId}:${message.key}`, message);
+    else acks = [message, ...acks].slice(0, 20);
     notifyAll();
   });
   next.onDisconnect.addListener(() => {
@@ -181,7 +196,11 @@ function Pick({ text }: { text: string }) {
   );
 }
 
-function Options({ answer }: { answer: ClaudeAnswer }) {
+function Options({
+  answer,
+}: {
+  answer: { mix: string[] | null; pick: number | null; deviation: boolean; pickPct: number | null };
+}) {
   if (!answer.mix) return null;
   return (
     <div class="chips">
@@ -334,7 +353,10 @@ function HandHeader({ info }: { info: HandInfo }) {
 function CurrentHand({ hand }: { hand: Hand }) {
   return (
     <section class="card advice">
-      <h2>Current hand</h2>
+      <div class="section-head">
+        <h2>Current hand</h2>
+        <HistoryPicker gameId={hand.gameId} />
+      </div>
       {hand.info && <HandHeader info={hand.info} />}
       {hand.decisions.length === 0 ? (
         <p class="muted small">No AI decisions yet this hand. Preflop rule and chart answers show on the card only.</p>
@@ -342,6 +364,175 @@ function CurrentHand({ hand }: { hand: Hand }) {
         hand.decisions.map((d) => (
           <DecisionView key={d.node} decision={d} live={d.node === hand.live} gameId={hand.gameId} />
         ))
+      )}
+    </section>
+  );
+}
+
+const cardText = (cards: string[]) => cards.map((c) => `${c[0] === "T" ? "10" : c[0]}${SUITS[c[1] ?? ""] ?? ""}`).join(" ");
+
+function resultText(resultBb: number | null): string | null {
+  if (resultBb === null) return null;
+  if (resultBb > 0) return `won ${resultBb}bb`;
+  if (resultBb < 0) return `lost ${-resultBb}bb`;
+  return "even";
+}
+
+function historyLabel(entry: HistoryEntry): string {
+  const cards = entry.heroCards.length ? cardText(entry.heroCards) : "no cards";
+  const result = entry.folded && entry.resultBb <= 0 ? `folded${entry.resultBb < 0 ? ` (${entry.resultBb}bb)` : ""}` : resultText(entry.resultBb);
+  return [`#${entry.number}`, cards, entry.position, result].filter(Boolean).join(" · ");
+}
+
+/** The menu of this session's earlier hands, in the Current hand header: no space of its own. */
+function HistoryPicker({ gameId }: { gameId: string }) {
+  const entries = histories.get(gameId) ?? [];
+  if (entries.length === 0) return null;
+  const pick = (event: Event) => {
+    const key = (event.currentTarget as HTMLSelectElement).value;
+    if (key) {
+      pickedHand.set(gameId, key);
+      send({ type: "hand_detail_request", gameId, key });
+    } else {
+      pickedHand.delete(gameId);
+    }
+    notifyAll();
+  };
+  return (
+    <select class="history-pick" aria-label="Replay an earlier hand" value={pickedHand.get(gameId) ?? ""} onChange={pick}>
+      <option value="">Earlier hands ({entries.length})</option>
+      {entries.map((entry) => (
+        <option key={entry.key} value={entry.key}>
+          {historyLabel(entry)}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/** What VAMOS showed at one of the hero's decisions in an earlier hand. */
+function ReplayAdvice({ decision }: { decision: ReplayDecision }) {
+  const { advice } = decision;
+  if (advice && isClaude(advice)) {
+    return (
+      <>
+        {advice.answers.map((answer, i) => (
+          <AnswerView key={i} answer={answer} deeper={i > 0} live={false} later={i < advice.answers.length - 1} />
+        ))}
+      </>
+    );
+  }
+  const preflop = advice as PreflopAdvice | null;
+  if (preflop?.action) {
+    return (
+      <div class="answer">
+        <div class="source">
+          <span class="dot" />
+          {preflop.source === "Rule" ? "Preflop rule" : "Preflop chart"}
+        </div>
+        <Pick text={preflop.action} />
+        <Options answer={preflop} />
+      </div>
+    );
+  }
+  return (
+    <div class="answer">
+      <p class="muted waiting">{decision.aiOff ? "AI off: facts only" : `${BRAND} was still reading the hand`}</p>
+    </div>
+  );
+}
+
+function ReplayLine({ event }: { event: ReplayAction }) {
+  const colored = event.hero && event.verb !== "post";
+  return (
+    <li class={`act-line${event.hero ? " hero" : ""}${event.verb === "post" ? " post" : ""}`}>
+      <span class="who">{event.hero ? "You" : event.player}</span>
+      {event.position && <span class="pos">{event.position}</span>}
+      <span class={colored ? `what act-${event.verb}` : "what"}>{event.text}</span>
+    </li>
+  );
+}
+
+/** An earlier hand, street by street, with VAMOS's advice next to what you did. */
+function HandReplay({ gameId, handKey }: { gameId: string; handKey: string }) {
+  const detail = replays.get(`${gameId}:${handKey}`);
+  const close = () => {
+    pickedHand.delete(gameId);
+    notifyAll();
+  };
+  const result = detail ? resultText(detail.resultBb) : null;
+  const tone = detail?.resultBb ? (detail.resultBb > 0 ? "won" : "lost") : "";
+  return (
+    <section class="card replay" aria-label="Earlier hand">
+      <div class="section-head">
+        <h2>Earlier hand{detail ? ` #${detail.number}` : ""}</h2>
+        <button type="button" class="close" aria-label="Close the earlier hand" onClick={close}>
+          ×
+        </button>
+      </div>
+      {!detail ? (
+        <p class="muted small">Loading...</p>
+      ) : (
+        <>
+          <div class="hand-head">
+            <div class="cards">
+              <span class="mine">
+                <Cards cards={detail.heroCards} count={2} />
+              </span>
+              <span class="board">
+                {detail.board.map((c) => (
+                  <Card key={c} card={c} />
+                ))}
+              </span>
+              {detail.secondBoard.length > 0 && (
+                <span class="board second" title="second run">
+                  {detail.secondBoard.map((c) => (
+                    <Card key={`2-${c}`} card={c} />
+                  ))}
+                </span>
+              )}
+            </div>
+            <p class="hand-line">
+              <span class="muted">
+                {detail.players.map((p) => `${p.hero ? "You" : p.name} ${p.position ?? ""} ${p.stackBb}bb`).join(" · ")}
+              </span>
+              {result && (
+                <span class={`result ${tone}`}>
+                  {" "}
+                  · {result}
+                  {detail.result && detail.resultBb ? ` (${detail.resultBb > 0 ? "+" : "-"}${detail.result})` : ""}
+                </span>
+              )}
+            </p>
+          </div>
+          {detail.streets.map((street) => (
+            <div key={street.name} class="street-block">
+              <p class="street-head">
+                <span class="street">{street.name}</span>
+                {street.board.length > 0 && <span class="dealt">{cardText(street.board)}</span>}
+                {street.potBb > 0 && <span class="muted">pot {street.potBb}bb</span>}
+              </p>
+              <ul class="events">
+                {street.events.map((event, i) =>
+                  event.kind === "action" ? (
+                    <ReplayLine key={i} event={event} />
+                  ) : (
+                    <li key={i} class="advice-line">
+                      <ReplayAdvice decision={event} />
+                    </li>
+                  ),
+                )}
+              </ul>
+            </div>
+          ))}
+          {(detail.shows.length > 0 || detail.winners.length > 0) && (
+            <p class="replay-end muted small">
+              {detail.shows.map((s) => `${s.hero ? "You" : s.name} showed ${cardText(s.cards)}`).join(" · ")}
+              {detail.shows.length > 0 && detail.winners.length > 0 ? " · " : ""}
+              {detail.winners.map((w) => `${w.hero ? "You" : w.name} collected ${w.amount} (${w.amountBb}bb)`).join(" · ")}
+            </p>
+          )}
+        </>
       )}
     </section>
   );
@@ -748,6 +939,9 @@ function Panel() {
       {settings && <Dial settings={settings} />}
       {costs && <Spend costs={costs} />}
       {hand && <CurrentHand hand={hand} />}
+      {hand && pickedHand.has(hand.gameId) && (
+        <HandReplay gameId={hand.gameId} handKey={pickedHand.get(hand.gameId) ?? ""} />
+      )}
       {players && <PlayersSection players={players} />}
       {status.recording && (
         <section class="card">

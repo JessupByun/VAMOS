@@ -397,6 +397,41 @@ test("a clear preflop spot is answered at once by a rule, with no Claude call", 
   expect(existsSync(join(harness.dataDir, "advice.jsonl"))).toBe(false);
 });
 
+test("an earlier hand replays in the side panel with the advice VAMOS gave", async () => {
+  const page = await openTable();
+  const panel = await harness.context.newPage();
+  await panel.goto(PANEL_URL);
+  const card = page.locator("#vamos-root .action-card");
+  harness.addLogLines(HAND_START.map((line) => line.replace("A♠, 10♦", "A♠, A♦")));
+  await heroTurn(page);
+  await page.evaluate(() =>
+    document.querySelector(".you-player .card-s-T")?.classList.replace("card-s-T", "card-s-A"),
+  );
+  harness.addLogLines([`"new guy @ ${STRANGER_ID}" folds`]);
+  await expect(card.locator(".source")).toHaveText("Preflop rule");
+  // The hero raises, the big blind folds, and the hand ends.
+  await page.evaluate(() => document.querySelector(".you-player")?.classList.remove("decision-current"));
+  harness.addLogLines([
+    `"TestHero @ ${HERO_ID}" raises to 0.60`,
+    `"alex @ ${KNOWN_ID}" folds`,
+    `Uncalled bet of 0.40 returned to "TestHero @ ${HERO_ID}"`,
+    `"TestHero @ ${HERO_ID}" collected 0.40 from pot`,
+    "-- ending hand #1 --",
+  ]);
+  // The menu sits in the Current hand header; nothing else shows until a hand is picked.
+  const picker = panel.getByRole("combobox", { name: "Replay an earlier hand" });
+  await expect(picker.locator("option")).toHaveText(["Earlier hands (1)", "#1 · A♠ A♦ · SB · won 1bb"]);
+  const replay = panel.locator("section.replay");
+  await expect(replay).toHaveCount(0);
+  await picker.selectOption({ index: 1 });
+  await expect(replay.locator("h2")).toHaveText("Earlier hand #1");
+  await expect(replay.locator(".advice-line .source")).toHaveText("Preflop rule");
+  await expect(replay.locator(".advice-line .pick")).toHaveText("RAISE TO 0.60 (3bb)");
+  await expect(replay.locator(".act-line.hero .what")).toHaveText(["posts the small blind", "raises to 3bb"]);
+  await replay.getByRole("button", { name: "Close the earlier hand" }).click();
+  await expect(replay).toHaveCount(0);
+});
+
 test("after the flop the card shows Claude's answer and the panel its reasoning", async () => {
   const page = await openTable();
   const panel = await harness.context.newPage();

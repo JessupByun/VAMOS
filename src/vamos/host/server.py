@@ -35,6 +35,7 @@ from vamos.engine.advice import preflop_advice
 from vamos.engine.facts import TableView, current_spot, facts
 from vamos.engine.madehand import describe
 from vamos.engine.state import Decision, positions
+from vamos.history import hand_detail, hand_list, net
 from vamos.host.framing import read_message, write_message
 from vamos.identity import IdentityMap, Resolution
 from vamos.log.hands import Hand, HandLog, Street
@@ -112,6 +113,10 @@ class Backend:
         # current hand last sent to the side panel.
         self.hero_seat: dict[str, Message] = {}
         self._hand_sent: dict[str, Message] = {}
+        # Per game, what the card showed at each of the hero's decisions (node -> record), for
+        # the side panel's replayer; saved next to the game's log so a restart keeps it.
+        self._decisions: dict[str, dict[str, Message]] = {}
+        self._history_sent: dict[str, list[Message]] = {}
         # One set of pseudonyms for the whole session, so the notes (shared by every table)
         # hide a name seen at any table.
         self.names = Pseudonyms()
@@ -153,7 +158,11 @@ class Backend:
                 self.hero_seat[game_id] = message["hero"]
             else:
                 self.hero_seat.pop(game_id, None)
-            return [self._players(game_id), *self._hand_update(game_id)]
+            return [
+                self._players(game_id),
+                *self._hand_update(game_id),
+                *self._history_update(game_id),
+            ]
         if kind == "assign_identity":
             self.identity.assign(message["playerId"], message.get("profile"))
             return [self._players(game_id) for game_id in self.seated]
@@ -216,6 +225,8 @@ class Backend:
             return [self._save_draft(message["gameId"], message["playerId"])]
         if kind == "ask":
             return self._ask(message)
+        if kind == "hand_detail_request":
+            return self._hand_detail(message["gameId"], str(message.get("key", "")))
         log.warning("unknown message type %r", kind)
         return []
 
@@ -295,7 +306,70 @@ class Backend:
                 game_id, self._game_file(game_id, ".jsonl")
             )
             self._load_notes(game_id)
+            self._load_decisions(game_id)
         return session
+
+    def _load_decisions(self, game_id: str) -> None:
+        held = self._decisions.setdefault(game_id, {})
+        path = self._game_file(game_id, ".decisions.jsonl")
+        if path is None or not path.exists():
+            return
+        for line in path.read_text().splitlines():
+            try:
+                record = json.loads(line)
+            except ValueError:
+                continue  # a line cut short by a crash
+            if isinstance(record, dict) and isinstance(record.get("node"), str):
+                held[record["node"]] = record  # the last record of a node is what was shown
+
+    def _record_decision(self, game_id: str, payload: Message) -> None:
+        """What the card shows at the hero's decision, kept for the replayer when it changes."""
+        node = payload.get("node")
+        if not isinstance(node, str) or node.count(":") != 2:
+            return
+        record = {
+            "node": node,
+            "street": int(node.split(":")[1]),
+            "facts": {k: payload.get(k) for k in ("position", "pot", "toCall", "madeHand")},
+            "advice": payload.get("advice"),
+            "aiOff": bool(payload.get("aiOff")),
+        }
+        held = self._decisions.setdefault(game_id, {})
+        if held.get(node) == record:
+            return
+        held[node] = record
+        path = self._game_file(game_id, ".decisions.jsonl")
+        if path is None:
+            return
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a") as f:
+                f.write(json.dumps(record) + "\n")
+        except OSError:
+            log.exception("[VAMOS] could not save a decision to %s", path)
+
+    def _history_update(self, game_id: str) -> list[Message]:
+        """The hero's finished hands this session, sent to the side panel when the list changes."""
+        hero = self._hero_id(game_id)
+        if hero is None:
+            return []
+        hands = hand_list(self._session(game_id).log, hero, self._decisions.get(game_id, {}))
+        if self._history_sent.get(game_id, []) == hands:
+            return []  # unchanged, or still empty
+        self._history_sent[game_id] = hands
+        return [{"type": "history", "gameId": game_id, "hands": hands}]
+
+    def _hand_detail(self, game_id: str, key: str) -> list[Message]:
+        """One earlier hand for the replayer, street by street with VAMOS's advice."""
+        hero = self._hero_id(game_id)
+        if hero is None:
+            return []
+        detail = hand_detail(
+            self._session(game_id).log, key, hero, self._decisions.get(game_id, {})
+        )
+        if detail is None:
+            return []
+        return [{"type": "hand_detail", "gameId": game_id, **detail}]
 
     def _load_notes(self, game_id: str) -> None:
         path = self._game_file(game_id, ".notes.json")
@@ -336,7 +410,7 @@ class Backend:
         replies = [self._players(game_id)] if game_id in self.seated else []
         if game_id in self.turns:
             replies.append(self._spot_facts(game_id))
-        return [*replies, *self._hand_update(game_id)]
+        return [*replies, *self._hand_update(game_id), *self._history_update(game_id)]
 
     def _notes_for(self, pid: str, aliases: dict[str, str]) -> str:
         """Notes on a player, also when written under an ID they had before logging in."""
@@ -398,16 +472,6 @@ class Backend:
         if hero not in {s.player.id for s in hand.seats}:
             return []
         bb = hand.big_blind or 1
-        put = hand.put_in.get(hero, 0) - hand.returned.get(hero, 0)
-        bounty = sum(
-            (e.amount or 0)
-            * (
-                (e.other is not None and e.other.id == hero)
-                - (e.player is not None and e.player.id == hero)
-            )
-            for e in hand.bounties
-            if e.kind == "bounty_paid"
-        )
         summary = {
             "type": "hand",
             "gameId": game_id,
@@ -422,9 +486,7 @@ class Backend:
             "folded": hero in hand.folded(),
             "ended": hand.ended,
             # Won or lost, in big blinds, once the hand is over.
-            "resultBb": (
-                round((hand.collected.get(hero, 0) - put + bounty) / bb, 2) if hand.ended else None
-            ),
+            "resultBb": round(net(hand, hero) / bb, 2) if hand.ended else None,
         }
         if self._hand_sent.get(game_id) == summary:
             return []
@@ -440,6 +502,7 @@ class Backend:
             spot = current_spot(game_log, view) if view else None
             if spot is not None and view is not None:
                 payload = self._spot_payload(game_id, game_log, view, spot, ask)
+                self._record_decision(game_id, payload)
         except Exception:
             # The card says so rather than reading the hand forever.
             self._log_failure(game_id, turn["key"], "the spot")

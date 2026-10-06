@@ -827,3 +827,41 @@ def test_two_different_failures_on_one_spot_are_both_logged(tmp_path, monkeypatc
     logged = [r.getMessage() for r in caplog.records if r.levelname == "ERROR"]
     assert len(logged) == 2
     assert "the preflop rules" in logged[0] and "Claude's prompt" in logged[1]
+
+
+def test_earlier_hands_replay_with_the_advice_given_even_after_a_restart(tmp_path):
+    backend, _, _ = claude_backend(tmp_path, [])
+    backend.handle({**SEATS, "hero": {"id": "heroid0001", "name": "Hero"}})
+    backend.handle(page(*HERO_HAND))
+    [facts] = backend.handle(TURN)  # aces first in: a rule raises at once
+    assert facts["facts"]["advice"]["source"] == "Rule"
+    finished = [
+        *HERO_HAND,
+        (205, '"Hero @ heroid0001" raises to 50'),
+        (206, '"alex @ Qw3rTy7UiO" folds'),
+        (207, 'Uncalled bet of 30 returned to "Hero @ heroid0001"'),
+        (208, '"Hero @ heroid0001" collected 40 from pot'),
+        (209, "-- ending hand #2 --"),
+    ]
+    backend.handle({"type": "turn", "gameId": GAME, "table": None})
+    replies = backend.handle(page(*finished))
+    [history] = [m for m in replies if m["type"] == "history"]
+    assert [(h["key"], h["resultBb"], h["decisions"]) for h in history["hands"]] == [("h2", 1.0, 1)]
+
+    def replay(b):
+        [detail] = b.handle({"type": "hand_detail_request", "gameId": GAME, "key": "h2"})
+        return [e.get("text") or e["advice"]["action"] for e in detail["streets"][0]["events"]]
+
+    expected = [
+        "posts the small blind",
+        "posts the big blind",
+        "RAISE TO 50 (2.5bb)",
+        "raises to 2.5bb",
+        "folds",
+    ]
+    assert replay(backend) == expected
+    # A restarted backend reads the decisions back from the game's saved file.
+    again, _ = claude_backend_with_data(tmp_path)
+    again.handle({**SEATS, "hero": {"id": "heroid0001", "name": "Hero"}})
+    again.handle(page(*finished))
+    assert replay(again) == expected
