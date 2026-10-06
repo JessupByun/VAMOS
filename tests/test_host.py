@@ -1,9 +1,11 @@
 import io
 import json
+import os
 import queue
 import re
 import struct
 import threading
+import time
 from datetime import datetime
 
 import pytest
@@ -12,7 +14,7 @@ from vamos.brain.provider import FakeProvider, Reply
 from vamos.config import VERSION
 from vamos.host.framing import MAX_OUTGOING_BYTES, read_message, write_message
 from vamos.host.install import EXTENSION_ID, HOST_NAME, install
-from vamos.host.server import Backend, serve
+from vamos.host.server import KEEP_GAMES_DAYS, Backend, _prune, serve
 
 
 def frame(message) -> bytes:
@@ -867,6 +869,16 @@ def test_earlier_hands_replay_with_the_advice_given_even_after_a_restart(tmp_pat
     assert replay(again) == expected
 
 
+def test_a_failed_decision_record_leaves_the_card_its_advice(tmp_path, monkeypatch, caplog):
+    backend, _, _ = claude_backend(tmp_path, [])
+    backend.handle({**SEATS, "hero": {"id": "heroid0001", "name": "Hero"}})
+    backend.handle(page(*HERO_HAND))
+    monkeypatch.setattr(backend, "_record_decision", lambda *args: 1 / 0)
+    [facts] = backend.handle(TURN)
+    assert facts["facts"]["advice"]["source"] == "Rule" and "error" not in facts
+    assert any("the decision record" in r.getMessage() for r in caplog.records)
+
+
 def test_hands_played_before_the_record_replay_claudes_answers_from_the_advice_log(tmp_path):
     sent = {
         "players": [
@@ -891,7 +903,7 @@ def test_hands_played_before_the_record_replay_claudes_answers_from_the_advice_l
     (tmp_path / "data" / "advice.jsonl").write_text(
         json.dumps(other_game) + "\n" + json.dumps(entry) + "\n"
     )
-    backend, _, _ = claude_backend(tmp_path, [])
+    backend, fake, _ = claude_backend(tmp_path, [])
     backend.handle({**SEATS, "hero": {"id": "heroid0001", "name": "Hero"}})
     finished = [
         *HERO_HAND,
@@ -908,3 +920,28 @@ def test_hands_played_before_the_record_replay_claudes_answers_from_the_advice_l
     [answer] = decision["advice"]["answers"]
     assert (answer["action"], answer["why"]) == ("RAISE TO 50 (2.5bb)", "alex folds too often.")
     assert detail["partial"] is True
+    # Replaying reads local files only: Claude is never asked and nothing is billed.
+    assert fake.requests == [] and not (tmp_path / "data" / "costs.jsonl").exists()
+
+
+def test_a_game_is_pruned_with_its_notes_and_decisions_once_none_was_written_for_days(tmp_path):
+    games = tmp_path / "games"
+    games.mkdir()
+    old, recent = time.time() - 4 * 86400, time.time() - 3600
+    for name, when in [
+        ("pglold.jsonl", old),
+        ("pglold.notes.json", old),
+        ("pglold.decisions.jsonl", old),
+        # The log is old, but a note was edited an hour ago: the whole game stays.
+        ("pglkept.jsonl", old),
+        ("pglkept.notes.json", recent),
+        ("pglkept.decisions.jsonl", old),
+    ]:
+        (games / name).write_text("{}")
+        os.utime(games / name, (when, when))
+    _prune(games, KEEP_GAMES_DAYS)
+    assert sorted(p.name for p in games.iterdir()) == [
+        "pglkept.decisions.jsonl",
+        "pglkept.jsonl",
+        "pglkept.notes.json",
+    ]

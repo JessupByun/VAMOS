@@ -127,7 +127,9 @@ def table(title: str, groups: dict[str, list[Spot]], expected: dict[int, Counter
 
 
 def main() -> None:
-    paths = [Path(a) for a in sys.argv[1:]] or sorted((DATA_DIR / "games").glob("*.jsonl"))
+    paths = [Path(a) for a in sys.argv[1:]] or sorted(
+        p for p in (DATA_DIR / "games").glob("*.jsonl") if p.suffixes == [".jsonl"]
+    )
     names, table_sets = hero_names(), tables.load_all()
     every: list[Spot] = []
     hands_by_size: Counter = Counter()

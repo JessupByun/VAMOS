@@ -91,7 +91,8 @@ def main() -> None:
         for notes in args.games.glob("*.notes.json"):
             shutil.copy(notes, data / "games" / notes.name)
         backend = Backend(data, PROFILES_DIR, provider=FakeProvider([]))
-        for path in sorted(args.games.glob("*.jsonl")):
+        # Game logs only, not their decision records (<game>.decisions.jsonl).
+        for path in sorted(p for p in args.games.glob("*.jsonl") if p.suffixes == [".jsonl"]):
             game_id = path.name.removesuffix(".jsonl")
             backend._load_notes(game_id)
             for before, number, hero, action in spots(path, names, args.min_players):

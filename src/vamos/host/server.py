@@ -532,7 +532,6 @@ class Backend:
             spot = current_spot(game_log, view) if view else None
             if spot is not None and view is not None:
                 payload = self._spot_payload(game_id, game_log, view, spot, ask)
-                self._record_decision(game_id, payload)
         except Exception:
             # The card says so rather than reading the hand forever.
             self._log_failure(game_id, turn["key"], "the spot")
@@ -543,6 +542,12 @@ class Backend:
                 "facts": None,
                 "error": SPOT_ERROR,
             }
+        if payload is not None:
+            try:
+                self._record_decision(game_id, payload)
+            except Exception:
+                # The replayer misses this decision; the card keeps its advice.
+                self._log_failure(game_id, str(payload.get("node")), "the decision record")
         return {"type": "facts", "gameId": game_id, "key": turn["key"], "facts": payload}
 
     def _spot_payload(
@@ -785,17 +790,26 @@ class Backend:
         return {"type": "ack", "what": "dom_snapshot", "detail": path.name}
 
 
-KEEP_GAMES_DAYS = 3  # saved game logs older than this are deleted when the backend starts
+KEEP_GAMES_DAYS = 3  # a game nothing was written to for this long is deleted at backend start
 
 
 def _prune(directory: Path, days: int) -> None:
+    """
+    Delete the games last written to more than `days` ago: each game's files together (its
+    log rows, notes and decision records), so its notes and replayer outlive no less than it.
+    """
     cutoff = time.time() - days * 86400
+    games: dict[str, list[Path]] = {}
     for path in directory.glob("*.json*") if directory.exists() else []:
+        games.setdefault(path.name.split(".")[0], []).append(path)
+    for paths in games.values():
         try:
-            if path.stat().st_mtime < cutoff:
+            if max(path.stat().st_mtime for path in paths) >= cutoff:
+                continue
+            for path in paths:
                 path.unlink()
         except OSError:
-            log.exception("[VAMOS] could not prune %s", path)
+            log.exception("[VAMOS] could not prune %s", paths[0].name.split(".")[0])
 
 
 def _slug(name: str) -> str:
@@ -1090,6 +1104,8 @@ def main() -> None:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    # The HTTP client logs every API request at INFO; advice.jsonl and costs.jsonl have them.
+    logging.getLogger("httpx2").setLevel(logging.WARNING)
     # stdout carries framed messages only; a stray print would corrupt the stream.
     stdout = sys.stdout.buffer
     sys.stdout = sys.stderr

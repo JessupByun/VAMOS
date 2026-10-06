@@ -384,10 +384,15 @@ function historyLabel(entry: HistoryEntry): string {
   return [`#${entry.number}`, cards, entry.position, result].filter(Boolean).join(" · ");
 }
 
+function pickedLabel(entry: HistoryEntry): string {
+  return [`Replaying #${entry.number}`, entry.heroCards.length ? cardText(entry.heroCards) : ""].filter(Boolean).join(" · ");
+}
+
 /** The menu of this session's earlier hands, in the Current hand header: no space of its own. */
 function HistoryPicker({ gameId }: { gameId: string }) {
   const entries = histories.get(gameId) ?? [];
   if (entries.length === 0) return null;
+  const picked = pickedHand.get(gameId);
   const pick = (event: Event) => {
     const key = (event.currentTarget as HTMLSelectElement).value;
     if (key) {
@@ -399,11 +404,12 @@ function HistoryPicker({ gameId }: { gameId: string }) {
     notifyAll();
   };
   return (
-    <select class="history-pick" aria-label="Replay an earlier hand" value={pickedHand.get(gameId) ?? ""} onChange={pick}>
-      <option value="">Earlier hands ({entries.length})</option>
+    <select class="history-pick" aria-label="Replay an earlier hand" value={picked ?? ""} onChange={pick}>
+      <option value="">Replay an earlier hand ({entries.length})</option>
       {entries.map((entry) => (
         <option key={entry.key} value={entry.key}>
-          {historyLabel(entry)}
+          {/* The closed menu shows the picked hand, short: the replayer below has the rest. */}
+          {entry.key === picked ? pickedLabel(entry) : historyLabel(entry)}
         </option>
       ))}
     </select>
@@ -463,10 +469,10 @@ function HandReplay({ gameId, handKey }: { gameId: string; handKey: string }) {
   const result = detail ? resultText(detail.resultBb) : null;
   const tone = detail?.resultBb ? (detail.resultBb > 0 ? "won" : "lost") : "";
   return (
-    <section class="card replay" aria-label="Earlier hand">
+    <section class="card replay" aria-label="Hand replayer">
       <div class="section-head">
-        <h2>Earlier hand{detail ? ` #${detail.number}` : ""}</h2>
-        <button type="button" class="close" aria-label="Close the earlier hand" onClick={close}>
+        <h2>Hand replayer{detail ? ` · #${detail.number}` : ""}</h2>
+        <button type="button" class="close" aria-label="Close the hand replayer" onClick={close}>
           ×
         </button>
       </div>

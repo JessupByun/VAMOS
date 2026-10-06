@@ -136,7 +136,7 @@ export interface HandInfo {
   resultBb: number | null;
 }
 
-/** One of this session's finished hands, in the side panel's "Earlier hands" menu. */
+/** One of this session's finished hands, in the side panel's "Replay an earlier hand" menu. */
 export interface HistoryEntry {
   key: string;
   number: number;

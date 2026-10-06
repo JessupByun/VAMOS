@@ -420,16 +420,19 @@ test("an earlier hand replays in the side panel with the advice VAMOS gave", asy
   ]);
   // The menu sits in the Current hand header; nothing else shows until a hand is picked.
   const picker = panel.getByRole("combobox", { name: "Replay an earlier hand" });
-  await expect(picker.locator("option")).toHaveText(["Earlier hands (1)", "#1 · A♠ A♦ · SB · won 1bb"]);
+  await expect(picker.locator("option")).toHaveText(["Replay an earlier hand (1)", "#1 · A♠ A♦ · SB · won 1bb"]);
   const replay = panel.locator("section.replay");
   await expect(replay).toHaveCount(0);
   await picker.selectOption({ index: 1 });
-  await expect(replay.locator("h2")).toHaveText("Earlier hand #1");
+  // The closed menu says which hand is being replayed.
+  await expect(picker.locator("option:checked")).toHaveText("Replaying #1 · A♠ A♦");
+  await expect(replay.locator("h2")).toHaveText("Hand replayer · #1");
   await expect(replay.locator(".advice-line .source")).toHaveText("Preflop rule");
   await expect(replay.locator(".advice-line .pick")).toHaveText("RAISE TO 0.60 (3bb)");
   await expect(replay.locator(".act-line.hero .what")).toHaveText(["posts the small blind", "raises to 3bb"]);
-  await replay.getByRole("button", { name: "Close the earlier hand" }).click();
+  await replay.getByRole("button", { name: "Close the hand replayer" }).click();
   await expect(replay).toHaveCount(0);
+  await expect(picker.locator("option:checked")).toHaveText("Replay an earlier hand (1)");
 });
 
 test("after the flop the card shows Claude's answer and the panel its reasoning", async () => {
@@ -586,4 +589,21 @@ test("screenshots of the card and the side panel", async () => {
   await page.evaluate(() => document.querySelector(".you-player")?.classList.remove("decision-current"));
   await expect(card).toContainText("waiting for your turn");
   await page.screenshot({ path: `${dir}/6-waiting-table.png` });
+  // The hand ends, and the side panel replays it with Claude's answer.
+  harness.addLogLines([
+    `"TestHero @ ${HERO_ID}" bets 0.20`,
+    `"alex @ ${KNOWN_ID}" folds`,
+    `Uncalled bet of 0.20 returned to "TestHero @ ${HERO_ID}"`,
+    `"TestHero @ ${HERO_ID}" collected 0.40 from pot`,
+    "-- ending hand #1 --",
+  ]);
+  const picker = panel.getByRole("combobox", { name: "Replay an earlier hand" });
+  await expect(picker).toBeVisible();
+  await panel.locator(".section-head").first().screenshot({ path: `${dir}/7-replay-menu-closed.png` });
+  await picker.selectOption({ index: 1 });
+  await expect(panel.locator("section.replay .advice-line .answer").first()).toBeVisible();
+  await panel.locator(".section-head").first().screenshot({ path: `${dir}/7-replay-menu-picked.png` });
+  await panel.screenshot({ path: `${dir}/7-replay-light.png`, fullPage: true });
+  await panel.emulateMedia({ colorScheme: "dark" });
+  await panel.screenshot({ path: `${dir}/7-replay-dark.png`, fullPage: true });
 });
