@@ -32,6 +32,8 @@ Everything else is maintained by Claude:
   With less than about 10 seconds left for an answer, Ask deeper still runs but says the deeper answer may not arrive in time.
 - The side panel's Current hand has a "Replay an earlier hand" menu: pick one of this session's hands to open the hand replayer, street by street, with what VAMOS advised next to what you did (x closes it).
   In the menu the session's biggest pots are bold with their pot, results are green or red, and hands where you never called, bet or raised are dimmed.
+  The filter beside the menu lists all hands, the ones you played (a call, bet or raise of your own), big pots, AI decisions (VAMOS's AI answered at least once) or showdowns (anyone showed cards); the menu's count follows it, and it stays while the side panel is open.
+  The replayer's previous and next buttons step to the older and newer hand in the menu.
   Hands are kept on this Mac only, in `data/games/` (under 1 MB per session), and never deleted, so every game stays there to analyze later; the replayer makes no AI calls.
 - The side panel's switches: AI Advice (with it off no Claude call is made; the preflop rules and chart still answer), VAMOS! HUD (the card on the table) and Per-Player Stats (the badges under each seat).
   While the backend is not running, the switches, the model, notes, profile matches and Save draft are paused and say why.

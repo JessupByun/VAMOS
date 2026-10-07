@@ -80,6 +80,17 @@ const hands = new Map<string, Hand>();
 const histories = new Map<string, HistoryEntry[]>();
 const pickedHand = new Map<string, string>();
 const replays = new Map<string, HandDetail>();
+// What the menu lists, and so what previous and next step through, chosen per table and kept
+// while the panel is open.
+const FILTERS = {
+  all: { label: "All hands", keeps: (_: HistoryEntry) => true },
+  played: { label: "Played", keeps: (e: HistoryEntry) => !e.quiet },
+  big: { label: "Big pots", keeps: (e: HistoryEntry) => e.big },
+  ai: { label: "AI decisions", keeps: (e: HistoryEntry) => e.aiDecisions > 0 },
+  showdown: { label: "Showdowns", keeps: (e: HistoryEntry) => e.showdown },
+};
+type HandFilter = keyof typeof FILTERS;
+const handFilters = new Map<string, HandFilter>();
 // By "<game>:<hand key>": when a replay was asked for, until it comes, and why one failed.
 const replayAsked = new Map<string, number>();
 const replayErrors = new Map<string, string>();
@@ -230,6 +241,23 @@ function askReplay(gameId: string, key: string) {
   replayErrors.delete(id);
   send({ type: "hand_detail_request", gameId, key });
   setTimeout(notifyAll, REPLY_MS);
+}
+
+/** Opens an earlier hand in the replayer; the menu shows it picked. */
+function openReplay(gameId: string, key: string) {
+  pickedHand.set(gameId, key);
+  askReplay(gameId, key);
+  notifyAll();
+}
+
+/** The hands the menu's filter keeps just before and just after `key`: older and newer. */
+function neighbors(gameId: string, key: string): { older?: HistoryEntry; newer?: HistoryEntry } {
+  const entries = histories.get(gameId) ?? [];
+  const { keeps } = FILTERS[handFilters.get(gameId) ?? "all"];
+  const at = entries.findIndex((entry) => entry.key === key);
+  if (at < 0) return {};
+  // Newest first, as in the menu.
+  return { older: entries.slice(at + 1).find(keeps), newer: entries.slice(0, at).reverse().find(keeps) };
 }
 
 function saveDraft(gameId: string, playerId: string) {
@@ -487,31 +515,53 @@ function pickedLabel(entry: HistoryEntry): string {
   return [`Replaying #${entry.number}`, entry.heroCards.length ? cardText(entry.heroCards) : ""].filter(Boolean).join(" · ");
 }
 
-/** The menu of this session's earlier hands, in the Current hand header: no space of its own. */
+/**
+ * The menu of this session's earlier hands and its filter, in the Current hand header: no
+ * space of their own.
+ */
 function HistoryPicker({ gameId }: { gameId: string }) {
   const entries = histories.get(gameId) ?? [];
   if (entries.length === 0) return null;
   const picked = pickedHand.get(gameId);
+  const chosen = handFilters.get(gameId) ?? "all";
+  const { keeps } = FILTERS[chosen];
+  const kept = entries.filter(keeps).length;
   const pick = (event: Event) => {
     const key = (event.currentTarget as HTMLSelectElement).value;
     if (key) {
-      pickedHand.set(gameId, key);
-      askReplay(gameId, key);
+      openReplay(gameId, key);
     } else {
       pickedHand.delete(gameId);
+      notifyAll();
     }
+  };
+  const filter = (event: Event) => {
+    handFilters.set(gameId, (event.currentTarget as HTMLSelectElement).value as HandFilter);
     notifyAll();
   };
   return (
-    <select class="history-pick" aria-label="Replay an earlier hand" value={picked ?? ""} onChange={pick}>
-      <option value="">Replay an earlier hand ({entries.length})</option>
-      {entries.map((entry) => (
-        <option key={entry.key} value={entry.key} class={entry.big ? "big" : entry.quiet ? "quiet" : undefined}>
-          {/* The closed menu shows the picked hand, short: the replayer below has the rest. */}
-          {entry.key === picked ? pickedLabel(entry) : <HistoryLabel entry={entry} />}
-        </option>
-      ))}
-    </select>
+    <span class="history-nav">
+      <select class="history-filter" aria-label="Filter earlier hands" value={chosen} onChange={filter}>
+        {Object.entries(FILTERS).map(([key, { label }]) => (
+          <option key={key} value={key}>
+            {label}
+          </option>
+        ))}
+      </select>
+      <select class="history-pick" aria-label="Replay an earlier hand" value={picked ?? ""} onChange={pick}>
+        <option value="">Replay an earlier hand ({kept})</option>
+        {/* The hand being replayed stays listed when the filter leaves it out, so the closed
+            menu still names it. */}
+        {entries
+          .filter((entry) => keeps(entry) || entry.key === picked)
+          .map((entry) => (
+            <option key={entry.key} value={entry.key} class={entry.big ? "big" : entry.quiet ? "quiet" : undefined}>
+              {/* The closed menu shows the picked hand, short: the replayer below has the rest. */}
+              {entry.key === picked ? pickedLabel(entry) : <HistoryLabel entry={entry} />}
+            </option>
+          ))}
+      </select>
+    </span>
   );
 }
 
@@ -625,6 +675,21 @@ function ReplayPlayers({ players }: { players: HandDetail["players"] }) {
   );
 }
 
+function Chevron({ to }: { to: "left" | "right" }) {
+  return (
+    <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+      <path
+        d={to === "left" ? "M10 3 5 8l5 5" : "M6 3l5 5-5 5"}
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+    </svg>
+  );
+}
+
 /** An earlier hand, street by street, with VAMOS's advice next to what you did. */
 function HandReplay({ gameId, handKey }: { gameId: string; handKey: string }) {
   const id = `${gameId}:${handKey}`;
@@ -637,13 +702,38 @@ function HandReplay({ gameId, handKey }: { gameId: string; handKey: string }) {
   // With the AI off, a decision no rule answered has nothing to show: said once, above the hand.
   const silent = (event: ReplayAction | ReplayDecision) => event.kind === "decision" && event.aiOff && !event.advice?.action;
   const aiOff = detail?.streets.some((street) => street.events.some(silent)) ?? false;
+  // The number shows at once, while a hand stepped to is still loading.
+  const number = histories.get(gameId)?.find((entry) => entry.key === handKey)?.number ?? detail?.number;
+  const { older, newer } = neighbors(gameId, handKey);
   return (
     <section class="card replay" aria-label="Hand replayer">
       <div class="section-head">
-        <h2>Hand replayer{detail ? ` · #${detail.number}` : ""}</h2>
-        <button type="button" class="close" aria-label="Close the hand replayer" onClick={close}>
-          ×
-        </button>
+        <h2>Hand replayer{number ? ` · #${number}` : ""}</h2>
+        <span class="replay-tools">
+          <span class="stepper">
+            <button
+              type="button"
+              aria-label="Previous hand"
+              title={older ? `Previous hand: #${older.number}` : "No earlier hand in the menu"}
+              disabled={!older}
+              onClick={() => older && openReplay(gameId, older.key)}
+            >
+              <Chevron to="left" />
+            </button>
+            <button
+              type="button"
+              aria-label="Next hand"
+              title={newer ? `Next hand: #${newer.number}` : "No later hand in the menu"}
+              disabled={!newer}
+              onClick={() => newer && openReplay(gameId, newer.key)}
+            >
+              <Chevron to="right" />
+            </button>
+          </span>
+          <button type="button" class="close" aria-label="Close the hand replayer" onClick={close}>
+            ×
+          </button>
+        </span>
       </div>
       {!detail && failed && (
         <div class="replay-failed" role="status">

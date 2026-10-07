@@ -965,10 +965,13 @@ details.file .body {
   background: var(--soft);
 }
 
-/* A section title with a control on its right: the earlier-hands menu, the replay's close. */
+/* A section title with controls on its right: the earlier-hands filter and menu, the
+   replay's previous, next and close. When they do not fit beside the title, they move under
+   it, still on the right. */
 .section-head {
   display: flex;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px 8px;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 8px;
@@ -978,17 +981,30 @@ details.file .body {
   margin: 0;
 }
 
+.history-nav,
+.replay-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+  margin-left: auto;
+}
+
 /* As wide as the hand shown, not the longest one in the menu. Chrome's styleable select
    (135+), so the menu can mark hands: big pots bold, hands without action quieter. */
 .history-pick,
-.history-pick::picker(select) {
+.history-pick::picker(select),
+.history-filter,
+.history-filter::picker(select) {
   appearance: base-select;
 }
 
-.history-pick {
+.history-pick,
+.history-filter {
   field-sizing: content;
   min-width: 0;
-  max-width: 62%;
   padding: 3px 8px;
   font-size: 11.5px;
   color: var(--fg);
@@ -998,12 +1014,20 @@ details.file .body {
   cursor: pointer;
 }
 
+.history-filter {
+  flex: none;
+}
+
 /* The menu opens under the button and grows leftward from its right edge (the button sits at
-   the right of the header), as wide as its longest entry up to the panel's width. */
-.history-pick::picker(select) {
+   the right of the header), as wide as its longest entry up to the panel's 12px gutter (100%
+   is the space beside the button). Above, the same way, only when it does not fit below:
+   Chrome's own order opens a select's list on whichever side has more room. */
+.history-pick::picker(select),
+.history-filter::picker(select) {
   position-area: block-end span-inline-start;
+  position-try: normal flip-block;
   width: max-content;
-  max-width: calc(100vw - 16px);
+  max-width: calc(100% - 12px);
   max-height: min(60vh, 520px);
   padding: 4px;
   overflow-y: auto;
@@ -1012,6 +1036,11 @@ details.file .body {
   border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+}
+
+/* The filter sits left of the menu: its short list grows rightward from its left edge. */
+.history-filter::picker(select) {
+  position-area: block-end span-inline-end;
 }
 
 /* Plain text flow (the styleable select lays an option's parts out in a row), so a long
@@ -1025,18 +1054,31 @@ details.file .body {
   line-height: 1.35;
 }
 
+.history-filter option {
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12.5px;
+}
+
 .history-pick option[value=""] {
   color: var(--muted);
 }
 
-.history-pick option::checkmark {
+.history-pick option::checkmark,
+.history-filter option::checkmark {
   display: none;
 }
 
 .history-pick option:hover,
-.history-pick option:focus-visible {
+.history-pick option:focus-visible,
+.history-filter option:hover,
+.history-filter option:focus-visible {
   outline: none;
   background: var(--soft);
+}
+
+.history-filter option:checked {
+  font-weight: 700;
 }
 
 .history-pick option.big {
@@ -1057,6 +1099,38 @@ details.file .body {
 
 .history-pick option.quiet .res {
   color: inherit;
+}
+
+/* Previous and next: one small pair, beside the close. */
+.stepper {
+  display: flex;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+
+.stepper button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  color: var(--fg);
+  background: var(--card);
+  border: none;
+}
+
+.stepper button + button {
+  border-left: 1px solid var(--border);
+}
+
+.stepper button:hover:not(:disabled) {
+  background: var(--soft);
+}
+
+.stepper button:focus-visible {
+  outline: 2px solid var(--muted);
+  outline-offset: -2px;
 }
 
 .replay .close {

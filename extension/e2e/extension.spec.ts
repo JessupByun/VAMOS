@@ -393,6 +393,50 @@ const HAND_START = [
   `"alex @ ${KNOWN_ID}" posts a big blind of 0.20`,
 ];
 
+const H = `"TestHero @ ${HERO_ID}"`;
+const D = `"alex @ ${KNOWN_ID}"`;
+const N = `"new guy @ ${STRANGER_ID}"`;
+
+/** The hand from flopTurn played out: the hero bets the flop and alex folds. */
+const FLOP_BET_WINS = [
+  `${H} bets 0.20`,
+  `${D} folds`,
+  `Uncalled bet of 0.20 returned to ${H}`,
+  `${H} collected 0.40 from pot`,
+  "-- ending hand #1 --",
+];
+
+/** Two hands after a hand #1 the hero won by 1bb: #2 folded without action, #3 an all in shown down. */
+const LATER_HANDS = [
+  `-- starting hand #2 (id: e2eh2)  No Limit Texas Hold'em (dealer: ${H}) --`,
+  `Player stacks: #1 ${H} (10.20) | #2 ${D} (9.80) | #3 ${N} (10.00)`,
+  "Your hand is 7♠, 2♦",
+  `${D} posts a small blind of 0.10`,
+  `${N} posts a big blind of 0.20`,
+  `${H} folds`,
+  `${D} folds`,
+  `Uncalled bet of 0.10 returned to ${N}`,
+  `${N} collected 0.20 from pot`,
+  "-- ending hand #2 --",
+  `-- starting hand #3 (id: e2eh3)  No Limit Texas Hold'em (dealer: ${D}) --`,
+  `Player stacks: #1 ${H} (10.20) | #2 ${D} (9.70) | #3 ${N} (10.10)`,
+  "Your hand is K♠, K♦",
+  `${N} posts a small blind of 0.10`,
+  `${H} posts a big blind of 0.20`,
+  `${D} raises to 0.60`,
+  `${N} folds`,
+  `${H} raises to 10.20 and go all in`,
+  `${D} calls 9.70 and go all in`,
+  `Uncalled bet of 0.50 returned to ${H}`,
+  "Flop:  [Q♣, 6♥, 8♦]",
+  "Turn: Q♣, 6♥, 8♦ [2♠]",
+  "River: Q♣, 6♥, 8♦, 2♠ [3♣]",
+  `${D} shows a A♠, J♣.`,
+  `${H} shows a K♠, K♦.`,
+  `${H} collected 19.50 from pot`,
+  "-- ending hand #3 --",
+];
+
 /** Puts the fake table where PokerNow would be after "new guy" folds: the hero's turn in the small blind. */
 async function heroTurn(page: Page) {
   await page.evaluate(
@@ -592,6 +636,89 @@ test("an earlier hand replays in the side panel with the advice VAMOS gave", asy
   await replay.getByRole("button", { name: "Close the hand replayer" }).click();
   await expect(replay).toHaveCount(0);
   await expect(picker.locator("option:checked")).toHaveText("Replay an earlier hand (1)");
+});
+
+test("the replayer steps to older and newer hands within the menu's filter", async () => {
+  const page = await openTable();
+  const panel = await openPanel();
+  const card = page.locator("#vamos-root .action-card");
+  // Hand #1: Claude answers on the flop and the hero wins; #2 and #3 follow.
+  await flopTurn(page);
+  await expect(card.locator(".action")).toHaveText("BET $0.20 (1bb)");
+  await page.evaluate(() => document.querySelector(".you-player")?.classList.remove("decision-current"));
+  harness.addLogLines([...FLOP_BET_WINS, ...LATER_HANDS]);
+  const picker = panel.getByRole("combobox", { name: "Replay an earlier hand" });
+  const filter = panel.getByRole("combobox", { name: "Filter earlier hands" });
+  const listed = picker.locator("option");
+  const replay = panel.locator("section.replay");
+  const title = replay.locator("h2");
+  const previous = replay.getByRole("button", { name: "Previous hand" });
+  const next = replay.getByRole("button", { name: "Next hand" });
+  const first = "#1 · A♠ 10♦ · SB · won $0.20 (1bb)";
+  await expect(listed).toHaveText(["Replay an earlier hand (3)", /^#3 · K♠ K♦/, /^#2 · 7♠ 2♦/, first]);
+  await expect(filter).toHaveValue("all");
+
+  // Previous is the older hand and next the newer one; the menu follows each step.
+  await picker.selectOption({ index: 2 });
+  await expect(title).toHaveText("Hand replayer · #2");
+  await previous.click();
+  await expect(title).toHaveText("Hand replayer · #1");
+  await expect(picker.locator("option:checked")).toHaveText("Replaying #1 · A♠ 10♦");
+  await expect(replay.locator(".vamos .src")).toHaveText("Claude Opus 5.5 · low");
+  await expect(previous).toBeDisabled();
+  await next.click();
+  await expect(title).toHaveText("Hand replayer · #2");
+  await expect(replay.locator(".act-line.hero .what")).toHaveText(["folds"]);
+  await next.click();
+  await expect(title).toHaveText("Hand replayer · #3");
+  await expect(picker.locator("option:checked")).toHaveText("Replaying #3 · K♠ K♦");
+  await expect(replay.locator(".replay-players .pcard:not(.back)")).toHaveCount(4);
+  await expect(next).toBeDisabled();
+  await expect(previous).toBeEnabled();
+
+  // A filter narrows the menu and its count, and the steps skip the hands it leaves out.
+  await filter.selectOption("played");
+  await expect(listed).toHaveText(["Replay an earlier hand (2)", "Replaying #3 · K♠ K♦", first]);
+  await previous.click();
+  await expect(title).toHaveText("Hand replayer · #1");
+  await expect(previous).toBeDisabled();
+  await next.click();
+  await expect(title).toHaveText("Hand replayer · #3");
+  for (const only of ["big", "showdown"]) {
+    await filter.selectOption(only);
+    await expect(listed).toHaveText(["Replay an earlier hand (1)", "Replaying #3 · K♠ K♦"]);
+    await expect(previous).toBeDisabled();
+    await expect(next).toBeDisabled();
+  }
+  // The hand open stays in the menu when the filter leaves it out, but not in the count.
+  await filter.selectOption("ai");
+  await expect(listed).toHaveText(["Replay an earlier hand (1)", "Replaying #3 · K♠ K♦", first]);
+  await expect(next).toBeDisabled();
+  await previous.click();
+  await expect(title).toHaveText("Hand replayer · #1");
+  await expect(listed).toHaveText(["Replay an earlier hand (1)", "Replaying #1 · A♠ 10♦"]);
+
+  // The filter stays while the panel is open, with the replayer closed and as hands end.
+  await replay.getByRole("button", { name: "Close the hand replayer" }).click();
+  await expect(replay).toHaveCount(0);
+  await expect(filter).toHaveValue("ai");
+  await expect(listed).toHaveText(["Replay an earlier hand (1)", first]);
+  harness.addLogLines([
+    `-- starting hand #4 (id: e2eh4)  No Limit Texas Hold'em (dealer: ${H}) --`,
+    `Player stacks: #1 ${H} (20.00) | #3 ${N} (10.00)`,
+    "Your hand is 5♠, 5♦",
+    `${H} posts a small blind of 0.10`,
+    `${N} posts a big blind of 0.20`,
+    `${H} folds`,
+    `Uncalled bet of 0.10 returned to ${N}`,
+    `${N} collected 0.20 from pot`,
+    "-- ending hand #4 --",
+  ]);
+  await expect(panel.locator(".hand-line")).toContainText("hand #4");
+  await expect(filter).toHaveValue("ai");
+  await expect(listed).toHaveText(["Replay an earlier hand (1)", first]);
+  await filter.selectOption("all");
+  await expect(listed).toHaveText(["Replay an earlier hand (4)", /^#4 /, /^#3 /, /^#2 /, first]);
 });
 
 test("with the AI off, the replayer says so once instead of at every decision", async () => {
@@ -876,6 +1003,7 @@ test("Save draft and the replayer say when they fail instead of waiting forever"
     process.kill(pid, "SIGCONT");
   }
   // Once it answers again, both arrive.
+  await expect(replay.locator(".replay-players")).toBeVisible();
   await expect(replay.locator("h2")).toHaveText("Hand replayer · #1");
   await expect(alex.locator(".saved")).toHaveText(/^Draft saved to drafts\/\d{4}-\d{2}-\d{2}-alex\.md$/);
   await expect(draft).toHaveCount(0);
@@ -1028,42 +1156,32 @@ test("screenshots of the card and the side panel", async () => {
   await panel.setViewportSize({ width: 600, height: 900 });
   await panel.locator("section.replay").screenshot({ path: `${dir}/7-replay-wide.png` });
   // Two more hands, one without action and one all in, for the menu's marks.
-  const H = `"TestHero @ ${HERO_ID}"`;
-  const D = `"alex @ ${KNOWN_ID}"`;
-  const N = `"new guy @ ${STRANGER_ID}"`;
-  harness.addLogLines([
-    `-- starting hand #2 (id: e2eh2)  No Limit Texas Hold'em (dealer: ${H}) --`,
-    `Player stacks: #1 ${H} (10.20) | #2 ${D} (9.80) | #3 ${N} (10.00)`,
-    "Your hand is 7♠, 2♦",
-    `${D} posts a small blind of 0.10`,
-    `${N} posts a big blind of 0.20`,
-    `${H} folds`,
-    `${D} folds`,
-    `Uncalled bet of 0.10 returned to ${N}`,
-    `${N} collected 0.20 from pot`,
-    "-- ending hand #2 --",
-    `-- starting hand #3 (id: e2eh3)  No Limit Texas Hold'em (dealer: ${D}) --`,
-    `Player stacks: #1 ${H} (10.20) | #2 ${D} (9.70) | #3 ${N} (10.10)`,
-    "Your hand is K♠, K♦",
-    `${N} posts a small blind of 0.10`,
-    `${H} posts a big blind of 0.20`,
-    `${D} raises to 0.60`,
-    `${N} folds`,
-    `${H} raises to 10.20 and go all in`,
-    `${D} calls 9.70 and go all in`,
-    `Uncalled bet of 0.50 returned to ${H}`,
-    "Flop:  [Q♣, 6♥, 8♦]",
-    "Turn: Q♣, 6♥, 8♦ [2♠]",
-    "River: Q♣, 6♥, 8♦, 2♠ [3♣]",
-    `${D} shows a A♠, J♣.`,
-    `${H} shows a K♠, K♦.`,
-    `${H} collected 19.50 from pot`,
-    "-- ending hand #3 --",
-  ]);
+  harness.addLogLines(LATER_HANDS);
   await expect(picker.locator("option")).toHaveCount(4);
   await expect(picker.locator("option.big")).toHaveCount(1);
   await expect(picker.locator("option.quiet")).toHaveCount(1);
+  // The menu's filter and the replayer's previous and next: narrowest, usual and wide.
+  const filter = panel.getByRole("combobox", { name: "Filter earlier hands" });
+  for (const width of [320, 380, 600]) {
+    await panel.setViewportSize({ width, height: 900 });
+    for (const [scheme, kept] of [["dark", "all"], ["light", "played"]] as const) {
+      await panel.emulateMedia({ colorScheme: scheme });
+      await filter.selectOption(kept);
+      await panel.locator("section.advice .section-head").screenshot({ path: `${dir}/8-menu-head-${width}-${kept}.png` });
+      await panel.locator("section.replay .section-head").screenshot({ path: `${dir}/8-replay-head-${width}-${kept}.png` });
+    }
+  }
+  await filter.selectOption("all");
+  await panel.getByRole("button", { name: "Next hand" }).click();
+  await expect(panel.locator("section.replay .vamos-off, section.replay .act-line").first()).toBeVisible();
+  await panel.locator("section.replay").screenshot({ path: `${dir}/8-replay-stepped-600.png` });
   await panel.setViewportSize({ width: 380, height: 900 });
+  // Mid-screen, with room for the list below (Playwright's own scroll leaves it at the bottom).
+  await filter.evaluate((select) => select.scrollIntoView({ block: "center" }));
+  await filter.click();
+  await panel.screenshot({ path: `${dir}/8-filter-open-light.png` });
+  await panel.keyboard.press("Escape");
+  await panel.emulateMedia({ colorScheme: "dark" });
   await picker.click();
   await panel.screenshot({ path: `${dir}/8-menu-open-dark.png` });
   await panel.keyboard.press("Escape");
