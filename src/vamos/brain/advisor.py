@@ -6,12 +6,15 @@ Every call is stamped with the decision node it answers, and what it returns is 
 while that node is current. When the hero acts or the hand moves on, the call is cancelled
 (its stream is closed) and its answer is dropped. "Ask deeper" adds a call with the deeper
 preset for the same node; a call already thinking keeps running, so both answers can be
-compared, and the card shows the answer of the latest call asked that has one. A call
-has a deadline from the table's clock, about five seconds before the hero's time runs out,
-or 25 seconds after the turn began when the table has no clock. A call that misses it,
-fails or answers nonsense leaves the facts on the card with the reason. A failure that may
-pass on its own (Claude overloaded, a dropped connection, an unreadable answer) is tried
-once more if enough time is left.
+compared, and the card shows the answer of the latest call asked that has one. Asked
+before the first call's reply has begun, the deeper call waits for it (or for the first call
+to end): Anthropic's prompt cache can be read only once a reply has begun, so sent sooner it
+would pay to write the profiles to the cache a second time. A call has a deadline from the
+table's clock, about five seconds before the hero's time runs out, or 25 seconds after the
+turn began when the table has no clock. A call that misses it, fails or answers nonsense
+leaves the facts on the card with the reason. A failure that may pass on its own (Claude
+overloaded, a dropped connection, an unreadable answer) is tried once more if enough time is
+left.
 
 Every call is appended to data/advice.jsonl once it has ended, however it ended (answered,
 failed, timed out, cancelled, or refused before sending), under pseudonyms: the hand as
@@ -75,6 +78,10 @@ class Call:
         self.started = started
         self.ended: float | None = None  # when it stopped thinking, however it ended
         self.cancelled = threading.Event()
+        # Claude's first event came, or the call stopped thinking: a call asked meanwhile on
+        # the same decision may go now and read the prompt cache this one is writing.
+        self.replied = threading.Event()
+        self.after: list[Call] = []  # calls on the same decision to wait for, as above
         self.state = "thinking"  # thinking, done, failed or cancelled
         self.refused = False  # failed without being sent
         self.answer: Answer | None = None
@@ -213,12 +220,14 @@ class Advisor:
                     self._cancel(old)
                 calls = self._calls[game_id] = []
             call = Call(job, deadline, self._clock())
+            call.after = [c for c in calls if c.state == "thinking" and not c.replied.is_set()]
             calls.append(call)
             if refuse is None and deadline - self._clock() < MIN_SECONDS:
                 refuse = "not enough time on the clock"
             if refuse is not None:
                 call.state, call.reason, call.refused = "failed", refuse, True
                 call.ended = call.started
+                call.replied.set()
             else:
                 self._running.add(call)
         if call.refused:
@@ -291,6 +300,7 @@ class Advisor:
         if call.state == "thinking":
             call.state = "cancelled"
             call.ended = self._clock()
+        call.replied.set()
         call.cancelled.set()
 
     def _watch(self, game_id: str, call: Call) -> None:
@@ -316,6 +326,9 @@ class Advisor:
 
     def _run(self, game_id: str, call: Call) -> None:
         try:
+            for earlier in call.after:  # an Ask deeper waits for the cache, as above
+                while not (earlier.replied.wait(0.02) or call.cancelled.is_set()):
+                    pass
             answer, reason = self._ask(call)
             current = self._finish(game_id, call, answer, reason)
             # Once its last request has ended, so the tokens are known, however it ended.
@@ -325,17 +338,20 @@ class Advisor:
         finally:
             with self._lock:
                 self._running.discard(call)
+            call.replied.set()
             call.over.set()
 
     def _ask(self, call: Call) -> tuple[Answer | None, str | None]:
         """Claude's answer, or why there is none; a failure that may pass is tried once more."""
+        if call.cancelled.is_set():
+            return None, None  # stopped before it was sent
         reason = "internal error"
         for attempt in (1, 2):
             if attempt == 2 and not self._retry(call, reason):
                 break
             call.attempts = attempt
             try:
-                reply = self._provider.run(call.job.request, call.cancelled)
+                reply = self._provider.run(call.job.request, call.cancelled, call.replied)
             except CallFailed as failure:
                 self._record(call, failure.usage)
                 reason = failure.reason
@@ -371,6 +387,7 @@ class Advisor:
             call.state = "done" if answer is not None else "failed"
             call.answer, call.reason = answer, reason
             call.ended = self._clock()
+            call.replied.set()
             return any(c is call for c in self._calls.get(game_id, []))
 
     def _log(self, game_id: str, call: Call) -> None:

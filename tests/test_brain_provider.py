@@ -90,11 +90,46 @@ def test_a_streamed_answer():
         NS(type="message_start", message=NS(usage=USAGE)),
         NS(type="message_delta", usage=NS(output_tokens=120)),
     ]
+    replying = threading.Event()
     reply = AnthropicProvider(client_with(FakeStream(events, message()))).run(
-        request(), threading.Event()
+        request(), threading.Event(), replying
     )
     assert reply.text == '{"strategy": [], "note": ""}'
     assert reply.usage["cache_read_input_tokens"] == 9000
+    assert replying.is_set()
+
+
+def test_claudes_first_event_is_signalled_as_it_arrives():
+    # An Ask deeper waits for it: only then can the request read the prompt cache.
+    replying = threading.Event()
+    seen = []
+
+    class Watched(FakeStream):
+        def __iter__(self):
+            seen.append(replying.is_set())
+            yield NS(type="message_start", message=NS(usage=USAGE))
+            seen.append(replying.is_set())  # before the stream ends: Claude still thinks
+
+    AnthropicProvider(client_with(Watched([], message()))).run(
+        request(), threading.Event(), replying
+    )
+    assert seen == [False, True]
+
+
+def test_no_first_event_is_signalled_when_the_request_fails_before_it():
+    response = httpx2.Response(
+        529, request=httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
+    )
+
+    def stream(**kwargs):
+        raise anthropic.APIStatusError("Overloaded", response=response, body=None)
+
+    replying = threading.Event()
+    with pytest.raises(CallFailed, match="Claude unavailable"):
+        AnthropicProvider(NS(messages=NS(stream=stream))).run(
+            request(), threading.Event(), replying
+        )
+    assert not replying.is_set()
 
 
 def test_a_passed_decision_stops_reading_the_stream():
@@ -256,4 +291,6 @@ def test_the_end_to_end_tests_canned_claude_can_answer_slowly_or_fail(tmp_path):
     with pytest.raises(CallFailed, match=provider.STOPPED):
         claude.run(request(), stopped)
     canned.write_text('{"wait_seconds": 0.01, "reason": "x", "strategy": [], "plan": ""}')
-    assert claude.run(request(), threading.Event()).text == text
+    replying = threading.Event()
+    assert claude.run(request(), threading.Event(), replying).text == text
+    assert replying.is_set()  # Claude's first event comes at once, then it thinks

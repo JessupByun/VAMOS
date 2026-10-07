@@ -75,7 +75,12 @@ class CallFailed(Exception):
 
 
 class Provider(Protocol):
-    def run(self, request: Request, cancelled: threading.Event) -> Reply: ...
+    def run(
+        self,
+        request: Request,
+        cancelled: threading.Event,
+        replying: threading.Event | None = None,  # set at Claude's first event
+    ) -> Reply: ...
 
 
 def api_key() -> str | None:
@@ -141,7 +146,12 @@ class AnthropicProvider:
             self._client = anthropic.Anthropic(api_key=key, max_retries=0, timeout=REQUEST_TIMEOUT)
         return self._client
 
-    def run(self, request: Request, cancelled: threading.Event) -> Reply:
+    def run(
+        self,
+        request: Request,
+        cancelled: threading.Event,
+        replying: threading.Event | None = None,
+    ) -> Reply:
         client = self._client_or_fail()
         usage: dict[str, Any] = {}
         try:
@@ -153,6 +163,8 @@ class AnthropicProvider:
                 watcher.start()
                 try:
                     for event in stream:
+                        if replying is not None:
+                            replying.set()
                         if event.type == "message_start":
                             usage = _usage_dict(event.message.usage)
                         elif event.type == "message_delta" and event.usage is not None:
@@ -245,7 +257,14 @@ class CannedProvider:
     def __init__(self, path: Path):
         self.path = path
 
-    def run(self, request: Request, cancelled: threading.Event) -> Reply:
+    def run(
+        self,
+        request: Request,
+        cancelled: threading.Event,
+        replying: threading.Event | None = None,
+    ) -> Reply:
+        if replying is not None:
+            replying.set()  # Claude's first event comes at once; the answer may take a while
         text = self.path.read_text()
         try:
             canned = json.loads(text)
@@ -260,31 +279,53 @@ class CannedProvider:
         return Reply(json.dumps(canned), "end_turn", {})
 
 
-type Scripted = Reply | CallFailed | tuple[threading.Event, Reply]
+type Scripted = (
+    Reply
+    | CallFailed
+    | tuple[threading.Event, Reply | CallFailed]
+    | tuple[threading.Event, threading.Event, Reply | CallFailed]
+)
 
 
 class FakeProvider:
     """
     A scripted Claude for tests: each call returns (or raises) the next scripted item, or,
-    scripted by preset name, its preset's item whichever call asks first.
+    scripted by preset name, its preset's item whichever call asks first. Claude's first
+    event comes at once. A slow call is scripted as (gate, item), ending once the test opens
+    the gate, or as (first, gate, item), whose first event also waits for `first` and never
+    comes if the gate opens before it.
     """
 
     def __init__(self, script: list[Scripted] | dict[str, Scripted]):
         self.script = dict(script) if isinstance(script, dict) else list(script)
         self.requests: list[Request] = []
 
-    def run(self, request: Request, cancelled: threading.Event) -> Reply:
+    def run(
+        self,
+        request: Request,
+        cancelled: threading.Event,
+        replying: threading.Event | None = None,
+    ) -> Reply:
         self.requests.append(request)
         if isinstance(self.script, dict):
             item = self.script[request.preset.name]
         else:
             item = self.script.pop(0)
+        first: threading.Event | None = None
+        gate: threading.Event | None = None
         if isinstance(item, tuple):
-            # (gate, reply): wait for the test to open the gate, as a slow call would.
-            gate, item = item
-            while not gate.wait(0.01):
-                if cancelled.is_set():
-                    raise CallFailed("stopped: the decision passed")
+            first, gate, item = item if len(item) == 3 else (None, *item)
+
+        def began() -> None:
+            if replying is not None and (first is None or first.is_set()):
+                replying.set()
+
+        began()
+        while gate is not None and not gate.wait(0.01):
+            began()
+            if cancelled.is_set():
+                raise CallFailed(STOPPED)
+        began()
         if isinstance(item, CallFailed):
             raise item
         return item

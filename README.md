@@ -29,6 +29,7 @@ Everything else is maintained by Claude:
 - Preflop, clear spots: simple rules (`Preflop rule`). Trash folds when 3 or more players are dealt in and the price is normal or steeper (not blind against blind, not facing an all-in); the strongest hands raise.
 - Everything else, before or after the flop: Claude Opus 5.5 at low effort (`VAMOS! AI (Claude Opus 5.5 · low)`), with Ask deeper for a medium-effort second answer.
   Both answers run to the end and show one under the other in the side panel, to compare; the card shows the deeper one once it comes.
+  Asked before the first answer has begun to arrive, Ask deeper waits for that moment (usually a second or two), so it reads your opponents' profiles from Claude's prompt cache instead of paying to cache them a second time.
   With less than about 10 seconds left for an answer, Ask deeper still runs but says the deeper answer may not arrive in time.
 - The side panel's Current hand has a "Replay an earlier hand" menu: pick one of this session's hands to open the hand replayer, street by street, with what VAMOS advised next to what you did (x closes it).
   In the menu the session's biggest pots are bold with their pot, results are green or red, and hands where you never called, bet or raised are dimmed.

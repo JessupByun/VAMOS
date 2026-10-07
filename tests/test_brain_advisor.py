@@ -228,6 +228,105 @@ def test_asking_deeper_while_the_first_answer_thinks_lets_both_finish(rig):
     assert len(r.ledger.path.read_text().splitlines()) == 2
 
 
+def held_back(r, count=1):
+    """Claude was sent `count` requests and no more, a moment after asking."""
+    r.sent(count)
+    time.sleep(0.2)
+    return len(r.provider.requests) == count
+
+
+def test_ask_deeper_before_the_first_reply_began_waits_for_it(rig):
+    # Anthropic's prompt cache can be read only once a request's reply has begun: sent before
+    # that, the deeper call would write the profiles to the cache a second time (2026-10-07,
+    # two $0.42 calls on one decision).
+    replying, first = threading.Event(), threading.Event()
+    deeper = answer(("check", 0, 1.0), note="Player A traps")
+    r = rig({"standard": (replying, first, BET), "deep": deeper})
+    r.advisor.start("g", r.job(), r.clock.t + 20)
+    r.sent(1)
+    assert r.advisor.start("g", r.job(preset="deep"), r.clock.t + 20)
+    assert held_back(r)
+    view = r.advisor.view("g", "h1:1:8")
+    assert [(a["preset"], a["state"]) for a in view["answers"]] == [
+        ("standard", "thinking"),
+        ("deep", "thinking"),
+    ]
+    replying.set()  # Claude's first event for the first call: the deeper one goes now
+    r.sent(2)
+    r.updated()
+    first.set()
+    r.updated()
+    view = r.advisor.view("g", "h1:1:8")
+    assert [(a["preset"], a["state"], a["action"]) for a in view["answers"]] == [
+        ("standard", "done", "BET $0.90 (4.5bb)"),
+        ("deep", "done", "CHECK"),
+    ]
+    assert view["action"] == "CHECK"
+
+
+def test_ask_deeper_after_the_first_reply_began_goes_at_once(rig):
+    first = threading.Event()
+    r = rig({"standard": (first, BET), "deep": answer(("check", 0, 1.0))})
+    r.advisor.start("g", r.job(), r.clock.t + 20)
+    r.sent(1)
+    r.advisor.start("g", r.job(preset="deep"), r.clock.t + 20)
+    r.updated()  # the deeper answer, while the first call still thinks
+    assert len(r.provider.requests) == 2
+    first.set()
+
+
+def test_ask_deeper_goes_once_the_first_call_fails_before_its_first_event(rig):
+    never, failing = threading.Event(), threading.Event()
+    r = rig({"standard": (never, failing, CallFailed("rate limited")), "deep": BET})
+    r.advisor.start("g", r.job(), r.clock.t + 20)
+    r.advisor.start("g", r.job(preset="deep"), r.clock.t + 20)
+    assert held_back(r)
+    failing.set()
+    r.updated()
+    r.updated()
+    view = r.advisor.view("g", "h1:1:8")
+    assert [(a["preset"], a["state"], a["reason"]) for a in view["answers"]] == [
+        ("standard", "failed", "rate limited"),
+        ("deep", "done", None),
+    ]
+
+
+def test_ask_deeper_goes_once_the_first_call_times_out_before_its_first_event(rig):
+    never, gate = threading.Event(), threading.Event()
+    r = rig({"standard": (never, gate, BET), "deep": answer(("check", 0, 1.0))})
+    r.advisor.start("g", r.job(), r.clock.t + 10)
+    r.advisor.start("g", r.job(preset="deep"), r.clock.t + 20)
+    assert held_back(r)
+    r.clock.t += 11  # the first call's deadline passes; the deeper one has 9 seconds left
+    r.updated()
+    r.updated()
+    view = r.advisor.view("g", "h1:1:8")
+    assert [(a["preset"], a["state"], a["reason"]) for a in view["answers"]] == [
+        ("standard", "failed", "timed out"),
+        ("deep", "done", None),
+    ]
+    assert len(r.provider.requests) == 2
+
+
+def test_a_deeper_call_still_held_back_when_the_decision_passes_is_never_sent(rig, caplog):
+    caplog.set_level(logging.INFO, logger="vamos.brain")
+    never, gate = threading.Event(), threading.Event()
+    r = rig({"standard": (never, gate, BET), "deep": BET})
+    r.advisor.start("g", r.job(message="Hand so far"), r.clock.t + 20)
+    r.advisor.start("g", r.job(preset="deep", message="Hand so far"), r.clock.t + 20)
+    assert held_back(r)
+    r.advisor.stop("g")  # the hero acted before Claude's first event
+    entries = sorted(r.logged(), key=lambda e: e["preset"])
+    assert [(e["preset"], e["state"], e["attempts"]) for e in entries] == [
+        ("deep", "cancelled", 0),
+        ("standard", "cancelled", 1),
+    ]
+    assert entries[0]["spot"] is None  # never sent, so never replayed
+    assert len(r.provider.requests) == 1
+    [deep] = [line for line in claude_lines(caplog) if "preset=deep" in line]
+    assert deep.endswith("outcome=cancelled seconds=0.00 attempts=0")
+
+
 def test_the_first_answer_shows_on_the_card_while_the_deeper_one_thinks(rig):
     first, deeper = threading.Event(), threading.Event()
     r = rig({"standard": (first, BET), "deep": (deeper, answer(("check", 0, 1.0)))})
@@ -373,7 +472,7 @@ def test_every_call_gets_one_line_in_the_host_log_with_its_tokens(rig, caplog):
 def test_a_call_cancelled_before_claudes_first_event_is_still_logged(rig, caplog):
     caplog.set_level(logging.INFO, logger="vamos.brain")
     gate = threading.Event()
-    r = rig([(gate, BET)])
+    r = rig([(threading.Event(), gate, BET)])
     r.advisor.start("g", r.job(message="Hand so far: Player A checks"), r.clock.t + 20)
     r.clock.t += 1.5
     r.advisor.stop("g")  # the hero acted
@@ -400,8 +499,9 @@ class StoppedAfterFirstEvent:
     def __init__(self):
         self.requests = []
 
-    def run(self, request, cancelled):
+    def run(self, request, cancelled, replying):
         self.requests.append(request)
+        replying.set()
         cancelled.wait(3)
         raise CallFailed(STOPPED, {"input_tokens": 700, "output_tokens": 1})
 
@@ -410,6 +510,7 @@ def test_a_call_cancelled_after_claudes_first_event_is_billed_and_logged(rig):
     r = rig([], provider=StoppedAfterFirstEvent())
     r.advisor.start("g", r.job(), r.clock.t + 20)
     r.advisor.start("g", r.job(preset="deep"), r.clock.t + 20)
+    r.sent(2)
     r.advisor.stop("g")  # the hero acted while both were thinking
     entries = sorted(r.logged(), key=lambda e: e["preset"])  # each logs as its thread ends
     assert [(e["preset"], e["state"], e["dollars"]) for e in entries] == [
