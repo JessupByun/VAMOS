@@ -80,6 +80,79 @@ test("the poller asks only for new rows and delivers each new row once", async (
   expect(harness.recordedPages()[1]?.body.logs).toEqual([harness.logRows()[0]]);
 });
 
+/** How many /log requests each tab makes over three polls' time. */
+async function requestsOver3Polls(...tabs: Page[]): Promise<number[]> {
+  const before = tabs.map((tab) => harness.logRequestsOf(tab).length);
+  await tabs[0]?.waitForTimeout(3 * POLL_MS);
+  return tabs.map((tab, i) => harness.logRequestsOf(tab).length - (before[i] ?? 0));
+}
+
+test("two tabs on one game poll the log once between them, and one takes over when the other goes", async () => {
+  const first = await openTable();
+  await expect.poll(pageCount).toBe(1);
+  const second = await openTable();
+  await expect(second.locator("#vamos-root .action-card")).toContainText("waiting for your turn");
+  const [fromFirst, fromSecond] = await requestsOver3Polls(first, second);
+  expect(fromFirst).toBeGreaterThanOrEqual(2);
+  expect(fromSecond).toBe(0);
+
+  // The polling tab reloads: the other picks the log up after the newest row the backend
+  // holds, and the reloaded tab stays quiet.
+  const newest = harness.logRows()[0]?.created_at;
+  await first.reload();
+  await expect(pillStatus(first)).toHaveText(/^active/);
+  await expect.poll(() => harness.logRequestsOf(second).at(-1)).toBe(`?after_at=${newest}`);
+  const [afterReload, takenOver] = await requestsOver3Polls(first, second);
+  expect(afterReload).toBe(0);
+  expect(takenOver).toBeGreaterThanOrEqual(2);
+
+  // That tab closes too: the reloaded one takes over, and a new row arrives once.
+  await second.close();
+  await expect.poll(() => harness.logRequestsOf(first).at(-1)).toBe(`?after_at=${newest}`);
+  harness.addLogRows(1);
+  await expect.poll(pageCount).toBe(2);
+  expect(harness.recordedPages()[1]?.body.logs).toEqual([harness.logRows()[0]]);
+});
+
+test("a second tab where the hero is not seated does not make VAMOS forget the hero's seat", async () => {
+  const first = await openTable();
+  await expect(badge(first, HERO_ID)).toHaveText("You");
+  const second = await harness.openWatching();
+  await expect(second.locator("#vamos-root .action-card")).toContainText("not seated");
+  // The watching tab has reported its table by now (it looks every 500 ms).
+  await second.waitForTimeout(1500);
+  await expect(badge(first, HERO_ID)).toHaveText("You");
+  await expect(badge(first, KNOWN_ID)).toHaveText("alex");
+  const panel = await harness.context.newPage();
+  await panel.goto(PANEL_URL);
+  await expect(panel.locator(".players li.me")).toHaveCount(1);
+});
+
+test("when PokerNow's log fails, the card and the side panel say why until it answers again", async () => {
+  const page = await openTable();
+  await expect.poll(pageCount).toBe(1);
+  const panel = await harness.context.newPage();
+  await panel.goto(PANEL_URL);
+  const card = page.locator("#vamos-root .action-card");
+  const problem = panel.locator(".log-problem");
+
+  harness.failLog(404);
+  const reason = /PokerNow's log is not answering \(HTTP 404\), retrying in \d+ s/;
+  await expect(card).toContainText(reason);
+  await expect(problem).toHaveText(reason);
+  // At the hero's turn the card says why it is still reading the hand.
+  harness.addLogLines([...HAND_START, `"new guy @ ${STRANGER_ID}" folds`]);
+  await heroTurn(page);
+  await expect(card).toContainText("reading the hand");
+  await expect(card.locator(".warn")).toHaveText(reason);
+
+  // PokerNow answers again: the reason goes, and the hand is read.
+  harness.failLog(null);
+  await expect(card.locator(".source")).toHaveText("VAMOS! AI (Claude Opus 5.5 · low)", { timeout: 20_000 });
+  await expect(problem).toHaveCount(0);
+  await expect(card.locator(".warn")).toHaveCount(0);
+});
+
 test("side panel shows the backend status of an open table", async () => {
   await openTable();
   const panel = await harness.context.newPage();
@@ -741,4 +814,14 @@ test("screenshots of the card and the side panel", async () => {
   await picker.click();
   await panel.screenshot({ path: `${dir}/8-menu-open-light.png` });
   await panel.keyboard.press("Escape");
+  // PokerNow's log stops answering: the card and the panel say why.
+  harness.failLog(502);
+  await expect(card.locator(".warn")).toBeVisible({ timeout: 15_000 });
+  await page.screenshot({ path: `${dir}/9-log-failing-waiting.png` });
+  await panel.locator("header.top").screenshot({ path: `${dir}/9-log-failing-panel-light.png` });
+  await panel.emulateMedia({ colorScheme: "dark" });
+  await panel.locator("header.top").screenshot({ path: `${dir}/9-log-failing-panel-dark.png` });
+  await page.evaluate(() => document.querySelector(".you-player")?.classList.add("decision-current"));
+  await expect(card).toContainText("reading the hand");
+  await card.screenshot({ path: `${dir}/9-log-failing-card.png` });
 });

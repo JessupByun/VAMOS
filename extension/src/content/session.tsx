@@ -1,6 +1,6 @@
 import { render } from "preact";
 
-import type { BackendStatus, ContentToWorker, WorkerToContent } from "../shared/protocol";
+import { type BackendStatus, type ContentToWorker, troubleText, type WorkerToContent } from "../shared/protocol";
 import { ClockEstimate, readTimeBar } from "./dom/clock";
 import { readHero, readSeats, seatsKey } from "./dom/seats";
 import { heroSeat, readHeroTurn, readLayout } from "./dom/table";
@@ -26,6 +26,7 @@ export function startSession(gameId: string): () => void {
     layout: readLayout(document),
     turn: null,
     facts: null,
+    logTrouble: null,
     showCard: true,
     showBadges: true,
   });
@@ -34,7 +35,8 @@ export function startSession(gameId: string): () => void {
   let retryDelay = RECONNECT_MIN_MS;
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
   // Log pages go out only once the backend has said where to pick the log up (the rows it
-  // already holds for this game, from before a refresh or restart).
+  // already holds for this game, from before a refresh or restart). Until then this tab does
+  // not poll: the worker lets one tab per game poll, and a tab waiting its turn never resumes.
   let resumed = false;
   let reportedSeats: string | null = null;
   // The turn key the backend last heard about; undefined until it has heard anything.
@@ -53,7 +55,19 @@ export function startSession(gameId: string): () => void {
   };
   // Pages go out only to a ready backend that has said where to resume, so the cursor never
   // advances past rows the worker had nowhere to deliver.
-  const poller = startLogPoller(gameId, (page) => status().state === "ready" && resumed && send(page));
+  const poller = startLogPoller(
+    gameId,
+    (page) => status().state === "ready" && resumed && send(page),
+    (trouble) => {
+      if (trouble) console.warn(`[VAMOS] ${troubleText(trouble, Date.now())}`);
+      store.set({ logTrouble: trouble });
+      send({ type: "log_status", gameId, trouble });
+    },
+  );
+  const unresume = () => {
+    resumed = false;
+    poller.pause();
+  };
 
   function reportSeats(force = false) {
     const seats = store.get().seats;
@@ -126,7 +140,7 @@ export function startSession(gameId: string): () => void {
     next.onMessage.addListener((message: WorkerToContent) => {
       if (message.type === "backend") {
         retryDelay = RECONNECT_MIN_MS;
-        if (message.state !== "ready") resumed = false;
+        if (message.state !== "ready") unresume();
         const becameReady = message.state === "ready" && status().state !== "ready";
         show(message);
         if (message.state === "ready" && !resumed) send({ type: "resume_request", gameId });
@@ -139,6 +153,10 @@ export function startSession(gameId: string): () => void {
           poller.resume(message.after);
           resumed = true;
         }
+      } else if (message.type === "log_status") {
+        if (message.gameId === gameId) store.set({ logTrouble: message.trouble });
+      } else if (message.type === "poll_soon") {
+        if (message.gameId === gameId) poller.soon();
       } else if (message.type === "settings") {
         store.set({ showCard: message.showCard !== false, showBadges: message.showBadges !== false });
       } else if (message.type === "players") {
@@ -161,8 +179,10 @@ export function startSession(gameId: string): () => void {
       if (port === next) port = null;
       if (stopped) return;
       if (!chrome.runtime?.id) return retire();
-      // The worker stopping also closed the native port, so the backend restarts too.
-      resumed = false;
+      // The worker stopping also closed the native port, so the backend restarts too; and
+      // which tab polls is decided again.
+      unresume();
+      store.set({ logTrouble: null });
       show({ type: "backend", state: "connecting" });
       retryTimer = setTimeout(connect, retryDelay);
       retryDelay = Math.min(retryDelay * 2, RECONNECT_MAX_MS);

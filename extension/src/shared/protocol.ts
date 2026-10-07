@@ -385,7 +385,40 @@ export interface Settings {
   showBadges: boolean;
 }
 
-/** Content script to backend, when it starts polling a game's log (again). */
+/** Why polling a game's log is failing, and when the next request goes out (epoch ms). */
+export interface LogTrouble {
+  /** In plain words, e.g. "PokerNow's log is not answering (HTTP 404)". */
+  problem: string;
+  retryAt: number;
+}
+
+/** The tab polling a game's log, to the worker, the side panel and the game's other tabs. */
+export interface LogStatus {
+  type: "log_status";
+  gameId: string;
+  /** Null once PokerNow answers again. */
+  trouble: LogTrouble | null;
+}
+
+/** "PokerNow's log is not answering (HTTP 404), retrying in 8 s", counted down to `now`. */
+export function troubleText(trouble: LogTrouble, now: number): string {
+  const seconds = Math.ceil((trouble.retryAt - now) / 1000);
+  let wait = "retrying now";
+  if (seconds >= 120) wait = `retrying in ${Math.ceil(seconds / 60)} min`;
+  else if (seconds > 0) wait = `retrying in ${seconds} s`;
+  return `${trouble.problem}, ${wait}`;
+}
+
+/** The hero's turn began in another tab on the game: the polling tab fetches the log now. */
+export interface PollSoon {
+  type: "poll_soon";
+  gameId: string;
+}
+
+/**
+ * Content script to worker, when it would start polling a game's log (again). The worker
+ * passes it on to the backend only from the one tab per game that polls.
+ */
 export interface ResumeRequest {
   type: "resume_request";
   gameId: string;
@@ -425,8 +458,17 @@ export type ContentToWorker =
   | AssignIdentity
   | HeroTurn
   | ClockReport
-  | ResumeRequest;
-export type WorkerToContent = BackendStatus | SnapshotRequest | Players | Facts | Settings | Resume;
+  | ResumeRequest
+  | LogStatus;
+export type WorkerToContent =
+  | BackendStatus
+  | SnapshotRequest
+  | Players
+  | Facts
+  | Settings
+  | Resume
+  | LogStatus
+  | PollSoon;
 export type PanelToWorker =
   | SnapshotRequest
   | AssignIdentity
@@ -450,7 +492,8 @@ export type WorkerToPanel =
   | HandInfo
   | DraftSaved
   | HandHistory
-  | HandDetail;
+  | HandDetail
+  | LogStatus;
 export type HostToWorker =
   | { type: "ready"; version: string; recording: boolean }
   | HostAck

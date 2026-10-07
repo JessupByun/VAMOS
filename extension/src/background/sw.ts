@@ -4,11 +4,13 @@ import {
   type ContentToWorker,
   HOST_NAME,
   type HostToWorker,
+  type LogStatus,
   type PanelToWorker,
   type WorkerToContent,
   type WorkerToPanel,
 } from "../shared/protocol";
 import { HostRetry } from "./retry";
+import { GameTabs } from "./tabs";
 
 // The native host lives as long as a PokerNow table tab is open: it is launched when the
 // first content script connects and the port is closed a short grace after the last one goes
@@ -36,6 +38,10 @@ interface TableMemory {
   last?: WorkerToPanel;
 }
 const tables = new Map<string, TableMemory>();
+// Which tab polls each game's log, and whose reports of the table reach the backend.
+const tabs = new GameTabs<chrome.runtime.Port>();
+// Per game, why its log poller is failing, for tabs and panels that open meanwhile.
+const logTrouble = new Map<string, LogStatus>();
 
 function table(gameId: string): TableMemory {
   let memory = tables.get(gameId);
@@ -64,6 +70,7 @@ function remember(message: HostToWorker) {
 
 function replay(port: chrome.runtime.Port) {
   for (const message of latest.values()) port.postMessage(message);
+  for (const message of logTrouble.values()) port.postMessage(message);
   for (const memory of tables.values()) {
     if (memory.players) port.postMessage(memory.players);
     if (memory.hand) port.postMessage(memory.hand);
@@ -77,6 +84,14 @@ function replay(port: chrome.runtime.Port) {
 chrome.sidePanel
   .setPanelBehavior({ openPanelOnActionClick: true })
   .catch((error: unknown) => console.error("[VAMOS] side panel behavior", error));
+
+/** Tells the side panel and the game's other tabs why its log is failing, or that it is not. */
+function setLogStatus(status: LogStatus, from?: chrome.runtime.Port) {
+  if (status.trouble) logTrouble.set(status.gameId, status);
+  else logTrouble.delete(status.gameId);
+  for (const port of contentPorts) if (port !== from) port.postMessage(status satisfies WorkerToContent);
+  for (const port of panelPorts) port.postMessage(status satisfies WorkerToPanel);
+}
 
 function setStatus(next: BackendStatus) {
   status = next;
@@ -102,18 +117,17 @@ function connectHost() {
         recording: message.recording,
       });
     } else {
+      // Where to pick the log up goes to the one tab polling that game.
+      if (message.type === "resume") {
+        tabs.poller(message.gameId)?.postMessage(message satisfies WorkerToContent);
+        return;
+      }
       remember(message);
-      // Each content script keeps only its own game's players, facts and resume point; the
-      // settings say whether the card is shown.
-      if (
-        message.type === "players" ||
-        message.type === "facts" ||
-        message.type === "resume" ||
-        message.type === "settings"
-      ) {
+      // Each content script keeps only its own game's players and facts; the settings say
+      // whether the card is shown.
+      if (message.type === "players" || message.type === "facts" || message.type === "settings") {
         for (const content of contentPorts) content.postMessage(message satisfies WorkerToContent);
       }
-      if (message.type === "resume") return;
       for (const panel of panelPorts) panel.postMessage(message satisfies WorkerToPanel);
     }
   });
@@ -160,12 +174,39 @@ chrome.runtime.onConnect.addListener((port) => {
     port.postMessage(status satisfies WorkerToContent);
     const settings = latest.get("settings");
     if (settings?.type === "settings") port.postMessage(settings satisfies WorkerToContent);
-    port.onMessage.addListener((message: ContentToWorker) => host?.postMessage(message));
+    for (const trouble of logTrouble.values()) port.postMessage(trouble satisfies WorkerToContent);
+    port.onMessage.addListener((message: ContentToWorker) => {
+      if (message.type === "resume_request") {
+        // Only one tab per game polls; another waits until that one goes.
+        if (tabs.claim(port, message.gameId)) host?.postMessage(message);
+        return;
+      }
+      if (message.type === "log_status") {
+        if (tabs.poller(message.gameId) === port) setLogStatus(message, port);
+        return;
+      }
+      if (message.type === "turn" && message.table !== null) {
+        // The hero's turn began here: the polling tab fetches the rows that led to it now.
+        const poller = tabs.poller(message.gameId);
+        if (poller !== undefined && poller !== port) {
+          poller.postMessage({ type: "poll_soon", gameId: message.gameId } satisfies WorkerToContent);
+        }
+      }
+      if (tabs.passes(port, message)) host?.postMessage(message);
+    });
     port.onDisconnect.addListener(() => {
       // Reading the reason marks it handled; Chrome reports it otherwise (e.g. "moved into
       // back/forward cache" when the user navigates away from the table).
       void chrome.runtime.lastError;
       contentPorts.delete(port);
+      const handover = tabs.close(port);
+      if (handover) {
+        setLogStatus({ type: "log_status", gameId: handover.gameId, trouble: null });
+        // Another tab on the game polls in its place, from where the backend's rows end.
+        if (handover.next !== undefined) {
+          host?.postMessage({ type: "resume_request", gameId: handover.gameId } satisfies ContentToWorker);
+        }
+      }
       if (contentPorts.size > 0) return;
       clearTimeout(closeTimer);
       closeTimer = setTimeout(closeHost, HOST_GRACE_MS);

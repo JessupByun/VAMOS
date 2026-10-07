@@ -6,6 +6,7 @@ import {
   type PlayerInfo,
   type Players,
   type SpotFacts,
+  troubleText,
 } from "../../shared/protocol";
 import { actionClass } from "../../shared/actions";
 import type { SeatElement } from "../dom/seats";
@@ -40,23 +41,26 @@ function statusText(status: BackendStatus): string {
 
 /**
  * Everything VAMOS! shows on the table lives in one spot at the top of the table: the
- * backend's status while there is nothing else to say, the hero's turn when there is.
+ * backend's status while there is nothing else to say, the hero's turn when there is, and
+ * why PokerNow's log is failing whenever it is (re-rendered with the seats, so it counts down).
  */
 function ActionCard({ store }: { store: Store }) {
-  const { status, heroSeat, layout, turn, facts, showCard } = useStore(store);
+  const { status, heroSeat, layout, turn, facts, showCard, logTrouble } = useStore(store);
   if (!showCard) return null;
   const ready = status.state === "ready";
+  const problem = logTrouble && troubleText(logTrouble, Date.now());
   let body;
   if (!ready || !heroSeat || turn === null) {
     body = (
       <div class={`action-card waiting ${status.state}`}>
         <span class="brand">{BRAND}</span>
         <span class="status">{statusText(status)}</span>
-        {ready && <span class="wait">· {heroSeat ? "waiting for your turn" : "not seated"}</span>}
+        {ready && problem && <span class="wait warn">· {problem}</span>}
+        {ready && !problem && <span class="wait">· {heroSeat ? "waiting for your turn" : "not seated"}</span>}
       </div>
     );
   } else {
-    body = <CardBody turn={turn} facts={facts} />;
+    body = <CardBody turn={turn} facts={facts} problem={problem} />;
   }
   return (
     <div class="card-slot" style={placed(layout)}>
@@ -78,7 +82,7 @@ export function forTurn(
   return facts.facts ? { facts: facts.facts } : null;
 }
 
-function CardBody({ turn, facts }: { turn: string; facts: Facts | null }) {
+function CardBody({ turn, facts, problem }: { turn: string; facts: Facts | null; problem: string | null }) {
   const shown = forTurn(turn, facts);
   if (shown && "error" in shown) {
     return (
@@ -95,6 +99,7 @@ function CardBody({ turn, facts }: { turn: string; facts: Facts | null }) {
       <div class="action-card neutral">
         <Source kind="neutral" label={BRAND} />
         <div class="line syncing">reading the hand...</div>
+        {problem && <div class="line note warn">{problem}</div>}
       </div>
     );
   }

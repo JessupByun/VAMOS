@@ -2,7 +2,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wr
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-import { type BrowserContext, chromium, type Route } from "@playwright/test";
+import { type BrowserContext, chromium, type Page, type Route } from "@playwright/test";
 
 // End-to-end harness: a throwaway Chrome for Testing profile with the built extension
 // loaded, the real Python native host registered inside that profile, and PokerNow served
@@ -28,6 +28,8 @@ function seat(position: number, name: string, id: string, extra = "") {
 
 const DECISIONS = `<div class="game-decisions-ctn" style="position:absolute;right:20px;bottom:20px;width:300px;height:80px"><button class="action-button fold">Fold</button></div>`;
 const TABLE_HTML = `<div class="table">${seat(1, "TestHero", HERO_ID, "you-player")}${seat(2, "alex", KNOWN_ID)}${seat(3, "new guy", STRANGER_ID)}</div>${DECISIONS}`;
+// The same table as a tab where the hero is not seated sees it: the hero's seat is just a seat.
+const WATCHING_HTML = TABLE_HTML.replace(" you-player", "");
 
 // Profiles get the first pseudonyms, so alex is "Player A" in every prompt.
 const CLAUDE_ANSWER = JSON.stringify({
@@ -91,6 +93,12 @@ export interface Harness {
   logRows: () => LogRow[];
   /** Query strings of every /log request the extension made, in order. */
   logRequests: () => string[];
+  /** The same, made from one tab. */
+  logRequestsOf: (page: Page) => string[];
+  /** Answer every /log request with this HTTP status from now on, or normally again with null. */
+  failLog: (status: number | null) => void;
+  /** Open the game in a new tab that shows the table without the hero seated. */
+  openWatching: () => Promise<Page>;
   hostLog: () => string;
   hostStarts: () => number;
   latestHostPid: () => number | null;
@@ -143,13 +151,19 @@ export async function launch(): Promise<Harness> {
   const addLogRows = (count: number) =>
     addLogLines(Array.from({ length: count }, (_, i) => `The game's ante was changed from 0 to ${i}.`));
   addLogRows(2);
-  const requests: string[] = [];
+  const requests: { query: string; page: Page }[] = [];
+  let failStatus: number | null = null;
+  const watching = new Set<Page>();
 
   // Mirrors PokerNow's /log: exclusive created_at bounds, newest first, at most 50 rows.
   async function fakePokerNow(route: Route) {
     const url = new URL(route.request().url());
     if (url.pathname === `/games/${GAME_ID}/log`) {
-      requests.push(url.search);
+      requests.push({ query: url.search, page: route.request().frame().page() });
+      if (failStatus !== null) {
+        // Like a Cloudflare error page: HTML, not JSON.
+        return route.fulfill({ status: failStatus, contentType: "text/html", body: page("<h1>Error</h1>") });
+      }
       const after = url.searchParams.get("after_at");
       const before = url.searchParams.get("before_at");
       const logs = rows
@@ -162,7 +176,8 @@ export async function launch(): Promise<Harness> {
       return route.fulfill({ json: { logs, infos: { min: null, max: null } } });
     }
     if (url.pathname === `/games/${GAME_ID}`) {
-      return route.fulfill({ contentType: "text/html", body: page(TABLE_HTML) });
+      const html = watching.has(route.request().frame().page()) ? WATCHING_HTML : TABLE_HTML;
+      return route.fulfill({ contentType: "text/html", body: page(html) });
     }
     if (url.pathname === "/start-game") {
       return route.fulfill({ contentType: "text/html", body: page(START_HTML) });
@@ -187,7 +202,17 @@ export async function launch(): Promise<Harness> {
     addLogLines,
     dataDir,
     logRows: () => [...rows],
-    logRequests: () => [...requests],
+    logRequests: () => requests.map((r) => r.query),
+    logRequestsOf: (tab) => requests.filter((r) => r.page === tab).map((r) => r.query),
+    failLog: (status) => {
+      failStatus = status;
+    },
+    openWatching: async () => {
+      const tab = await context.newPage();
+      watching.add(tab);
+      await tab.goto(`${ORIGIN}/games/${GAME_ID}`);
+      return tab;
+    },
     hostLog,
     hostStarts: () => [...hostLog().matchAll(/host \S+ started/g)].length,
     latestHostPid: () => {

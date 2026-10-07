@@ -34,7 +34,8 @@ Everything else is maintained by Claude:
 - The side panel's switches: AI Advice (with it off no Claude call is made; the preflop rules and chart still answer), VAMOS! HUD (the card on the table) and Per-Player Stats (the badges under each seat).
 - The side panel's API costs count the Claude calls VAMOS records (`data/costs.jsonl`).
   The Anthropic Console is exact: it counts anything else that uses your API key, and any charge for calls VAMOS stopped before Claude's first reply (whether those are billed is unverified; VAMOS logs them in `data/advice.jsonl` without a cost).
-- Problems are said, never hidden: the side panel counts the log lines VAMOS could not read this session (each one is in `data/logs/host.log`), and if `data/identity.json` (your seat matches) is ever damaged, VAMOS keeps it aside as `identity.damaged-<date>-<time>.json`, starts without it and says so under Players.
+- Problems are said, never hidden: when PokerNow's log stops answering, the card and the side panel say why and when VAMOS tries again (for example "PokerNow's log is not answering (HTTP 404), retrying in 8 s"); the side panel counts the log lines VAMOS could not read this session (each one is in `data/logs/host.log`), and if `data/identity.json` (your seat matches) is ever damaged, VAMOS keeps it aside as `identity.damaged-<date>-<time>.json`, starts without it and says so under Players.
+- A game open in two tabs is read from one of them, so PokerNow is asked no more often than with one tab; when that tab closes or reloads, the other takes over.
 - Amounts show in dollars and big blinds, e.g. `RAISE TO $0.60 (3bb)`.
 - Claude sees opponents only under pseudonyms (Player A, Player B, ...); no real name or nickname is sent.
 

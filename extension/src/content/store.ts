@@ -1,6 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
 
-import type { BackendStatus, Facts, Players } from "../shared/protocol";
+import type { BackendStatus, Facts, LogTrouble, Players } from "../shared/protocol";
 import type { SeatElement } from "./dom/seats";
 import type { Layout } from "./ui/placement";
 
@@ -15,6 +15,8 @@ export interface ViewState {
   /** The key of the table at the hero's turn, or null when it is not the hero's turn. */
   turn: string | null;
   facts: Facts | null;
+  /** Why PokerNow's log is failing for this game, or null while it answers. */
+  logTrouble: LogTrouble | null;
   /** The action card shown on the table; switched in the side panel. */
   showCard: boolean;
   /** The players' badges shown under their seats; switched in the side panel. */

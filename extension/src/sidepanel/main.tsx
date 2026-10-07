@@ -12,6 +12,7 @@ import {
   type HistoryEntry,
   type HostAck,
   isClaude,
+  type LogTrouble,
   type PanelToWorker,
   type PlayerInfo,
   type Players,
@@ -21,6 +22,7 @@ import {
   type ProfileView,
   type Settings,
   type TonightRead,
+  troubleText,
   type WorkerToPanel,
 } from "../shared/protocol";
 import "./panel.css";
@@ -66,6 +68,8 @@ const replays = new Map<string, HandDetail>();
 // Where each player's draft was last saved this session.
 const savedDrafts = new Map<string, string>();
 const playersByGame = new Map<string, Players>();
+// Per table, why PokerNow's log is failing, while it is.
+const logTroubles = new Map<string, LogTrouble>();
 // The table last heard from; a table with a live decision is shown before it.
 let lastGame: string | null = null;
 let retryDelay = RECONNECT_MIN_MS;
@@ -134,6 +138,7 @@ function connect() {
         histories.clear();
         pickedHand.clear();
         replays.clear();
+        logTroubles.clear();
       }
       if (becameReady) resendNotes();
     } else if (message.type === "players") {
@@ -150,7 +155,10 @@ function connect() {
       onFacts(message.gameId, message.facts?.node ?? null, message.facts?.advice ?? null);
     } else if (message.type === "history") histories.set(message.gameId, message.hands);
     else if (message.type === "hand_detail") replays.set(`${message.gameId}:${message.key}`, message);
-    else acks = [message, ...acks].slice(0, 20);
+    else if (message.type === "log_status") {
+      if (message.trouble) logTroubles.set(message.gameId, message.trouble);
+      else logTroubles.delete(message.gameId);
+    } else acks = [message, ...acks].slice(0, 20);
     notifyAll();
   });
   next.onDisconnect.addListener(() => {
@@ -180,7 +188,9 @@ function useWorkerState() {
   const game = shownGame();
   const hand = game ? (hands.get(game) ?? null) : null;
   const players = game ? (playersByGame.get(game) ?? null) : null;
-  return { status, acks, players, settings, costs, hand };
+  // Before any table has said who sits there, a failing log is still worth saying.
+  const logTrouble = (game ? logTroubles.get(game) : logTroubles.values().next().value) ?? null;
+  return { status, acks, players, settings, costs, hand, logTrouble };
 }
 
 const send = (message: PanelToWorker) => port?.postMessage(message);
@@ -967,6 +977,20 @@ function UnreadRows({ count }: { count: number }) {
   );
 }
 
+/** Why PokerNow's log is failing for the shown table, counted down to the next try. */
+function LogProblem({ trouble }: { trouble: LogTrouble }) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setTick((n) => n + 1), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  return (
+    <p class="log-problem" role="status">
+      {troubleText(trouble, Date.now())}
+    </p>
+  );
+}
+
 /** The wordmark's poker chip, edged along the action colors. */
 function Chip() {
   return (
@@ -1005,7 +1029,7 @@ function Switch(props: { label: string; on: boolean; hint: string; onChange: (on
 }
 
 function Panel() {
-  const { status, acks, players, settings, costs, hand } = useWorkerState();
+  const { status, acks, players, settings, costs, hand, logTrouble } = useWorkerState();
   const requestSnapshot = () => send({ type: "snapshot_request" });
   const state = status.state === "ready" ? "active" : status.state;
 
@@ -1022,6 +1046,7 @@ function Panel() {
             {status.detail ? ` · ${status.detail}` : ""}
           </span>
         </div>
+        {logTrouble && <LogProblem trouble={logTrouble} />}
         {settings && (
           <div class="switches">
             <Switch
