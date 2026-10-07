@@ -67,6 +67,34 @@ Player stacks: {roster("A", "B", "C")}
     assert positions(h) == {"BBBBBBBBBB": "SB", "CCCCCCCCCC": "BB", "AAAAAAAAAA": "BTN"}
 
 
+@pytest.mark.parametrize(
+    ("seats", "small", "big"),
+    [
+        ((1, 3), "A", "C"),
+        ((1, 3), "C", "A"),
+        ((4, 2), "A", "C"),
+        ((1, 3), None, "A"),  # the small blind is dead too
+    ],
+)
+def test_heads_up_with_a_dead_button_plays_as_heads_up(seats, small, big):
+    # The two players left are heads-up: the one who is not the big blind is the button and
+    # acts first before the flop and last after it.
+    button = "C" if big == "A" else "A"
+    blinds = (
+        f"{P[small]} posts a small blind of 10\n" if small else "Dead Small Blind\n"
+    ) + f"{P[big]} posts a big blind of 20\n"
+    text = (
+        "-- starting hand #9 (id: h9)  No Limit Texas Hold'em (dead button) --\n"
+        f"Player stacks: #{seats[0]} {P['A']} (1000) | #{seats[1]} {P['C']} (1000)\n" + blinds
+    )
+    h = hand(text)
+    assert positions(h) == {button * 10: "BTN", big * 10: "BB"}
+    assert to_act(h) == button * 10
+    flop = text + f"{P[button]} calls 20\n{P[big]} checks\nFlop:  [K♠, 7♦, 2♣]\n"
+    assert to_act(hand(flop)) == big * 10
+    assert to_act(hand(flop + f"{P[big]} checks\n")) == button * 10
+
+
 def test_dead_small_blind_three_handed_labels_the_poster_bb_and_nobody_sb():
     # B's seat, the small blind's, is empty; C posts the big blind one seat after the button.
     text = f"""\

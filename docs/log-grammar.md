@@ -851,6 +851,7 @@ The player "Harry @ Q4OMcL0rqd" rebought. New stack 1000.
 - Seating and admin rows interleave mid-hand and must neither end nor alter the current hand.
 - Build the roster only from `Player stacks`, since `joined` rows can precede it inside the hand.
 - Positions come from physical seats over dealt-in players with the dealer token as anchor, and fall back to the big blind poster on `(dead button)` or after `Dead Small Blind`.
+- Heads-up with `(dead button)`, VAMOS makes the player who is not the big blind the button, first to act before the flop and last after it, as in any heads-up hand; no such hand is in J, R or S, so this order is unverified.
 - Showdown comes from counting players who never folded, because all-in shows arrive before the remaining board rows.
 - A hand can have many `collected` rows (side pots, runs, boards, splits), so never assume one winner.
 - A pot regex must require `from pot`, because `collected N from the 7-2 bounty` shares the prefix.
@@ -869,6 +870,7 @@ The player "Harry @ Q4OMcL0rqd" rebought. New stack 1000.
 - 2026 ante rows, to settle `posts an ante of` versus `posts a ante of`, plus an all-in ante.
 - Bomb pot hands, to capture the forced-bet wording and confirm the hand skips blinds.
 - A login mid-session, to record the ID-change row and learn which ID the token carries.
+- A heads-up hand with `(dead button)` (the player due the button leaves a 3-handed table), to confirm who acts first after the flop.
 - A table set to always run it twice, to record the forced run-it-twice row in an export.
 - Cents-mode betting rows in the 2026 format.
 - A table with `Simulated Fee` on, to learn whether a fee row appears and whether pots still balance.

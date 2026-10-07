@@ -3,8 +3,10 @@ The hero's decision, as the log describes it: position, the price, the pot and t
 
 Action order runs in rising seat number from the button (verified across the corpus), so
 positions come from physical seats, anchored on the button. With a dead button the big
-blind anchors them instead, and with a dead small blind the big blind poster is labeled BB
-and the empty small blind seat's label goes to nobody.
+blind anchors them instead (heads-up, the other player is the button, as in any heads-up
+hand: an assumption, since no real heads-up hand with a dead button has been seen), and with
+a dead small blind the big blind poster is labeled BB and the empty small blind seat's label
+goes to nobody.
 """
 
 from collections.abc import Sequence
@@ -38,8 +40,10 @@ def seat_order(hand: Hand) -> list[str]:
         if big_blind not in ids:
             return []
         # The empty button seat sits before the small blind (or before the big blind when
-        # the small blind is dead too); label the player before it as the button.
-        offset = 2 if any(a.kind == "post_sb" for a in hand.actions) else 1
+        # the small blind is dead too); label the player before it as the button. Heads-up,
+        # the player who is not the big blind is the button, as in any heads-up hand.
+        small_blind = any(a.kind == "post_sb" for a in hand.actions)
+        offset = 2 if small_blind and len(ids) > 2 else 1
         button = (ids.index(big_blind) - offset) % len(ids)
     return ids[button + 1 :] + ids[: button + 1]
 
