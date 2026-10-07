@@ -6,7 +6,7 @@ import re
 import struct
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -867,6 +867,42 @@ def test_earlier_hands_replay_with_the_advice_given_even_after_a_restart(tmp_pat
     again.handle({**SEATS, "hero": {"id": "heroid0001", "name": "Hero"}})
     again.handle(page(*finished))
     assert replay(again) == expected
+
+
+def test_decision_records_say_when_the_card_showed_them_and_when_the_advice_changed(tmp_path):
+    gate = threading.Event()
+    profiles = tmp_path / "profiles"
+    profiles.mkdir()
+    fake = FakeProvider([(gate, Reply(BET_HALF, "end_turn", {}))])
+    now = [datetime(2026, 10, 7, 21, 0, 0, 125000).astimezone()]
+    backend = Backend(tmp_path / "data", profiles, provider=fake, now=lambda: now[0])
+    sent = queue.Queue()
+    backend.emit = sent.put
+    backend.handle(page(*FLOP_HAND))
+    backend.handle(FLOP_TURN)  # the card shows the spot while Claude thinks
+    now[0] += timedelta(seconds=1)
+    backend.handle({**FLOP_TURN, "key": "k3"})  # the same advice: nothing new to record
+    now[0] += timedelta(seconds=2.5)
+    gate.set()
+    while sent.get(timeout=3)["type"] != "facts":
+        pass
+    path = tmp_path / "data" / "games" / f"{GAME}.decisions.jsonl"
+    records = [json.loads(line) for line in path.read_text().splitlines()]
+    assert [r["advice"]["state"] for r in records] == ["thinking", "done"]
+    # To the millisecond, with the time zone, to set against the log rows' times.
+    shown = (now[0] - timedelta(seconds=3.5)).isoformat(timespec="milliseconds")
+    assert re.fullmatch(r"2026-10-07T21:00:00\.125[+-]\d\d:\d\d", shown)
+    assert [r["shownAt"] for r in records] == [shown, shown]
+    assert [r["at"] for r in records] == [shown, now[0].isoformat(timespec="milliseconds")]
+
+    # A restarted backend asks again: a new record, still shown since the first one.
+    again, _ = claude_backend_with_data(tmp_path, [(threading.Event(), Reply(BET_HALF, "", {}))])
+    again.handle(page(*FLOP_HAND))
+    again.handle(FLOP_TURN)
+    last = json.loads(path.read_text().splitlines()[-1])
+    assert (last["advice"]["state"], last["shownAt"]) == ("thinking", shown)
+    assert last["at"] != shown
+    again.advisor.close()
 
 
 def test_a_failed_decision_record_leaves_the_card_its_advice(tmp_path, monkeypatch, caplog):

@@ -573,6 +573,16 @@ test("after the flop the card shows Claude's answer and the panel its reasoning"
   await expect(card.locator(".action")).toHaveText("BET $0.40 (2bb)");
   await expect(panel.locator(".decision .street")).toHaveText(["Flop", "Turn"]);
   await expect(panel.locator(".decision.live .street")).toHaveText("Turn");
+
+  // Each decision record says when the card first showed the spot and when its advice changed.
+  const records = readFileSync(join(harness.dataDir, `games/${GAME_ID}.decisions.jsonl`), "utf8")
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line) as { node: string; shownAt: string; at: string });
+  const flop = records.filter((r) => r.node === records.find((f) => f.node.split(":")[1] === "1")?.node);
+  expect(flop.length).toBeGreaterThan(1); // thinking, then answered, then asked deeper
+  expect(new Set(flop.map((r) => r.shownAt)).size).toBe(1);
+  for (const r of records) expect(Date.parse(r.at)).toBeGreaterThanOrEqual(Date.parse(r.shownAt));
 });
 
 // Not a check: screenshots of the card and side panel for reviewing the design by eye.

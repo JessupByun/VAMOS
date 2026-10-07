@@ -58,6 +58,7 @@ class Backend:
         record: bool = False,
         provider: Provider | None = None,
         clock: Callable[[], float] = time.monotonic,
+        now: Callable[[], datetime] = lambda: datetime.now().astimezone(),
     ):
         self.data_dir = data_dir
         self.profiles_dir = profiles_dir
@@ -86,6 +87,7 @@ class Backend:
         self.lock = threading.RLock()
         self.emit: Callable[[Message], None] = lambda message: None
         self.clock = clock
+        self.now = now  # wall time with its zone, for the decision records
         self.ledger = Ledger(data_dir / "costs.jsonl")
         self.advice_log = data_dir / "advice.jsonl"
         self.advisor = Advisor(
@@ -356,8 +358,15 @@ class Backend:
             "aiOff": bool(payload.get("aiOff")),
         }
         held = self._decisions.setdefault(game_id, {})
-        if held.get(node) == record:
+        previous = held.get(node)
+        if previous is not None and {k: previous.get(k) for k in record} == record:
             return
+        # When the card first showed this decision and when this version of it was sent, to
+        # the millisecond with the time zone, so whether an answer came before the hero acted
+        # can be read against the log rows' times. Unknown for a decision recorded before.
+        at = self.now().isoformat(timespec="milliseconds")
+        record["shownAt"] = previous.get("shownAt") if previous is not None else at
+        record["at"] = at
         held[node] = record
         path = self._game_file(game_id, ".decisions.jsonl")
         if path is None:
