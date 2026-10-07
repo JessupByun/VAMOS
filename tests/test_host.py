@@ -12,7 +12,7 @@ import pytest
 
 from vamos.brain.provider import FakeProvider, Reply
 from vamos.config import VERSION
-from vamos.host.framing import MAX_OUTGOING_BYTES, read_message, write_message
+from vamos.host.framing import MAX_OUTGOING_BYTES, BadMessage, read_message, write_message
 from vamos.host.install import EXTENSION_ID, HOST_NAME, install
 from vamos.host.server import Backend, serve
 
@@ -40,6 +40,14 @@ def test_framing_round_trip():
 @pytest.mark.parametrize("data", [b"", b"\x05\x00", struct.pack("<I", 10) + b"{}"])
 def test_read_message_returns_none_on_closed_or_truncated_pipe(data):
     assert read_message(io.BytesIO(data)) is None
+
+
+@pytest.mark.parametrize("body", [b"{oops", b"\xff\xfe", b"[" * 100_000])
+def test_a_message_that_is_not_json_is_refused_and_the_next_one_still_read(body):
+    stream = io.BytesIO(struct.pack("<I", len(body)) + body + frame({"type": "hello"}))
+    with pytest.raises(BadMessage, match=f"{len(body)}-byte message is not JSON"):
+        read_message(stream)
+    assert read_message(stream) == {"type": "hello"}
 
 
 def test_write_message_refuses_oversized_messages():
@@ -173,6 +181,14 @@ def test_serve_survives_a_bad_message(backend):
     stdout = io.BytesIO()
     serve(stdin, stdout, backend)
     assert [m["type"] for m in read_all(stdout)] == ["ready", "settings", "costs"]
+
+
+def test_serve_skips_a_message_that_is_not_json(backend, caplog):
+    stdin = io.BytesIO(struct.pack("<I", 5) + b"{oops" + frame({"type": "hello"}))
+    stdout = io.BytesIO()
+    serve(stdin, stdout, backend)
+    assert [m["type"] for m in read_all(stdout)] == ["ready", "settings", "costs"]
+    assert "[VAMOS] skipped a message from Chrome: 5-byte message is not JSON" in caplog.text
 
 
 def test_install_writes_launcher_and_manifest(tmp_path):

@@ -11,8 +11,12 @@ from typing import Any, BinaryIO
 MAX_OUTGOING_BYTES = 1024 * 1024
 
 
+class BadMessage(ValueError):
+    """A message whose body is not JSON. It was read whole, so the next one can still be read."""
+
+
 def read_message(stream: BinaryIO) -> Any | None:
-    """The next message, or None once Chrome closes the pipe."""
+    """The next message, or None once Chrome closes the pipe; BadMessage if it is not JSON."""
     header = stream.read(4)
     if len(header) < 4:
         return None
@@ -20,7 +24,10 @@ def read_message(stream: BinaryIO) -> Any | None:
     body = stream.read(length)
     if len(body) < length:
         return None
-    return json.loads(body)
+    try:
+        return json.loads(body)
+    except (ValueError, RecursionError) as error:
+        raise BadMessage(f"{length}-byte message is not JSON ({error})") from error
 
 
 def write_message(stream: BinaryIO, message: Any) -> None:

@@ -36,7 +36,7 @@ from vamos.engine.facts import TableView, current_spot, facts, format_money
 from vamos.engine.madehand import describe
 from vamos.engine.state import Decision, positions
 from vamos.history import hand_detail, hand_list, net
-from vamos.host.framing import read_message, write_message
+from vamos.host.framing import BadMessage, read_message, write_message
 from vamos.identity import IdentityMap, Resolution
 from vamos.jsonl import append_lines
 from vamos.log.hands import Hand, HandLog, Street
@@ -1065,7 +1065,16 @@ def serve(stdin: BinaryIO, stdout: BinaryIO, backend: Backend) -> None:
             log.exception("[VAMOS] could not send %r", message.get("type"))
 
     backend.emit = emit
-    while (message := read_message(stdin)) is not None:
+    while True:
+        try:
+            message = read_message(stdin)
+        except BadMessage as error:
+            # One unreadable message must not end the backend: Chrome would only start it
+            # again, and a message that keeps coming would make that a loop.
+            log.error("[VAMOS] skipped a message from Chrome: %s", error)
+            continue
+        if message is None:
+            break
         # Replies go out under the same lock as Claude's updates, so an older state of the
         # card can never be sent after a newer one.
         with backend.lock:
