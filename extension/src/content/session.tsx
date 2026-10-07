@@ -36,7 +36,8 @@ export function startSession(gameId: string): () => void {
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
   // Log pages go out only once the backend has said where to pick the log up (the rows it
   // already holds for this game, from before a refresh or restart). Until then this tab does
-  // not poll: the worker lets one tab per game poll, and a tab waiting its turn never resumes.
+  // not poll: the worker lets one tab per game poll, and a tab waiting its turn never resumes
+  // until the worker hands polling to it.
   let resumed = false;
   let reportedSeats: string | null = null;
   // The turn key the backend last heard about; undefined until it has heard anything.
@@ -68,6 +69,9 @@ export function startSession(gameId: string): () => void {
     resumed = false;
     poller.pause();
   };
+  // Chrome slows a hidden tab's timers, so the worker hands polling to a tab the user looks at.
+  const reportVisibility = () => send({ type: "visibility", gameId, visible: document.visibilityState === "visible" });
+  document.addEventListener("visibilitychange", reportVisibility);
 
   function reportSeats(force = false) {
     const seats = store.get().seats;
@@ -128,6 +132,7 @@ export function startSession(gameId: string): () => void {
     poller.stop();
     clearInterval(seatTimer);
     window.removeEventListener("resize", relayout);
+    document.removeEventListener("visibilitychange", reportVisibility);
     show({ type: "backend", state: "down", detail: "VAMOS was updated, refresh this tab" });
   };
 
@@ -150,9 +155,12 @@ export function startSession(gameId: string): () => void {
         }
       } else if (message.type === "resume") {
         if (message.gameId === gameId) {
-          poller.resume(message.after);
+          poller.resume(message.after, message.handedOverAt);
           resumed = true;
         }
+      } else if (message.type === "poll_stop") {
+        // Another tab on the game polls from now on.
+        if (message.gameId === gameId) unresume();
       } else if (message.type === "log_status") {
         if (message.gameId === gameId) store.set({ logTrouble: message.trouble });
       } else if (message.type === "poll_soon") {
@@ -172,6 +180,7 @@ export function startSession(gameId: string): () => void {
         });
       }
     });
+    reportVisibility();
     next.onDisconnect.addListener(() => {
       // Reading the reason marks it handled (it is set when the worker restarts or the page
       // enters the back/forward cache); Chrome reports an unread one as an error.
@@ -213,6 +222,7 @@ export function startSession(gameId: string): () => void {
     clearTimeout(retryTimer);
     clearInterval(seatTimer);
     window.removeEventListener("resize", relayout);
+    document.removeEventListener("visibilitychange", reportVisibility);
     poller.stop();
     port?.disconnect();
     port = null;

@@ -99,6 +99,8 @@ export interface Harness {
   failLog: (status: number | null) => void;
   /** Open the game in a new tab that shows the table without the hero seated. */
   openWatching: () => Promise<Page>;
+  /** Show or hide a tab to VAMOS, as Chrome does when the user switches tabs or windows. */
+  setVisible: (page: Page, visible: boolean) => Promise<void>;
   hostLog: () => string;
   hostStarts: () => number;
   latestHostPid: () => number | null;
@@ -222,6 +224,24 @@ export async function launch(): Promise<Harness> {
       watching.add(tab);
       await tab.goto(`${ORIGIN}/games/${GAME_ID}`);
       return tab;
+    },
+    setVisible: async (tab, visible) => {
+      // Headless Chrome reports every tab visible, even with another in front or its window
+      // minimized. So the page's visibility is stubbed where the content script reads it: in
+      // its own isolated world, which Playwright's evaluate does not reach.
+      const cdp = await context.newCDPSession(tab);
+      const worlds: { id: number; origin: string }[] = [];
+      cdp.on("Runtime.executionContextCreated", ({ context: world }) => worlds.push(world));
+      await cdp.send("Runtime.enable");
+      const vamos = worlds.filter((world) => world.origin === `chrome-extension://${EXTENSION_ID}`).at(-1);
+      if (vamos === undefined) throw new Error("VAMOS's content script is not running in this tab");
+      const state = visible ? "visible" : "hidden";
+      await cdp.send("Runtime.evaluate", {
+        contextId: vamos.id,
+        expression: `Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "${state}" });
+          document.dispatchEvent(new Event("visibilitychange"));`,
+      });
+      await cdp.detach();
     },
     hostLog,
     hostStarts: () => [...hostLog().matchAll(/host \S+ started/g)].length,

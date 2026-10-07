@@ -44,7 +44,7 @@ Everything else is maintained by Claude:
   A missing or rejected API key, or running out of API credits, shows as a yellow line at the top of the side panel until a call gets through again.
   When Chrome cannot start the backend, the card and the side panel say to run `uv run vamos install` in this folder and then reload VAMOS.
   A Save draft or a hand replay that fails says why, or that the backend did not answer.
-- A game open in two tabs is read from one of them, so PokerNow is asked no more often than with one tab; when that tab closes or reloads, the other takes over.
+- A game open in two tabs is read from one of them, so PokerNow is asked no more often than with one tab; the other takes over when that tab closes or reloads, and when you switch to the other tab (Chrome slows down tabs you are not looking at) or your turn shows there while the reading tab is out of sight.
 - Amounts show in dollars and big blinds, e.g. `RAISE TO $0.60 (3bb)`.
 - Claude sees opponents only under pseudonyms (Player A, Player B, ...); no real name or nickname is sent.
 

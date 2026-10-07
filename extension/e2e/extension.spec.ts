@@ -123,6 +123,49 @@ test("two tabs on one game poll the log once between them, and one takes over wh
   expect(harness.recordedPages()[1]?.body.logs).toEqual([harness.logRows()[0]]);
 });
 
+test("polling follows the tab the user looks at, or the one showing the hero's turn", async () => {
+  test.setTimeout(60_000);
+  const first = await openTable();
+  await expect.poll(pageCount).toBe(1);
+  const second = await openTable();
+  await expect(second.locator("#vamos-root .action-card")).toContainText("waiting for your turn");
+
+  // The user switches to the second tab. Chrome would slow the hidden first tab's polling to
+  // about once a minute, so the second picks the log up after the newest row the backend holds.
+  let newest = harness.logRows()[0]?.created_at;
+  await harness.setVisible(first, false);
+  await harness.setVisible(second, true);
+  await expect.poll(() => harness.logRequestsOf(second).at(-1)).toBe(`?after_at=${newest}`);
+  const [hidden, shown] = await requestsOver3Polls(first, second);
+  expect(hidden).toBe(0);
+  expect(shown).toBeGreaterThanOrEqual(2);
+  harness.addLogRows(1);
+  await expect.poll(pageCount).toBe(2);
+  expect(harness.recordedPages()[1]?.body.logs).toEqual([harness.logRows()[0]]);
+
+  // And back to the first tab.
+  newest = harness.logRows()[0]?.created_at;
+  await harness.setVisible(second, false);
+  await harness.setVisible(first, true);
+  await expect.poll(() => harness.logRequestsOf(first).at(-1)).toBe(`?after_at=${newest}`);
+  const [back, away] = await requestsOver3Polls(first, second);
+  expect(back).toBeGreaterThanOrEqual(2);
+  expect(away).toBe(0);
+
+  // Both hidden (the user is in another window): the first goes on polling, until the hero's
+  // turn shows in the second, which then reads the hand.
+  await harness.setVisible(first, false);
+  const [stays, waits] = await requestsOver3Polls(first, second);
+  expect(stays).toBeGreaterThanOrEqual(2);
+  expect(waits).toBe(0);
+  harness.addLogLines([...HAND_START, `"new guy @ ${STRANGER_ID}" folds`]);
+  await heroTurn(second);
+  await expect(second.locator("#vamos-root .action-card .source")).toHaveText("VAMOS! AI (Claude Opus 5.5 · low)");
+  const [quiet, polling] = await requestsOver3Polls(first, second);
+  expect(quiet).toBe(0);
+  expect(polling).toBeGreaterThanOrEqual(2);
+});
+
 test("a second tab where the hero is not seated does not make VAMOS forget the hero's seat", async () => {
   const first = await openTable();
   await expect(badge(first, HERO_ID)).toHaveText("You");

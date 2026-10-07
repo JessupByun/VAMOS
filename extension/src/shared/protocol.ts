@@ -445,6 +445,19 @@ export interface PollSoon {
   gameId: string;
 }
 
+/** Another tab on the game polls its log from now on: this one stops. */
+export interface PollStop {
+  type: "poll_stop";
+  gameId: string;
+}
+
+/** A game's tab was shown or hidden; the worker hands polling to a tab the user looks at. */
+export interface TabVisibility {
+  type: "visibility";
+  gameId: string;
+  visible: boolean;
+}
+
 /**
  * Content script to worker, when it would start polling a game's log (again). The worker
  * passes it on to the backend only from the one tab per game that polls.
@@ -459,6 +472,11 @@ export interface Resume {
   type: "resume";
   gameId: string;
   after: string | null;
+  /**
+   * Added by the worker when polling moved here from another tab on the game that is still
+   * open: when that tab was told to stop (epoch ms), so the first request keeps clear of its last.
+   */
+  handedOverAt?: number;
 }
 
 /** Why Claude's calls fail for the API key or its credits, in plain words with the fix; null once one gets through. */
@@ -495,7 +513,8 @@ export type ContentToWorker =
   | HeroTurn
   | ClockReport
   | ResumeRequest
-  | LogStatus;
+  | LogStatus
+  | TabVisibility;
 export type WorkerToContent =
   | BackendStatus
   | SnapshotRequest
@@ -504,7 +523,8 @@ export type WorkerToContent =
   | Settings
   | Resume
   | LogStatus
-  | PollSoon;
+  | PollSoon
+  | PollStop;
 export type PanelToWorker =
   | SnapshotRequest
   | AssignIdentity

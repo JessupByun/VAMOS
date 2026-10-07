@@ -24,9 +24,10 @@ export interface LogPoller {
   /**
    * Start polling, or start over: from `after` (the newest row the backend already holds), or
    * from the newest rows when it holds none; rows above it are walked back to it, so none are
-   * skipped.
+   * skipped. `handedOverAt` is when another tab on the game stopped polling for this one to
+   * take over: the first request keeps the minimum gap from that tab's last.
    */
-  resume: (after: string | null) => void;
+  resume: (after: string | null, handedOverAt?: number) => void;
   /** Poll nothing until the next resume(), e.g. while the backend is away. */
   pause: () => void;
   /** Poll as soon as the minimum gap allows, e.g. when the hero's turn starts. */
@@ -212,7 +213,7 @@ export function startLogPoller(
       running = false;
       clearTimeout(timer);
     },
-    resume: (after) => {
+    resume: (after, handedOverAt) => {
       if (stopped) return;
       generation += 1;
       cursor = after;
@@ -223,8 +224,10 @@ export function startLogPoller(
       wantHistory = after === null;
       if (running) return;
       running = true;
-      // A request still on its way schedules the next one; otherwise keep PokerNow's gap.
-      if (!inFlight) schedule(Math.max(0, lastStart + delay - Date.now()));
+      // A request still on its way schedules the next one; otherwise keep PokerNow's gap, also
+      // from a request the tab polling until now may have sent just before it stopped.
+      const earliest = Math.max(lastStart + delay, (handedOverAt ?? -Infinity) + MIN_GAP_MS);
+      if (!inFlight) schedule(Math.max(0, earliest - Date.now()));
     },
     pause: () => {
       if (!running) return;

@@ -447,6 +447,26 @@ describe("log poller", () => {
     poller.stop();
   });
 
+  it("taking polling over from another tab, keeps the minimum gap from that tab's last request", async () => {
+    server.add(1);
+    const poller = startLogPoller("g1", deliver);
+    const handedOverAt = Date.now();
+    await vi.advanceTimersByTimeAsync(300);
+    poller.resume(server.newest(), handedOverAt);
+    await vi.advanceTimersByTimeAsync(MIN_GAP_MS - 301);
+    expect(server.requests).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(server.requests).toHaveLength(1);
+
+    // A takeover long after the other tab stopped asks as soon as this tab's own gap allows.
+    poller.pause();
+    await vi.advanceTimersByTimeAsync(POLL_MS);
+    poller.resume(server.newest(), Date.now() - 10 * POLL_MS);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(server.requests).toHaveLength(2);
+    poller.stop();
+  });
+
   it("clears its report when paused, since nothing is being retried", async () => {
     server.respond = () => new Response("", { status: 404 });
     const poller = startLogPoller("g1", deliver, report);
