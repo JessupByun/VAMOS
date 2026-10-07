@@ -6,11 +6,12 @@ Each spot in data/advice.jsonl is rebuilt into PokerNow log lines (from the hand
 was sent, under the same pseudonyms), so the engine computes today's facts with today's
 code; the system prompt holds today's profiles of the players in that spot, as live calls
 do. The new answers are shown next to the logged ones and saved to data/replays/. By default
-the calls that answered or failed at the table are replayed; those stopped when the hero
-acted (or refused before sending) only when named with --lines. Spends real money (about 1-2
-cents per spot on Opus 5.5 low), recorded in the cost ledger as "replay", which "This
-session" leaves out, and stops once --budget is spent; --dry-run prints each rebuilt message
-without calling Claude.
+each spot that answered or failed at the table is replayed once, next to the answer logged
+with the same preset when Ask deeper logged two; calls stopped when the hero acted (or
+refused before sending) only when named with --lines. Spends real money (about 1-2 cents per
+spot on Opus 5.5 low), recorded in the cost ledger as "replay", which "This session" leaves
+out, and stops once --budget is spent; --dry-run prints each rebuilt message without calling
+Claude.
 
 Run: uv run python scripts/replay_advice.py [--preset standard|deep] [--effort low|medium]
      [--lines 5,6,7] [--budget DOLLARS] [--dry-run]
@@ -114,18 +115,24 @@ def main() -> None:
     parser.add_argument("--effort", help="override the preset's effort (low, medium, high, ...)")
     parser.add_argument(
         "--lines",
-        help="1-based lines of data/advice.jsonl (default: every call that answered or failed)",
+        help="1-based lines of data/advice.jsonl (default: each spot that answered or failed)",
     )
     parser.add_argument("--budget", type=float, default=3.0, help="stop once this much is spent")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
     logged = [json.loads(line) for line in (DATA_DIR / "advice.jsonl").read_text().splitlines()]
-    wanted = (
-        {int(n) for n in args.lines.split(",")}
-        if args.lines
-        else {n for n, e in enumerate(logged, 1) if e.get("state") not in ("cancelled", "refused")}
-    )
+    if args.lines:
+        wanted = {int(n) for n in args.lines.split(",")}
+    else:
+        # Ask deeper logs a second call on the same spot: the one asked with this preset is
+        # replayed, else the first.
+        best: dict[tuple[str, str], tuple[bool, int]] = {}
+        for n, e in enumerate(logged, 1):
+            if e.get("spot") and e.get("state") not in ("cancelled", "refused"):
+                key = (e.get("game"), e["node"])
+                best[key] = min(best.get(key, (True, n)), (e.get("preset") != args.preset, n))
+        wanted = {n for _, n in best.values()}
     ledger = Ledger(DATA_DIR / "costs.jsonl")
     profiles = load_profiles(PROFILES_DIR)
     names = Pseudonyms()

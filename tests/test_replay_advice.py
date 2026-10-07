@@ -75,7 +75,8 @@ def replay(tmp_path: Path, monkeypatch, fake: FakeProvider, *args: str):
 def test_replays_are_billed_as_replay_and_stop_at_the_budget(tmp_path, monkeypatch, capsys):
     entry = logged_spot(tmp_path)
     advice = tmp_path / "data" / "advice.jsonl"
-    advice.write_text("".join(json.dumps(entry) + "\n" for _ in range(3)))
+    spots = ({**entry, "node": f"{entry['node']}{n}"} for n in "abc")
+    advice.write_text("".join(json.dumps(spot) + "\n" for spot in spots))
     (tmp_path / "data" / "costs.jsonl").unlink()  # the live call's row
     fake = FakeProvider([BET] * 3)
     replay(tmp_path, monkeypatch, fake, "--budget", "0.012")
@@ -97,3 +98,23 @@ def test_calls_stopped_or_refused_at_the_table_are_replayed_only_when_named(tmp_
     assert len(fake.requests) == 1
     replay(tmp_path, monkeypatch, fake, "--lines", "2")
     assert len(fake.requests) == 2
+
+
+def test_a_spot_asked_deeper_too_is_replayed_once_per_preset(tmp_path, monkeypatch):
+    entry = logged_spot(tmp_path)
+    deeper = {**entry, "kind": "ask", "preset": "deep", "model": "claude-opus-5-5"}
+    other = {**entry, "node": f"{entry['node']}b"}
+    advice = tmp_path / "data" / "advice.jsonl"
+    advice.write_text("".join(json.dumps(e) + "\n" for e in (entry, deeper, other)))
+    fake = FakeProvider([BET] * 4)
+    replay(tmp_path, monkeypatch, fake)
+    assert len(fake.requests) == 2
+    replay(tmp_path, monkeypatch, fake, "--preset", "deep")
+    assert len(fake.requests) == 4
+    assert [r.preset.name for r in fake.requests] == ["standard", "standard", "deep", "deep"]
+    # Each replay sits next to the answer logged with its own preset, when there is one.
+    saved = {
+        path.stem.rsplit("-", 1)[1]: [r["line"] for r in json.loads(path.read_text())]
+        for path in (tmp_path / "data" / "replays").glob("*.json")
+    }
+    assert saved == {"standard": [1, 3], "deep": [2, 3]}
