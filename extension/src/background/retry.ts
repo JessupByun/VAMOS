@@ -42,7 +42,7 @@ export const START_FIX = "Run uv run vamos install in the VAMOS folder, then rel
  * do, so the fix comes with them. One that had answered was running and stopped.
  */
 export function hostDown(reason: string, started: boolean, waitMs: number): BackendStatus {
-  const retrying = `retrying in ${Math.round(waitMs / 1000)}s`;
+  const retrying = `retrying in ${Math.round(waitMs / 1000)} s`;
   if (started) return { type: "backend", state: "down", detail: `${reason} (${retrying})` };
   return {
     type: "backend",

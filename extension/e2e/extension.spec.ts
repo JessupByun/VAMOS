@@ -925,7 +925,7 @@ test("when Chrome cannot start the backend, the card and the side panel say how 
   await page.goto(`${ORIGIN}/games/${GAME_ID}`);
   const card = page.locator("#vamos-root .action-card");
   await expect(pillStatus(page)).toHaveText(
-    /^down: the backend could not start \(Specified native messaging host not found\), retrying in \d+s$/,
+    /^down: the backend could not start \(Specified native messaging host not found\), retrying in \d+ s$/,
   );
   await expect(card.locator(".todo")).toHaveText(START_FIX);
   const panel = await openPanel();

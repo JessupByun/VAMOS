@@ -41,7 +41,7 @@ describe("the status after the backend stops", () => {
     expect(hostDown("Specified native messaging host not found.", false, 2000)).toEqual({
       type: "backend",
       state: "down",
-      detail: "the backend could not start (Specified native messaging host not found), retrying in 2s",
+      detail: "the backend could not start (Specified native messaging host not found), retrying in 2 s",
       fix: START_FIX,
     });
     expect(START_FIX).toBe("Run uv run vamos install in the VAMOS folder, then reload VAMOS");
@@ -53,7 +53,7 @@ describe("the status after the backend stops", () => {
     expect(hostDown("Native host has exited.", true, 1000)).toEqual({
       type: "backend",
       state: "down",
-      detail: "Native host has exited. (retrying in 1s)",
+      detail: "Native host has exited. (retrying in 1 s)",
     });
   });
 });
