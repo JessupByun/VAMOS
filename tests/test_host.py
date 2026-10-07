@@ -191,6 +191,24 @@ def test_serve_skips_a_message_that_is_not_json(backend, caplog):
     assert "[VAMOS] skipped a message from Chrome: 5-byte message is not JSON" in caplog.text
 
 
+def test_a_damaged_identity_file_does_not_stop_the_backend(tmp_path):
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / "identity.json").write_text('{"zzzzzzzzzz": "alex",')
+    profiles = tmp_path / "profiles"
+    profiles.mkdir()
+    (profiles / "alex.md").write_text(ALEX)
+    stdin = io.BytesIO(frame({"type": "hello"}) + frame(SEATS))
+    stdout = io.BytesIO()
+    serve(stdin, stdout, Backend(data, profiles))
+    ready, _, _, players = read_all(stdout)
+    assert ready["type"] == "ready"
+    [problem] = players["problems"]
+    assert problem.startswith("data/identity.json was damaged, so the players you matched")
+    assert [p.name for p in data.glob("identity.damaged-*.json")] == [problem.rsplit("/", 1)[1]]
+    assert [p["status"] for p in players["players"]] == ["profile", "unknown"]
+
+
 def test_install_writes_launcher_and_manifest(tmp_path):
     manifest_path = install(
         launcher_dir=tmp_path / "support", hosts_dir=tmp_path / "hosts", python="/py/bin/python"

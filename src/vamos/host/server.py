@@ -776,6 +776,7 @@ class Backend:
             "players": players,
             "profiles": [{"key": p.key, "name": p.name} for p in profiles.profiles.values()],
             "problems": [
+                *([self.identity.problem] if self.identity.problem else []),
                 *profiles.problems,
                 *(
                     f'"{name}" is too short or looks like a pseudonym, so it is not hidden '

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { expect, type Page, test } from "@playwright/test";
@@ -86,6 +86,22 @@ test("side panel shows the backend status of an open table", async () => {
   await panel.goto(PANEL_URL);
   await expect(panel.locator(".state")).toHaveText(/active/);
   await expectPanelRoundTrip(panel);
+});
+
+test("a damaged identity map is set aside and the side panel says so", async () => {
+  mkdirSync(harness.dataDir, { recursive: true });
+  writeFileSync(join(harness.dataDir, "identity.json"), '{"strange001": null,');
+  const page = await openTable();
+  await expect(badge(page, KNOWN_ID)).toHaveText("alex");
+  await expect(badge(page, STRANGER_ID).locator("select")).toBeVisible();
+  const panel = await harness.context.newPage();
+  await panel.goto(PANEL_URL);
+  await expect(panel.locator(".problems li")).toHaveText(
+    /^data\/identity\.json was damaged, so the players you matched to profiles will be asked again; the old file is kept as data\/identity\.damaged-\d{8}-\d{6}\.json$/,
+  );
+  const kept = readdirSync(harness.dataDir).filter((name) => name.startsWith("identity.damaged-"));
+  expect(kept.map((name) => readFileSync(join(harness.dataDir, name), "utf8"))).toEqual(['{"strange001": null,']);
+  expect(harness.hostLog()).toMatch(/could not read \S*identity\.json/);
 });
 
 test("host exits once the last table tab closes, after a short grace", async () => {

@@ -34,6 +34,7 @@ Everything else is maintained by Claude:
 - The side panel's switches: AI Advice (with it off no Claude call is made; the preflop rules and chart still answer), VAMOS! HUD (the card on the table) and Per-Player Stats (the badges under each seat).
 - The side panel's API costs count the Claude calls VAMOS records (`data/costs.jsonl`).
   The Anthropic Console is exact: it counts anything else that uses your API key, and any charge for calls VAMOS stopped before Claude's first reply (whether those are billed is unverified; VAMOS logs them in `data/advice.jsonl` without a cost).
+- If `data/identity.json` (your seat matches) is ever damaged, VAMOS keeps it aside as `identity.damaged-<date>-<time>.json`, starts without it and says so under Players.
 - Amounts show in dollars and big blinds, e.g. `RAISE TO $0.60 (3bb)`.
 - Claude sees opponents only under pseudonyms (Player A, Player B, ...); no real name or nickname is sent.
 

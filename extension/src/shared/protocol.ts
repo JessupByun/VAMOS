@@ -235,6 +235,7 @@ export interface Players {
   gameId: string;
   players: PlayerInfo[];
   profiles: { key: string; name: string }[];
+  /** Files VAMOS could not use as they are: a profile, or a damaged identity map. */
   problems: string[];
 }
 
