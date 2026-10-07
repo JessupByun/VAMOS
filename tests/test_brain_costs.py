@@ -87,6 +87,9 @@ def test_a_torn_last_line_is_skipped(tmp_path):
     with path.open("a") as f:
         f.write('{"at": "2026-10-')
     assert ledger.totals(AT)["allTime"] == pytest.approx(1.0)
+    # The next call's row starts on a line of its own, so it is counted too.
+    ledger.record(price("claude-opus-5-5", {"output_tokens": 50_000}, "advice", AT))
+    assert ledger.totals(AT)["allTime"] == pytest.approx(2.0)
 
 
 def test_offline_replays_count_in_the_month_but_not_at_the_table(tmp_path):

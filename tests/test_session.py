@@ -58,6 +58,18 @@ def test_malformed_rows_are_ignored():
     assert not session.add_page(None)
 
 
+def test_a_row_saved_after_a_half_written_last_line_survives_a_reload(tmp_path):
+    store = tmp_path / "g.jsonl"
+    GameSession("g", store).add_page(body(*HAND_1[:3]))
+    # A crash cut off the last row being written.
+    store.write_text(store.read_text() + '{"order": 103, "msg": "\\"Bob @ bbbb')
+    restarted = GameSession("g", store)
+    assert restarted.add_page(body(*HAND_1[3:]))
+    reloaded = GameSession("g", store)
+    assert not reloaded.add_page(body(*HAND_1))  # every row is back, the cut one included
+    assert reloaded.log.hands[0].balanced
+
+
 def test_a_fresh_page_that_does_not_reach_known_rows_marks_a_gap():
     session = GameSession("g")
     session.add_page(body(*HAND_1[:6]))

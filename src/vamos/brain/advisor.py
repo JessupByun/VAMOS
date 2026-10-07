@@ -36,6 +36,7 @@ from vamos.brain.answer import Answer, BadAnswer, Choice, Spot, settle
 from vamos.brain.costs import TOKENS, Ledger, known, price
 from vamos.brain.provider import CallFailed, Provider, Request
 from vamos.engine.facts import format_chips, format_money
+from vamos.jsonl import append_lines
 
 log = logging.getLogger("vamos.brain")
 
@@ -422,9 +423,7 @@ class Advisor:
         }
         try:
             with self._ledger_lock:
-                self._advice_log.parent.mkdir(parents=True, exist_ok=True)
-                with self._advice_log.open("a") as f:
-                    f.write(json.dumps(entry) + "\n")
+                append_lines(self._advice_log, [json.dumps(entry)])
         except OSError:
             log.exception("[VAMOS] could not log advice")
 

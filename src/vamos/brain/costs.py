@@ -14,6 +14,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from vamos.jsonl import append_lines
+
 # Dollars per million tokens (Claude API list prices as of 2026-09-25). Cache writes cost
 # 1.25x input for the 5-minute lifetime and 2x for the 1-hour one.
 PRICES = {
@@ -111,9 +113,7 @@ class Ledger:
         self.soft_cap = soft_cap
 
     def record(self, cost: CallCost) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.path.open("a") as f:
-            f.write(json.dumps(asdict(cost), sort_keys=True) + "\n")
+        append_lines(self.path, [json.dumps(asdict(cost), sort_keys=True)])
 
     def charge(self, model: str, usage: dict[str, Any], kind: str, at: datetime) -> CallCost | None:
         """Price and record one request's usage, whenever any of its tokens are known."""

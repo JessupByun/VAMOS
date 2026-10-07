@@ -38,6 +38,7 @@ from vamos.engine.state import Decision, positions
 from vamos.history import hand_detail, hand_list, net
 from vamos.host.framing import read_message, write_message
 from vamos.identity import IdentityMap, Resolution
+from vamos.jsonl import append_lines
 from vamos.log.hands import Hand, HandLog, Street
 from vamos.money import parse_chips
 from vamos.profiles import Profile, ProfileSet, load_profiles
@@ -372,9 +373,7 @@ class Backend:
         if path is None:
             return
         try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            with path.open("a") as f:
-                f.write(json.dumps(record) + "\n")
+            append_lines(path, [json.dumps(record)])
         except OSError:
             log.exception("[VAMOS] could not save a decision to %s", path)
 

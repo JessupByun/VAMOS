@@ -10,6 +10,7 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
+from vamos.jsonl import append_lines
 from vamos.log.hands import HandLog, Street, build_hands
 
 VOLUNTARY = {"call", "bet", "raise"}
@@ -57,9 +58,7 @@ class GameSession:
         entries = [{"gap": gap}] if gap is not None else []
         entries += [{"order": order, "msg": text} for order, text in sorted(rows.items())]
         try:
-            self._store.parent.mkdir(parents=True, exist_ok=True)
-            with self._store.open("a") as f:
-                f.writelines(json.dumps(e) + "\n" for e in entries)
+            append_lines(self._store, (json.dumps(e) for e in entries))
         except OSError:
             log.exception("[VAMOS] could not save rows to %s", self._store)
 

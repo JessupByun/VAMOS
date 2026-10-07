@@ -32,7 +32,7 @@ After a backend change, the same reload restarts the backend (Chrome launches it
 
 ## Layout
 
-- `src/vamos/` backend package: `cards.py` card and hand-class helpers, `money.py` chip parsing, `config.py` paths, `identity.py` the seat-to-profile map, `profiles.py` reads `profiles/`, `verify.py` (`vamos verify`), `host/` native messaging host and installer.
+- `src/vamos/` backend package: `cards.py` card and hand-class helpers, `money.py` chip parsing, `config.py` paths, `identity.py` the seat-to-profile map, `profiles.py` reads `profiles/`, `jsonl.py` appends to the JSON Lines files (a line a crash cut short never swallows the next one), `verify.py` (`vamos verify`), `host/` native messaging host and installer.
 - `extension/` the MV3 extension (`src/background` worker, `src/content` action card, seat badges, DOM readers and log poller, `src/sidepanel`), vitest unit tests in `test/`, the Playwright e2e suite in `e2e/`, and `tools/test-seats.mjs` (extra seats at our own test tables).
 - `src/vamos/log/` the log parser: `grammar.py` (line -> event) and `hands.py` (events -> hands with chip accounting).
 - `src/vamos/engine/` live decision facts and preflop answers: `state.py` (decision state, turn order, positions), `madehand.py`, `facts.py` (the action card's facts), `advice.py` (the push/fold chart, else `preflop_rules.py`); `equity.py` is the weighted equity behind the preflop matchup tables.
