@@ -2,6 +2,7 @@ import json
 import logging
 import queue
 import threading
+import time
 from datetime import datetime
 
 import pytest
@@ -60,6 +61,13 @@ def rig(tmp_path):
 
         def updated(self):
             return self.updates.get(timeout=3)
+
+        def sent(self, count):
+            """Waits until Claude was sent `count` requests: each call runs on its own thread."""
+            until = time.monotonic() + 3
+            while len(self.provider.requests) < count:
+                assert time.monotonic() < until
+                time.sleep(0.005)
 
         def logged(self):
             self.advisor.close()  # every call has ended and been logged
@@ -189,6 +197,123 @@ def test_asking_opus_keeps_the_first_answer_up_meanwhile(rig):
     assert view["answers"][1]["why"] == "alex traps"
 
 
+def test_asking_deeper_while_the_first_answer_thinks_lets_both_finish(rig):
+    first = threading.Event()
+    r = rig({"standard": (first, BET), "deep": answer(("check", 0, 1.0), note="Player A traps")})
+    r.advisor.start("g", r.job(), r.clock.t + 20)
+    r.advisor.start("g", r.job(preset="deep"), r.clock.t + 20)
+    r.updated()  # the deeper answer came first
+    view = r.advisor.view("g", "h1:1:8")
+    assert [(a["preset"], a["state"]) for a in view["answers"]] == [
+        ("standard", "thinking"),
+        ("deep", "done"),
+    ]
+    assert (view["action"], view["model"]) == ("CHECK", "Claude Opus 5.5 · medium")
+    first.set()
+    assert r.updated() == "g"  # the first answer still reaches the panel
+    view = r.advisor.view("g", "h1:1:8")
+    assert [(a["preset"], a["action"]) for a in view["answers"]] == [
+        ("standard", "BET $0.90 (4.5bb)"),
+        ("deep", "CHECK"),
+    ]
+    # The card keeps the deeper answer: the one asked last.
+    assert (view["action"], view["model"], view["state"]) == (
+        "CHECK",
+        "Claude Opus 5.5 · medium",
+        "done",
+    )
+    # Both are billed and logged.
+    entries = sorted(r.logged(), key=lambda e: e["preset"])
+    assert [(e["preset"], e["state"]) for e in entries] == [("deep", "done"), ("standard", "done")]
+    assert len(r.ledger.path.read_text().splitlines()) == 2
+
+
+def test_the_first_answer_shows_on_the_card_while_the_deeper_one_thinks(rig):
+    first, deeper = threading.Event(), threading.Event()
+    r = rig({"standard": (first, BET), "deep": (deeper, answer(("check", 0, 1.0)))})
+    r.advisor.start("g", r.job(), r.clock.t + 20)
+    r.advisor.start("g", r.job(preset="deep"), r.clock.t + 20)
+    first.set()
+    r.updated()
+    view = r.advisor.view("g", "h1:1:8")
+    assert (view["action"], view["model"], view["asked"], view["state"]) == (
+        "BET $0.90 (4.5bb)",
+        "Claude Opus 5.5 · low",
+        "Claude Opus 5.5 · medium",
+        "thinking",
+    )
+
+
+def test_a_preset_is_asked_once_per_decision_even_after_a_deeper_ask(rig):
+    r = rig([BET, BET])
+    assert r.advisor.start("g", r.job(), r.clock.t + 20)
+    assert r.advisor.start("g", r.job(preset="deep"), r.clock.t + 20)
+    assert not r.advisor.start("g", r.job(), r.clock.t + 20)
+    assert r.advisor.asked("g", "h1:1:8", "standard") and r.advisor.asked("g", "h1:1:8", "deep")
+    r.updated()
+    r.updated()
+    assert len(r.provider.requests) == 2
+
+
+def test_the_decision_passing_stops_every_call_on_it(rig):
+    first, deeper = threading.Event(), threading.Event()
+    r = rig([(first, BET), (deeper, BET)])
+    r.advisor.start("g", r.job(), r.clock.t + 20)
+    r.advisor.start("g", r.job(preset="deep"), r.clock.t + 20)
+    r.advisor.stop("g")
+    assert [e["state"] for e in r.logged()] == ["cancelled", "cancelled"]
+
+
+def test_a_new_decision_stops_every_call_on_the_last_one(rig):
+    first, deeper = threading.Event(), threading.Event()
+    r = rig([(first, BET), (deeper, BET), answer(("check", 0, 1.0))])
+    r.advisor.start("g", r.job(), r.clock.t + 20)
+    r.sent(1)
+    r.advisor.start("g", r.job(preset="deep"), r.clock.t + 20)
+    r.sent(2)
+    r.advisor.start("g", r.job("h1:2:10"), r.clock.t + 20)
+    r.updated()
+    by_node = sorted((e["node"], e["preset"], e["state"]) for e in r.logged())
+    assert by_node == [
+        ("h1:1:8", "deep", "cancelled"),
+        ("h1:1:8", "standard", "cancelled"),
+        ("h1:2:10", "standard", "done"),
+    ]
+
+
+def test_a_clock_read_moves_the_deadline_of_every_call_on_the_decision(rig):
+    first, deeper = threading.Event(), threading.Event()
+    r = rig([(first, BET), (deeper, BET)])
+    r.advisor.start("g", r.job(), r.clock.t + 20)
+    r.advisor.start("g", r.job(preset="deep"), r.clock.t + 20)
+    r.advisor.set_deadline("g", "h1:1:8", r.clock.t + 5)
+    r.clock.t += 6
+    r.updated()
+    r.updated()
+    view = r.advisor.view("g", "h1:1:8")
+    assert [(a["state"], a["reason"]) for a in view["answers"]] == [("failed", "timed out")] * 2
+    first.set()
+    deeper.set()
+
+
+def test_a_key_or_credit_failure_is_reported_until_a_call_gets_through(tmp_path):
+    seen, updates = [], queue.Queue()
+    script = [CallFailed("out of API credits"), CallFailed("rate limited"), BET]
+    advisor = Advisor(
+        FakeProvider(script),
+        Ledger(tmp_path / "costs.jsonl"),
+        updates.put,
+        on_account=seen.append,
+        clock=Clock(),
+    )
+    for node in ("h1:1:8", "h1:1:9", "h1:1:10"):
+        request = Request(PRESETS["standard"], [], [])
+        advisor.start("g", Job(node, request, SPOT), 2000.0)
+        updates.get(timeout=3)
+    # A rate limit says nothing about the key; an answer shows it works again.
+    assert seen == ["out of API credits", None]
+
+
 def test_a_new_decision_starts_a_fresh_list_of_answers(rig):
     r = rig([BET, BET])
     r.advisor.start("g", r.job(), r.clock.t + 20)
@@ -284,7 +409,8 @@ class StoppedAfterFirstEvent:
 def test_a_call_cancelled_after_claudes_first_event_is_billed_and_logged(rig):
     r = rig([], provider=StoppedAfterFirstEvent())
     r.advisor.start("g", r.job(), r.clock.t + 20)
-    r.advisor.start("g", r.job(preset="deep"), r.clock.t + 20)  # Ask deeper stops it
+    r.advisor.start("g", r.job(preset="deep"), r.clock.t + 20)
+    r.advisor.stop("g")  # the hero acted while both were thinking
     entries = sorted(r.logged(), key=lambda e: e["preset"])  # each logs as its thread ends
     assert [(e["preset"], e["state"], e["dollars"]) for e in entries] == [
         ("deep", "cancelled", 0.00282),

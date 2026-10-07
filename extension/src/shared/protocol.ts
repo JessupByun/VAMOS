@@ -9,8 +9,19 @@ export interface BackendStatus {
   state: BackendState;
   version?: string;
   detail?: string;
+  /** What to do when Chrome could not start the backend at all. */
+  fix?: string;
   /** Raw log pages are being saved (test-table sessions only). */
   recording?: boolean;
+}
+
+/** Characters kept of the notes on one player; the backend cuts at the same length. */
+export const NOTES_LIMIT = 2_000;
+
+/** Why a control that needs the backend cannot be used now, or null when it can. */
+export function pausedWhy(status: BackendStatus): string | null {
+  if (status.state === "ready") return null;
+  return status.state === "connecting" ? "VAMOS's backend is starting" : "VAMOS's backend is not running";
 }
 
 /** One page of PokerNow's game log, forwarded untouched so the backend owns parsing. */
@@ -115,6 +126,13 @@ export interface DraftSaved {
   playerId: string;
   /** Relative to the repo, e.g. "drafts/2026-10-05-alex.md" ("-2" for a second game that day). */
   path: string;
+}
+
+/** Save draft did not write the draft, and why, e.g. "could not write to the drafts folder (File exists)". */
+export interface DraftFailed {
+  type: "draft_failed";
+  playerId: string;
+  error: string;
 }
 
 /** The hand on the table from the hero's seat; sent whenever it changes. */
@@ -230,6 +248,14 @@ export interface HandDetail {
   resultBb: number | null;
 }
 
+/** An earlier hand the backend could not replay, and why. */
+export interface HandDetailFailed {
+  type: "hand_detail_failed";
+  gameId: string;
+  key: string;
+  error: string;
+}
+
 export interface Players {
   type: "players";
   gameId: string;
@@ -276,6 +302,8 @@ export interface SpotFacts {
   advice: PreflopAdvice | ClaudeAdvice | null;
   /** Set when AI is off and no preflop rule or chart answered: the card shows the facts only. */
   aiOff?: boolean;
+  /** With Claude asked: when VAMOS stops waiting for an answer, in epoch milliseconds. */
+  answerBy?: number;
 }
 
 /** One call's answer about a decision; a decision has a second one after "Ask deeper". */
@@ -431,6 +459,12 @@ export interface Resume {
   after: string | null;
 }
 
+/** Why Claude's calls fail for the API key or its credits, in plain words with the fix; null once one gets through. */
+export interface ApiStatus {
+  type: "api_status";
+  problem: string | null;
+}
+
 export interface Costs {
   type: "costs";
   /** Dollars. */
@@ -481,7 +515,9 @@ export type PanelToWorker =
   /** Write this session's read and notes on a player to drafts/ for the user to review. */
   | { type: "save_draft"; gameId: string; playerId: string }
   /** One earlier hand for the replayer. */
-  | { type: "hand_detail_request"; gameId: string; key: string };
+  | { type: "hand_detail_request"; gameId: string; key: string }
+  /** The cost figures as of now: "this session" ends after a long pause with no call. */
+  | { type: "costs_request" };
 export type WorkerToPanel =
   | BackendStatus
   | HostAck
@@ -489,10 +525,13 @@ export type WorkerToPanel =
   | Facts
   | Settings
   | Costs
+  | ApiStatus
   | HandInfo
   | DraftSaved
+  | DraftFailed
   | HandHistory
   | HandDetail
+  | HandDetailFailed
   | LogStatus;
 export type HostToWorker =
   | { type: "ready"; version: string; recording: boolean }
@@ -501,8 +540,11 @@ export type HostToWorker =
   | Facts
   | Settings
   | Costs
+  | ApiStatus
   | HandInfo
   | DraftSaved
+  | DraftFailed
   | HandHistory
   | HandDetail
+  | HandDetailFailed
   | Resume;

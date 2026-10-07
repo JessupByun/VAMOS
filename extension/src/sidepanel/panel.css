@@ -54,9 +54,10 @@ main {
   padding: 12px;
 }
 
-/* The header: the wordmark in the action colors (the one flourish), the backend's state,
-   why PokerNow's log is failing while it is, the three switches, and a warning when the log
-   has lines VAMOS could not read. */
+/* The header: the wordmark in the action colors (the one flourish), the backend's state and
+   what to do when it cannot start, why PokerNow's log is failing while it is, a problem with
+   the API key or its credits, the three switches, and a warning when the log has lines VAMOS
+   could not read. */
 .top {
   padding: 4px 4px 2px;
 }
@@ -195,10 +196,23 @@ button.switch:hover {
 }
 
 .unread,
-.log-problem {
+.log-problem,
+.api-problem,
+.fix {
   margin-top: 8px;
   font-size: 11.5px;
   color: var(--warn);
+}
+
+.fix {
+  font-weight: 600;
+}
+
+/* Why the controls are paused while the backend is not ready. */
+.paused-why {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  color: var(--muted);
 }
 
 .unread .where {
@@ -435,6 +449,28 @@ button.secondary {
 
 button.secondary:hover {
   border-color: var(--muted);
+}
+
+/* A control that needs the backend, while it is not ready: its title says why. */
+button:disabled,
+select:disabled,
+input:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+button:disabled:hover {
+  border-color: var(--border);
+}
+
+.segmented.paused label {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.hurry {
+  margin-top: 6px;
+  color: var(--warn);
 }
 
 .segmented {
@@ -851,8 +887,27 @@ button.mini:hover {
   border-color: var(--muted);
 }
 
-.saved {
+.saved,
+.draft-failed,
+.notes-count {
   margin-top: 4px;
+}
+
+.draft-failed,
+.notes-count.cut,
+.replay-failed {
+  color: var(--warn);
+}
+
+.replay-failed {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.replay-failed button {
+  flex: none;
+  white-space: nowrap;
 }
 
 /* The profile file, read only: a clear, full-width bar to open it. */

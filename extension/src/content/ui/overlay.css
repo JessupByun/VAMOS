@@ -67,6 +67,10 @@
   border-radius: 5px;
 }
 
+.badge select:disabled {
+  opacity: 0.55;
+}
+
 .card-slot {
   position: fixed;
   z-index: 2147483647;
@@ -150,6 +154,29 @@
 
 .action-card.waiting.down .status {
   color: var(--vamos-bad);
+}
+
+/* Chrome could not start the backend: what to do goes on its own line, which may wrap. */
+.action-card.waiting.fix {
+  flex-wrap: wrap;
+  row-gap: 3px;
+  align-items: baseline;
+  max-width: min(460px, 60vw);
+  padding: 7px 14px;
+  border-radius: 14px;
+  white-space: normal;
+}
+
+/* Beside the wordmark, wrapping under itself rather than below it. */
+.action-card.waiting.fix .status {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.action-card.waiting .todo {
+  flex-basis: 100%;
+  font-weight: 600;
+  color: var(--vamos-warn);
 }
 
 .action-card .source {

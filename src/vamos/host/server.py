@@ -27,6 +27,7 @@ from vamos.brain.provider import (
     CannedProvider,
     Provider,
     Request,
+    api_key,
 )
 from vamos.brain.pseudonyms import HERO, LeakError, Pseudonyms
 from vamos.brain.spot import betting, claude_facts, legal
@@ -47,6 +48,19 @@ from vamos.session import GameSession, Read, Showdown, reads
 log = logging.getLogger("vamos.host")
 
 SPOT_ERROR = "VAMOS! hit an error on this spot (logged in data/logs/host.log)"
+NOTES_LIMIT = 2_000  # characters per player; the side panel cuts at the same length
+# What the side panel's header says while Claude's calls fail for the API key or its credits.
+ACCOUNT_TEXT = {
+    "no API key": "No API key: put ANTHROPIC_API_KEY in the .env file in the VAMOS folder",
+    "API key rejected": (
+        "API key rejected: check ANTHROPIC_API_KEY in the .env file in the VAMOS folder, "
+        "then reload VAMOS"
+    ),
+    "API key not allowed to use this model": (
+        "API key not allowed to use Claude Opus 5.5: check its workspace in the Anthropic Console"
+    ),
+    "out of API credits": "Out of API credits: add credits in the Anthropic Console",
+}
 
 type Message = dict[str, Any]
 
@@ -91,11 +105,15 @@ class Backend:
         self.now = now  # wall time with its zone, for the decision records
         self.ledger = Ledger(data_dir / "costs.jsonl")
         self.advice_log = data_dir / "advice.jsonl"
+        # Why Claude's calls fail for the API key or its credits, until one gets through. A
+        # missing key is known at once; a rejected key or no credits only from a call.
+        self.account_problem = None if provider is not None or api_key() else "no API key"
         self.advisor = Advisor(
             provider or AnthropicProvider(),
             self.ledger,
             self._advice_changed,
             self._cost_changed,
+            self._account_changed,
             clock=clock,
             advice_log=self.advice_log,
         )
@@ -153,6 +171,7 @@ class Backend:
                 {"type": "ready", "version": VERSION, "recording": self.record},
                 self._settings(),
                 self._costs(),
+                self._api_status(),
             ]
         if kind == "log_page":
             return self._log_page(message)
@@ -209,7 +228,13 @@ class Backend:
                     for game_id in list(self.turns):
                         self.advisor.stop(game_id)
             self._save_settings()
-            return [self._settings(), *(self._spot_facts(game_id) for game_id in self.turns)]
+            return [
+                self._settings(),
+                self._costs(),  # "this session" may have ended since the last call
+                *(self._spot_facts(game_id) for game_id in self.turns),
+            ]
+        if kind == "costs_request":
+            return [self._costs()]
         if kind == "resume_request":
             # Where a log poller starting over picks up: after the newest row held.
             newest = self._session(message["gameId"]).newest
@@ -221,7 +246,15 @@ class Backend:
                 }
             ]
         if kind == "notes":
-            text = str(message.get("text", ""))[:2000]
+            text = str(message.get("text", ""))
+            if len(text) > NOTES_LIMIT:
+                log.warning(
+                    "[VAMOS] cut notes on %s from %d to %d characters",
+                    message.get("playerId"),
+                    len(text),
+                    NOTES_LIMIT,
+                )
+                text = text[:NOTES_LIMIT]
             if message.get("playerId"):
                 # Notes about one player, kept by PokerNow ID, and saved with the game's log.
                 self.player_notes[message["playerId"]] = text
@@ -229,7 +262,16 @@ class Backend:
                     self._save_notes(message["gameId"], message["playerId"], text)
             return []
         if kind == "save_draft":
-            return [self._save_draft(message["gameId"], message["playerId"])]
+            pid = str(message.get("playerId", ""))
+            try:
+                return [self._save_draft(str(message.get("gameId", "")), pid)]
+            except OSError as error:
+                log.exception("[VAMOS] could not save a draft")
+                why = f"could not write to the drafts folder ({error.strerror or error})"
+            except Exception:
+                log.exception("[VAMOS] could not save a draft")
+                why = "VAMOS hit an error saving it (logged in data/logs/host.log)"
+            return [{"type": "draft_failed", "playerId": pid, "error": why}]
         if kind == "ask":
             return self._ask(message)
         if kind == "hand_detail_request":
@@ -263,11 +305,23 @@ class Backend:
         }
 
     def _costs(self) -> Message:
-        return {"type": "costs", **self.ledger.totals(datetime.now()), "softCap": SOFT_CAP}
+        # The ledger's times are local, without a zone.
+        now = self.now().astimezone().replace(tzinfo=None)
+        return {"type": "costs", **self.ledger.totals(now), "softCap": SOFT_CAP}
 
     def _cost_changed(self) -> None:
         with self.lock:
             self.emit(self._costs())
+
+    def _api_status(self) -> Message:
+        problem = self.account_problem
+        return {"type": "api_status", "problem": ACCOUNT_TEXT.get(problem, problem)}
+
+    def _account_changed(self, problem: str | None) -> None:
+        with self.lock:
+            if problem != self.account_problem:
+                self.account_problem = problem
+                self.emit(self._api_status())
 
     def _advice_changed(self, game_id: str) -> None:
         with self.lock:
@@ -282,15 +336,21 @@ class Backend:
             return []
         self._turn_ends[game_id] = self.clock() + seconds
         cached = self._facts.get(game_id)
-        if cached is not None:
-            self.advisor.set_deadline(game_id, cached[0], self._deadline(game_id))
-        return []
+        if cached is None or not self.advisor.asked(game_id, cached[0]):
+            return []
+        self.advisor.set_deadline(game_id, cached[0], self._deadline(game_id))
+        # The side panel learns how long Claude is now waited for.
+        return [self._spot_facts(game_id)]
 
     def _deadline(self, game_id: str) -> float:
         ends = self._turn_ends.get(game_id)
         if ends is not None:
             return ends - SPARE_SECONDS
         return self._turn_started.get(game_id, self.clock()) + DEFAULT_SECONDS
+
+    def _answer_by(self, game_id: str) -> int:
+        """When VAMOS stops waiting for Claude on the decision, in epoch milliseconds."""
+        return round((self.now().timestamp() + self._deadline(game_id) - self.clock()) * 1000)
 
     def _ask(self, message: Message) -> list[Message]:
         """Ask again with another preset (the deeper one) about the decision on the table."""
@@ -397,16 +457,21 @@ class Backend:
         """One earlier hand for the replayer, street by street with VAMOS's advice."""
         hero = self._hero_id(game_id)
         if hero is None:
-            return []
-        detail = hand_detail(
-            self._session(game_id).log,
-            key,
-            hero,
-            self._decisions.get(game_id, {}),
-            self._logged.get(game_id, []),
-        )
+            return [_replay_failed(game_id, key, "VAMOS has not seen your seat at this table yet")]
+        try:
+            detail = hand_detail(
+                self._session(game_id).log,
+                key,
+                hero,
+                self._decisions.get(game_id, {}),
+                self._logged.get(game_id, []),
+            )
+        except Exception:
+            log.exception("[VAMOS] could not replay hand %s", key)
+            why = "VAMOS hit an error on this hand (logged in data/logs/host.log)"
+            return [_replay_failed(game_id, key, why)]
         if detail is None:
-            return []
+            return [_replay_failed(game_id, key, "this hand is not in this session's log")]
         return [{"type": "hand_detail", "gameId": game_id, **detail}]
 
     def _load_notes(self, game_id: str) -> None:
@@ -590,7 +655,11 @@ class Backend:
             preset = ask or self._preset_for(game_id, hand)
             stub = Job(spot.node, Request(PRESETS[preset], [], []), None)  # type: ignore[arg-type]
             self.advisor.start(game_id, stub, 0.0, refuse="internal error (logged)")
-        return {**payload, "advice": self.advisor.view(game_id, spot.node)}
+        return {
+            **payload,
+            "advice": self.advisor.view(game_id, spot.node),
+            "answerBy": self._answer_by(game_id),
+        }
 
     def _log_failure(self, game_id: str, node: str, what: str) -> None:
         # Once per spot and failure: the same spot is recomputed on every log page while it
@@ -800,6 +869,10 @@ class Backend:
         path = game_dir / f"dom_{message['capturedAt']}.html"
         path.write_text(message["html"])
         return {"type": "ack", "what": "dom_snapshot", "detail": path.name}
+
+
+def _replay_failed(game_id: str, key: str, error: str) -> Message:
+    return {"type": "hand_detail_failed", "gameId": game_id, "key": key, "error": error}
 
 
 def _slug(name: str) -> str:

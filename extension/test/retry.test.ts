@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { HostRetry, RETRY_MAX_MS, RETRY_MIN_MS, STABLE_MS } from "../src/background/retry";
+import { HostRetry, hostDown, RETRY_MAX_MS, RETRY_MIN_MS, STABLE_MS, START_FIX } from "../src/background/retry";
 
 describe("host retry backoff", () => {
   it("doubles on consecutive failures up to the cap", () => {
@@ -33,5 +33,27 @@ describe("host retry backoff", () => {
     retry.failed(1);
     retry.reset();
     expect(retry.failed(2)).toBe(RETRY_MIN_MS);
+  });
+});
+
+describe("the status after the backend stops", () => {
+  it("says how to fix a backend Chrome could not start, with Chrome's own words kept", () => {
+    expect(hostDown("Specified native messaging host not found.", false, 2000)).toEqual({
+      type: "backend",
+      state: "down",
+      detail: "the backend could not start (Specified native messaging host not found), retrying in 2s",
+      fix: START_FIX,
+    });
+    expect(START_FIX).toBe("Run uv run vamos install in the VAMOS folder, then reload VAMOS");
+    // Exiting before it ever answered is a failed start too.
+    expect(hostDown("Native host has exited.", false, 4000).fix).toBe(START_FIX);
+  });
+
+  it("keeps the plain reason for a backend that was running", () => {
+    expect(hostDown("Native host has exited.", true, 1000)).toEqual({
+      type: "backend",
+      state: "down",
+      detail: "Native host has exited. (retrying in 1s)",
+    });
   });
 });

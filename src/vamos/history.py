@@ -235,6 +235,8 @@ def _from_log(hand: Hand, logged: list[Message], hero: str | None) -> dict[int, 
             calls.setdefault(index, []).append(entry)
     out = {}
     for index, entries in calls.items():
+        # Logged as each call ended, and a deeper answer can end before the first one.
+        entries.sort(key=lambda e: e.get("kind") == "ask")
         answers = [a for e in entries if (a := _logged_answer(e, seats, bb))]
         if not answers:
             continue

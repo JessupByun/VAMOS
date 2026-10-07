@@ -4,7 +4,9 @@ the background.
 
 Every call is stamped with the decision node it answers, and what it returns is shown only
 while that node is current. When the hero acts or the hand moves on, the call is cancelled
-(its stream is closed) and its answer is dropped. A call
+(its stream is closed) and its answer is dropped. "Ask deeper" adds a call with the deeper
+preset for the same node; a call already thinking keeps running, so both answers can be
+compared, and the card shows the answer of the latest call asked that has one. A call
 has a deadline from the table's clock, about five seconds before the hero's time runs out,
 or 25 seconds after the turn began when the table has no clock. A call that misses it,
 fails or answers nonsense leaves the facts on the card with the reason. A failure that may
@@ -45,6 +47,13 @@ SPARE_SECONDS = 5.0  # left on the clock for the hero to act after the deadline
 MIN_SECONDS = 3.0  # with less time than this, no call is started
 RETRY_SECONDS = 6.0  # the least time left for a second try
 RETRYABLE = ("Claude unavailable", "no connection to Claude", "unreadable answer")
+# Failures every later call would hit too, until the key or the credits are fixed.
+ACCOUNT_PROBLEMS = (
+    "no API key",
+    "API key rejected",
+    "API key not allowed to use this model",
+    "out of API credits",
+)
 MODEL_NAMES = {
     "claude-opus-5-5": "Claude Opus 5.5",
 }
@@ -159,6 +168,8 @@ class Advisor:
         ledger: Ledger,
         on_update: Callable[[str], None],  # a game's advice changed
         on_cost: Callable[[], None] = lambda: None,  # a call was billed
+        # A call failed for the API key or its credits (the reason), or one got through (None).
+        on_account: Callable[[str | None], None] = lambda problem: None,
         clock: Callable[[], float] = time.monotonic,
         now: Callable[[], datetime] = datetime.now,
         advice_log: Path | None = None,
@@ -168,27 +179,24 @@ class Advisor:
         self._advice_log = advice_log
         self._on_update = on_update
         self._on_cost = on_cost
+        self._on_account = on_account
         self._clock = clock
         self._now = now
         self._lock = threading.Lock()
         self._ledger_lock = threading.Lock()
-        self._calls: dict[str, Call] = {}  # per game, the latest call
-        # Per game, the latest call that answered: an earlier answer for the same node stays
-        # on the card while a deeper model is asked.
-        self._answered: dict[str, Call] = {}
-        # Per game, every call about the latest call's node in the order asked, so a deeper
+        # Per game, every call about the current decision in the order asked, so a deeper
         # answer is shown under the first one rather than in its place.
-        self._node_calls: dict[str, list[Call]] = {}
-        # Calls whose thread has not yet ended: replaced or cancelled ones too.
+        self._calls: dict[str, list[Call]] = {}
+        # Calls whose thread has not yet ended: cancelled ones too.
         self._running: set[Call] = set()
 
     def asked(self, game_id: str, node: str, preset: str | None = None) -> bool:
         """Whether Claude was asked about `node` (with `preset`, if given)."""
         with self._lock:
-            call = self._calls.get(game_id)
-            if call is None or call.job.node != node:
-                return False
-            return preset is None or call.job.request.preset.name == preset
+            return any(
+                call.job.node == node and preset in (None, call.job.request.preset.name)
+                for call in self._calls.get(game_id, [])
+            )
 
     def start(self, game_id: str, job: Job, deadline: float, refuse: str | None = None) -> bool:
         """
@@ -196,18 +204,16 @@ class Advisor:
         reason records the call as failed without sending it.
         """
         with self._lock:
-            current = self._calls.get(game_id)
-            same_node = current is not None and current.job.node == job.node
-            if same_node and current.job.request.preset == job.request.preset:
-                return False
-            if not same_node:
-                self._answered.pop(game_id, None)
-                self._node_calls.pop(game_id, None)
-            if current is not None:
-                self._cancel(current)
+            calls = self._calls.get(game_id, [])
+            if calls and calls[-1].job.node == job.node:
+                if any(c.job.request.preset == job.request.preset for c in calls):
+                    return False
+            else:
+                for old in calls:
+                    self._cancel(old)
+                calls = self._calls[game_id] = []
             call = Call(job, deadline, self._clock())
-            self._calls[game_id] = call
-            self._node_calls.setdefault(game_id, []).append(call)
+            calls.append(call)
             if refuse is None and deadline - self._clock() < MIN_SECONDS:
                 refuse = "not enough time on the clock"
             if refuse is not None:
@@ -223,19 +229,16 @@ class Advisor:
         return True
 
     def set_deadline(self, game_id: str, node: str, deadline: float) -> None:
-        """The table's clock was read after the call started."""
+        """The table's clock was read after the calls started."""
         with self._lock:
-            call = self._calls.get(game_id)
-            if call is not None and call.job.node == node:
-                call.deadline = deadline
+            for call in self._calls.get(game_id, []):
+                if call.job.node == node:
+                    call.deadline = deadline
 
     def stop(self, game_id: str) -> None:
         """The decision passed: drop whatever is running or shown for this game."""
         with self._lock:
-            call = self._calls.pop(game_id, None)
-            self._answered.pop(game_id, None)
-            self._node_calls.pop(game_id, None)
-            if call is not None:
+            for call in self._calls.pop(game_id, []):
                 self._cancel(call)
 
     def close(self, wait: float = 2.0) -> None:
@@ -254,14 +257,16 @@ class Advisor:
     def view(self, game_id: str, node: str) -> dict[str, Any] | None:
         """The card's advice for `node`, or None when Claude was not asked about it."""
         with self._lock:
-            call = self._calls.get(game_id)
-            if call is None or call.job.node != node:
+            calls = self._calls.get(game_id)
+            if not calls or calls[-1].job.node != node:
                 return None
-            shown = self._answered.get(game_id)
+            call = calls[-1]
+            # The deeper answer once it has come, whenever the first one arrives.
+            shown = next((c for c in reversed(calls) if c.answer is not None), None)
             asked = _label(call)
             out: dict[str, Any] = {
                 "source": "Claude",
-                **_answer_fields(shown),  # the answer on the card: the latest one given
+                **_answer_fields(shown),  # the answer on the card
                 "model": _label(shown) if shown else asked,  # e.g. "Claude Opus 5.5 · low"
                 "asked": asked,  # the latest call's model and effort
                 "preset": (shown or call).job.request.preset.name,
@@ -277,7 +282,7 @@ class Advisor:
                         "reason": c.reason,
                         **_answer_fields(c),
                     }
-                    for c in self._node_calls.get(game_id, [call])
+                    for c in calls
                 ],
             }
         return out
@@ -334,11 +339,14 @@ class Advisor:
             except CallFailed as failure:
                 self._record(call, failure.usage)
                 reason = failure.reason
+                if reason in ACCOUNT_PROBLEMS:
+                    self._on_account(reason)
                 continue
             except Exception:
                 log.exception("[VAMOS] Claude call crashed")
                 return None, "internal error"
             self._record(call, reply.usage)
+            self._on_account(None)  # Claude answered, so the key and its credits work
             call.raw = reply.text
             try:
                 # Each preset draws its own roll, so a deeper answer is a fresh draw from its
@@ -356,16 +364,14 @@ class Advisor:
     def _finish(
         self, game_id: str, call: Call, answer: Answer | None = None, reason: str | None = None
     ) -> bool:
-        """Settle a call still thinking; True when it is the one the card shows."""
+        """Settle a call still thinking; True when it is about the decision on the card."""
         with self._lock:
             if call.state != "thinking":
-                return False  # timed out, cancelled or replaced meanwhile
+                return False  # timed out or cancelled meanwhile
             call.state = "done" if answer is not None else "failed"
             call.answer, call.reason = answer, reason
             call.ended = self._clock()
-            if answer is not None:
-                self._answered[game_id] = call
-            return self._calls.get(game_id) is call
+            return any(c is call for c in self._calls.get(game_id, []))
 
     def _log(self, game_id: str, call: Call) -> None:
         """A call that has ended: one line in host.log, one entry in data/advice.jsonl."""

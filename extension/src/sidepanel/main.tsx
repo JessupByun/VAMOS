@@ -13,7 +13,9 @@ import {
   type HostAck,
   isClaude,
   type LogTrouble,
+  NOTES_LIMIT,
   type PanelToWorker,
+  pausedWhy,
   type PlayerInfo,
   type Players,
   type PreflopAdvice,
@@ -29,6 +31,15 @@ import "./panel.css";
 
 const RECONNECT_MIN_MS = 1000;
 const RECONNECT_MAX_MS = 10000;
+// A replay or a draft the backend has not answered by then is said to have failed.
+const REPLY_MS = 5000;
+// "This session" ends after a long pause with no call, which no call announces.
+const COSTS_REFRESH_MS = 60_000;
+// Ask deeper says when its answer, usually 5-14 s at medium effort, may come too late.
+const ASK_DEEPER_MIN_MS = 10_000;
+// The notes field counts its characters from here on.
+const NOTES_COUNT_FROM = NOTES_LIMIT - 200;
+const NO_REPLY = "no reply from VAMOS's backend";
 const BRAND = "VAMOS!";
 const STREETS = ["Preflop", "Flop", "Turn", "River"];
 
@@ -43,6 +54,8 @@ let status: BackendStatus = { type: "backend", state: "connecting" };
 let acks: HostAck[] = [];
 let settings: Settings | null = null;
 let costs: Costs | null = null;
+// Why Claude's calls fail for the API key or its credits, until one gets through.
+let apiProblem: string | null = null;
 
 // Per table: the players, the hand on the table (from the backend's hand updates) and
 // Claude's answers in it, in order, so earlier streets stay readable. A decision node is
@@ -51,6 +64,8 @@ interface Decision {
   node: string;
   street: string;
   advice: ClaudeAdvice;
+  /** When VAMOS stops waiting for Claude on it, in epoch milliseconds. */
+  answerBy: number | null;
 }
 interface Hand {
   gameId: string;
@@ -65,8 +80,16 @@ const hands = new Map<string, Hand>();
 const histories = new Map<string, HistoryEntry[]>();
 const pickedHand = new Map<string, string>();
 const replays = new Map<string, HandDetail>();
-// Where each player's draft was last saved this session.
+// By "<game>:<hand key>": when a replay was asked for, until it comes, and why one failed.
+const replayAsked = new Map<string, number>();
+const replayErrors = new Map<string, string>();
+// Per player: where the draft was last saved this session, when Save draft was pressed until
+// the backend answers, and why the last one failed.
 const savedDrafts = new Map<string, string>();
+const draftAsked = new Map<string, number>();
+const draftErrors = new Map<string, string>();
+// Players whose notes were cut at NOTES_LIMIT on the last keystroke or paste.
+const notesCut = new Set<string>();
 const playersByGame = new Map<string, Players>();
 // Per table, why PokerNow's log is failing, while it is.
 const logTroubles = new Map<string, LogTrouble>();
@@ -94,7 +117,7 @@ function onHand(info: HandInfo) {
   );
 }
 
-function onFacts(gameId: string, node: string | null, advice: unknown) {
+function onFacts(gameId: string, node: string | null, advice: unknown, answerBy: number | null) {
   const hand = hands.get(gameId);
   if (node === null || !isClaude(advice as ClaudeAdvice | null)) {
     // The decision passed (or a preflop rule or chart answered, or AI is off): nothing on
@@ -103,7 +126,7 @@ function onFacts(gameId: string, node: string | null, advice: unknown) {
     return;
   }
   const [key = "", street = ""] = node.split(":");
-  const entry = { node, street: STREETS[Number(street)] ?? "", advice: advice as ClaudeAdvice };
+  const entry = { node, street: STREETS[Number(street)] ?? "", advice: advice as ClaudeAdvice, answerBy };
   const current: Hand = hand && hand.key === key ? hand : { gameId, key, info: null, decisions: [], live: null };
   const decisions = [...current.decisions.filter((d) => d.node !== node), entry].sort((a, b) =>
     a.node.localeCompare(b.node, "en", { numeric: true }),
@@ -126,6 +149,8 @@ function resendNotes() {
 function connect() {
   const next = chrome.runtime.connect({ name: "panel" });
   port = next;
+  // What the worker last heard may be hours old.
+  next.postMessage({ type: "costs_request" } satisfies PanelToWorker);
   next.onMessage.addListener((message: WorkerToPanel) => {
     retryDelay = RECONNECT_MIN_MS;
     if (message.type === "backend") {
@@ -138,6 +163,8 @@ function connect() {
         histories.clear();
         pickedHand.clear();
         replays.clear();
+        replayAsked.clear();
+        replayErrors.clear();
         logTroubles.clear();
       }
       if (becameReady) resendNotes();
@@ -147,18 +174,27 @@ function connect() {
     }
     else if (message.type === "settings") settings = message;
     else if (message.type === "costs") costs = message;
-    else if (message.type === "draft_saved") savedDrafts.set(message.playerId, message.path);
-    else if (message.type === "hand") {
+    else if (message.type === "api_status") apiProblem = message.problem;
+    else if (message.type === "draft_saved") {
+      savedDrafts.set(message.playerId, message.path);
+      draftAsked.delete(message.playerId);
+      draftErrors.delete(message.playerId);
+    } else if (message.type === "draft_failed") {
+      draftErrors.set(message.playerId, message.error);
+      draftAsked.delete(message.playerId);
+    } else if (message.type === "hand") {
       onHand(message);
       lastGame = message.gameId;
     } else if (message.type === "facts") {
-      onFacts(message.gameId, message.facts?.node ?? null, message.facts?.advice ?? null);
+      const facts = message.facts;
+      onFacts(message.gameId, facts?.node ?? null, facts?.advice ?? null, facts?.answerBy ?? null);
     } else if (message.type === "history") histories.set(message.gameId, message.hands);
     else if (message.type === "hand_detail") replays.set(`${message.gameId}:${message.key}`, message);
+    else if (message.type === "hand_detail_failed") replayErrors.set(`${message.gameId}:${message.key}`, message.error);
     else if (message.type === "log_status") {
       if (message.trouble) logTroubles.set(message.gameId, message.trouble);
       else logTroubles.delete(message.gameId);
-    } else acks = [message, ...acks].slice(0, 20);
+    } else if (message.type === "ack") acks = [message, ...acks].slice(0, 20);
     notifyAll();
   });
   next.onDisconnect.addListener(() => {
@@ -173,6 +209,39 @@ function connect() {
 }
 
 connect();
+setInterval(() => {
+  if (status.state === "ready") send({ type: "costs_request" });
+}, COSTS_REFRESH_MS);
+
+/** Re-renders every `ms` while `on`, for what counts down. */
+function useTick(ms: number, on = true) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!on) return;
+    const timer = setInterval(() => setTick((n) => n + 1), ms);
+    return () => clearInterval(timer);
+  }, [ms, on]);
+}
+
+/** Asks the backend for an earlier hand; it says so if no answer comes in time. */
+function askReplay(gameId: string, key: string) {
+  const id = `${gameId}:${key}`;
+  replayAsked.set(id, Date.now());
+  replayErrors.delete(id);
+  send({ type: "hand_detail_request", gameId, key });
+  setTimeout(notifyAll, REPLY_MS);
+}
+
+function saveDraft(gameId: string, playerId: string) {
+  draftAsked.set(playerId, Date.now());
+  draftErrors.delete(playerId);
+  send({ type: "save_draft", gameId, playerId });
+  setTimeout(notifyAll, REPLY_MS);
+  notifyAll();
+}
+
+/** Asked at `asked` and not answered within REPLY_MS. */
+const late = (asked: number | undefined) => asked !== undefined && Date.now() - asked >= REPLY_MS;
 
 function useWorkerState() {
   const [, setVersion] = useState(0);
@@ -190,7 +259,7 @@ function useWorkerState() {
   const players = game ? (playersByGame.get(game) ?? null) : null;
   // Before any table has said who sits there, a failing log is still worth saying.
   const logTrouble = (game ? logTroubles.get(game) : logTroubles.values().next().value) ?? null;
-  return { status, acks, players, settings, costs, hand, logTrouble };
+  return { status, acks, players, settings, costs, hand, logTrouble, apiProblem };
 }
 
 const send = (message: PanelToWorker) => port?.postMessage(message);
@@ -226,6 +295,7 @@ function Options({
 
 function waiting(answer: ClaudeAnswer, live: boolean, later: boolean): string {
   if (answer.state === "failed") return `No answer: ${answer.reason}`;
+  // Until 2026-10-07 Ask deeper stopped a first answer still thinking; older hands say so.
   if (answer.state === "cancelled" && later) return "Stopped when you asked deeper.";
   return live && answer.state === "thinking" ? "Thinking..." : "No answer before you acted.";
 }
@@ -258,9 +328,12 @@ function AnswerView(props: { answer: ClaudeAnswer; deeper: boolean; live: boolea
   );
 }
 
-function DecisionView(props: { decision: Decision; live: boolean; gameId: string }) {
-  const { decision, live, gameId } = props;
+function DecisionView(props: { decision: Decision; live: boolean; gameId: string; paused: string | null }) {
+  const { decision, live, gameId, paused } = props;
   const answers = decision.advice.answers;
+  const askable = live && !answers.some((a) => a.preset === "deep");
+  useTick(1000, askable && decision.answerBy !== null);
+  const short = askable && decision.answerBy !== null && decision.answerBy - Date.now() < ASK_DEEPER_MIN_MS;
   return (
     <div class={live ? "decision live" : "decision"}>
       <div class="head">
@@ -270,14 +343,19 @@ function DecisionView(props: { decision: Decision; live: boolean; gameId: string
       {answers.map((answer, i) => (
         <AnswerView key={i} answer={answer} deeper={i > 0} live={live} later={i < answers.length - 1} />
       ))}
-      {live && !answers.some((a) => a.preset === "deep") && (
+      {askable && (
         <button
           type="button"
           class="secondary"
+          disabled={paused !== null}
+          title={paused ?? undefined}
           onClick={() => send({ type: "ask", gameId, preset: "deep" })}
         >
           Ask deeper
         </button>
+      )}
+      {askable && short && (
+        <p class="hurry small">Little time left on the clock: the deeper answer may not arrive in time.</p>
       )}
     </div>
   );
@@ -351,7 +429,7 @@ function HandHeader({ info }: { info: HandInfo }) {
   );
 }
 
-function CurrentHand({ hand }: { hand: Hand }) {
+function CurrentHand({ hand, paused }: { hand: Hand; paused: string | null }) {
   return (
     <section class="card advice">
       <div class="section-head">
@@ -363,7 +441,7 @@ function CurrentHand({ hand }: { hand: Hand }) {
         <p class="muted small">No AI decisions yet this hand. Preflop rule and chart answers show on the card only.</p>
       ) : (
         hand.decisions.map((d) => (
-          <DecisionView key={d.node} decision={d} live={d.node === hand.live} gameId={hand.gameId} />
+          <DecisionView key={d.node} decision={d} live={d.node === hand.live} gameId={hand.gameId} paused={paused} />
         ))
       )}
     </section>
@@ -418,7 +496,7 @@ function HistoryPicker({ gameId }: { gameId: string }) {
     const key = (event.currentTarget as HTMLSelectElement).value;
     if (key) {
       pickedHand.set(gameId, key);
-      send({ type: "hand_detail_request", gameId, key });
+      askReplay(gameId, key);
     } else {
       pickedHand.delete(gameId);
     }
@@ -549,7 +627,9 @@ function ReplayPlayers({ players }: { players: HandDetail["players"] }) {
 
 /** An earlier hand, street by street, with VAMOS's advice next to what you did. */
 function HandReplay({ gameId, handKey }: { gameId: string; handKey: string }) {
-  const detail = replays.get(`${gameId}:${handKey}`);
+  const id = `${gameId}:${handKey}`;
+  const detail = replays.get(id);
+  const failed = replayErrors.get(id) ?? (late(replayAsked.get(id)) ? NO_REPLY : null);
   const close = () => {
     pickedHand.delete(gameId);
     notifyAll();
@@ -565,9 +645,16 @@ function HandReplay({ gameId, handKey }: { gameId: string; handKey: string }) {
           ×
         </button>
       </div>
-      {!detail ? (
-        <p class="muted small">Loading...</p>
-      ) : (
+      {!detail && failed && (
+        <div class="replay-failed" role="status">
+          <p class="small">Could not load this hand: {failed}.</p>
+          <button type="button" class="mini" onClick={() => askReplay(gameId, handKey)}>
+            Try again
+          </button>
+        </div>
+      )}
+      {!detail && !failed && <p class="muted small">Loading...</p>}
+      {detail && (
         <>
           {detail.board.length > 0 && (
             <div class="hand-head">
@@ -642,17 +729,23 @@ function HandReplay({ gameId, handKey }: { gameId: string; handKey: string }) {
   );
 }
 
-function Dial({ settings }: { settings: Settings }) {
+function Dial({ settings, paused }: { settings: Settings; paused: string | null }) {
   return (
     <section class="card">
       <h2>Model</h2>
-      <div class="segmented" role="radiogroup" aria-label="Model">
+      <div
+        class={`segmented${paused ? " paused" : ""}`}
+        role="radiogroup"
+        aria-label="Model"
+        title={paused ?? undefined}
+      >
         {settings.presets.map((preset) => (
           <label key={preset.name} class={`${preset.name}${settings.preset === preset.name ? " on" : ""}`}>
             <input
               type="radio"
               name="preset"
               checked={settings.preset === preset.name}
+              disabled={paused !== null}
               onChange={() => send({ type: "settings", preset: preset.name })}
             />
             <span class="model">{preset.label}</span>
@@ -703,7 +796,8 @@ function pct(count: number, of: number): string {
   return `${Math.round((100 * count) / of)}%`;
 }
 
-function IdentityPicker({ player, profiles }: { player: PlayerInfo; profiles: Players["profiles"] }) {
+function IdentityPicker(props: { player: PlayerInfo; profiles: Players["profiles"]; paused: string | null }) {
+  const { player, profiles, paused } = props;
   const change = (event: Event) => {
     const value = (event.currentTarget as HTMLSelectElement).value;
     if (!value) return;
@@ -715,7 +809,13 @@ function IdentityPicker({ player, profiles }: { player: PlayerInfo; profiles: Pl
   };
   const current = player.profile?.key ?? (player.status === "none" ? NO_PROFILE : "");
   return (
-    <select aria-label={`Match a profile for ${player.name}`} value={current} onChange={change}>
+    <select
+      aria-label={`Match a profile for ${player.name}`}
+      value={current}
+      disabled={paused !== null}
+      title={paused ?? undefined}
+      onChange={change}
+    >
       {player.status === "unknown" && <option value="">{MATCH}</option>}
       {profiles.map((p) => (
         <option key={p.key} value={p.key}>
@@ -728,11 +828,20 @@ function IdentityPicker({ player, profiles }: { player: PlayerInfo; profiles: Pl
   );
 }
 
-function PlayerNotes({ player, gameId }: { player: PlayerInfo; gameId: string }) {
+function PlayerNotes({ player, gameId, paused }: { player: PlayerInfo; gameId: string; paused: string | null }) {
   const [, rerender] = useState(0);
   const value = drafts.get(player.id) ?? player.notes;
   const change = (event: Event) => {
-    const text = (event.currentTarget as HTMLInputElement).value;
+    const input = event.currentTarget as HTMLInputElement;
+    let text = input.value;
+    // What the field shows is what is kept: the backend keeps no more either.
+    if (text.length > NOTES_LIMIT) {
+      text = text.slice(0, NOTES_LIMIT);
+      input.value = text;
+      notesCut.add(player.id);
+    } else {
+      notesCut.delete(player.id);
+    }
     drafts.set(player.id, text);
     draftGames.set(player.id, gameId);
     rerender((n) => n + 1);
@@ -747,16 +856,32 @@ function PlayerNotes({ player, gameId }: { player: PlayerInfo; gameId: string })
     const text = drafts.get(player.id);
     if (text !== undefined) send({ type: "notes", playerId: player.id, text, gameId });
   };
+  const limit = NOTES_LIMIT.toLocaleString("en-US");
   return (
-    <input
-      class="notes"
-      type="text"
-      value={value}
-      onInput={change}
-      onBlur={flush}
-      placeholder="Notes for this session, e.g. very bluffy"
-      aria-label={`Notes on ${player.name}`}
-    />
+    <>
+      <input
+        class="notes"
+        type="text"
+        value={value}
+        disabled={paused !== null}
+        title={paused ?? undefined}
+        onInput={change}
+        onBlur={flush}
+        placeholder="Notes for this session, e.g. very bluffy"
+        aria-label={`Notes on ${player.name}`}
+      />
+      {notesCut.has(player.id) ? (
+        <p class="small notes-count cut" role="status">
+          Cut at {limit} characters: the rest was not kept.
+        </p>
+      ) : (
+        value.length >= NOTES_COUNT_FROM && (
+          <p class="muted small notes-count">
+            {value.length.toLocaleString("en-US")} of {limit} characters
+          </p>
+        )
+      )}
+    </>
   );
 }
 
@@ -892,10 +1017,12 @@ function Identity({ player }: { player: PlayerInfo }) {
   );
 }
 
-function PlayerRow(props: { player: PlayerInfo; profiles: Players["profiles"]; gameId: string }) {
-  const { player, profiles, gameId } = props;
+function PlayerRow(props: { player: PlayerInfo; profiles: Players["profiles"]; gameId: string; paused: string | null }) {
+  const { player, profiles, gameId, paused } = props;
   const profile = player.profile;
   const saved = savedDrafts.get(player.id);
+  const saving = draftAsked.get(player.id);
+  const notSaved = draftErrors.get(player.id) ?? (late(saving) ? NO_REPLY : null);
   const kind = player.hero ? "me" : profile ? "mapped" : "guest";
   return (
     <li class={`player ${kind}`}>
@@ -911,12 +1038,16 @@ function PlayerRow(props: { player: PlayerInfo; profiles: Players["profiles"]; g
             <button
               type="button"
               class="mini"
-              title="Write this session's read and your notes to drafts/ for you to review (saving again replaces this game's draft)"
-              onClick={() => send({ type: "save_draft", gameId, playerId: player.id })}
+              disabled={paused !== null}
+              title={
+                paused ??
+                "Write this session's read and your notes to drafts/ for you to review (saving again replaces this game's draft)"
+              }
+              onClick={() => saveDraft(gameId, player.id)}
             >
               Save draft
             </button>
-            {player.source !== "player_id" && <IdentityPicker player={player} profiles={profiles} />}
+            {player.source !== "player_id" && <IdentityPicker player={player} profiles={profiles} paused={paused} />}
           </span>
         )}
       </div>
@@ -924,8 +1055,16 @@ function PlayerRow(props: { player: PlayerInfo; profiles: Players["profiles"]; g
       {profile?.summary && <p class="summary">{profile.summary}</p>}
       <TonightStats t={player.tonight} />
       {profile && <ProfileStats profile={profile} />}
-      {!player.hero && <PlayerNotes player={player} gameId={gameId} />}
-      {saved && <p class="muted small saved">Draft saved to {saved}</p>}
+      {!player.hero && <PlayerNotes player={player} gameId={gameId} paused={paused} />}
+      {notSaved ? (
+        <p class="small draft-failed" role="status">
+          Draft not saved: {notSaved}
+        </p>
+      ) : saving !== undefined ? (
+        <p class="muted small saved">Saving the draft...</p>
+      ) : (
+        saved && <p class="muted small saved">Draft saved to {saved}</p>
+      )}
       {profile && (
         <details class="file">
           <summary>
@@ -938,7 +1077,7 @@ function PlayerRow(props: { player: PlayerInfo; profiles: Players["profiles"]; g
   );
 }
 
-function PlayersSection({ players }: { players: Players }) {
+function PlayersSection({ players, paused }: { players: Players; paused: string | null }) {
   return (
     <section class="card">
       <h2>Players</h2>
@@ -956,7 +1095,7 @@ function PlayersSection({ players }: { players: Players }) {
       {players.players.length > 0 ? (
         <ul class="players">
           {players.players.map((p) => (
-            <PlayerRow key={p.id} player={p} profiles={players.profiles} gameId={players.gameId} />
+            <PlayerRow key={p.id} player={p} profiles={players.profiles} gameId={players.gameId} paused={paused} />
           ))}
         </ul>
       ) : (
@@ -979,11 +1118,7 @@ function UnreadRows({ count }: { count: number }) {
 
 /** Why PokerNow's log is failing for the shown table, counted down to the next try. */
 function LogProblem({ trouble }: { trouble: LogTrouble }) {
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    const timer = setInterval(() => setTick((n) => n + 1), 1000);
-    return () => clearInterval(timer);
-  }, []);
+  useTick(1000);
   return (
     <p class="log-problem" role="status">
       {troubleText(trouble, Date.now())}
@@ -1013,10 +1148,24 @@ function Chip() {
 }
 
 /** An on/off switch with its current meaning spelled out under it. */
-function Switch(props: { label: string; on: boolean; hint: string; onChange: (on: boolean) => void }) {
-  const { label, on, hint, onChange } = props;
+function Switch(props: {
+  label: string;
+  on: boolean;
+  hint: string;
+  paused: string | null;
+  onChange: (on: boolean) => void;
+}) {
+  const { label, on, hint, paused, onChange } = props;
   return (
-    <button type="button" class={on ? "switch on" : "switch"} role="switch" aria-checked={on} onClick={() => onChange(!on)}>
+    <button
+      type="button"
+      class={on ? "switch on" : "switch"}
+      role="switch"
+      aria-checked={on}
+      disabled={paused !== null}
+      title={paused ?? undefined}
+      onClick={() => onChange(!on)}
+    >
       <span class="track">
         <span class="knob" />
       </span>
@@ -1029,9 +1178,11 @@ function Switch(props: { label: string; on: boolean; hint: string; onChange: (on
 }
 
 function Panel() {
-  const { status, acks, players, settings, costs, hand, logTrouble } = useWorkerState();
+  const { status, acks, players, settings, costs, hand, logTrouble, apiProblem } = useWorkerState();
   const requestSnapshot = () => send({ type: "snapshot_request" });
   const state = status.state === "ready" ? "active" : status.state;
+  // What is sent while the backend is not ready would be lost, so it cannot be changed then.
+  const paused = pausedWhy(status);
 
   return (
     <main>
@@ -1046,38 +1197,52 @@ function Panel() {
             {status.detail ? ` · ${status.detail}` : ""}
           </span>
         </div>
+        {status.fix && (
+          <p class="fix" role="status">
+            {status.fix}
+          </p>
+        )}
         {logTrouble && <LogProblem trouble={logTrouble} />}
+        {apiProblem && (
+          <p class="api-problem" role="status">
+            {apiProblem}
+          </p>
+        )}
         {settings && (
           <div class="switches">
             <Switch
               label="AI Advice"
               on={settings.aiOn}
               hint={settings.aiOn ? "mixed preflop and AI postflop" : "off: preflop rules only, no API calls"}
+              paused={paused}
               onChange={(on) => send({ type: "settings", aiOn: on })}
             />
             <Switch
               label="VAMOS! HUD"
               on={settings.showCard}
               hint={settings.showCard ? "displayed on your turn" : "hidden"}
+              paused={paused}
               onChange={(on) => send({ type: "settings", showCard: on })}
             />
             <Switch
               label="Per-Player Stats"
               on={settings.showBadges}
               hint={settings.showBadges ? "under each seat" : "hidden"}
+              paused={paused}
               onChange={(on) => send({ type: "settings", showBadges: on })}
             />
           </div>
         )}
+        {settings && paused && <p class="paused-why">{paused}, so these controls are paused.</p>}
         {players && <UnreadRows count={players.unreadRows} />}
       </header>
-      {settings && <Dial settings={settings} />}
+      {settings && <Dial settings={settings} paused={paused} />}
       {costs && <Spend costs={costs} />}
-      {hand && <CurrentHand hand={hand} />}
+      {hand && <CurrentHand hand={hand} paused={paused} />}
       {hand && pickedHand.has(hand.gameId) && (
         <HandReplay gameId={hand.gameId} handKey={pickedHand.get(hand.gameId) ?? ""} />
       )}
-      {players && <PlayersSection players={players} />}
+      {players && <PlayersSection players={players} paused={paused} />}
       {status.recording && (
         <section class="card">
           <h2>Recording</h2>

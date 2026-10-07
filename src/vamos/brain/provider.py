@@ -16,6 +16,7 @@ The API key comes from ANTHROPIC_API_KEY in the environment or in the repo's .en
 """
 
 import contextlib
+import json
 import os
 import socket
 import threading
@@ -236,26 +237,48 @@ def _failure(error: Exception, usage: dict[str, Any]) -> CallFailed:
 class CannedProvider:
     """
     End-to-end tests: every call answers with the file's text, so they never reach the API.
-    The file is read on each call, so a test can change the answer between decisions.
+    The file is read on each call, so a test can change the answer between decisions. Two
+    keys in it are for the test, not the answer: "wait_seconds" makes Claude slow, and
+    "fail" fails the call with that reason.
     """
 
     def __init__(self, path: Path):
         self.path = path
 
     def run(self, request: Request, cancelled: threading.Event) -> Reply:
-        return Reply(self.path.read_text(), "end_turn", {})
+        text = self.path.read_text()
+        try:
+            canned = json.loads(text)
+        except ValueError:
+            return Reply(text, "end_turn", {})
+        if not isinstance(canned, dict) or not {"wait_seconds", "fail"} & canned.keys():
+            return Reply(text, "end_turn", {})
+        if cancelled.wait(float(canned.pop("wait_seconds", 0))):
+            raise CallFailed(STOPPED)
+        if "fail" in canned:
+            raise CallFailed(str(canned["fail"]))
+        return Reply(json.dumps(canned), "end_turn", {})
+
+
+type Scripted = Reply | CallFailed | tuple[threading.Event, Reply]
 
 
 class FakeProvider:
-    """A scripted Claude for tests: each call returns (or raises) the next scripted item."""
+    """
+    A scripted Claude for tests: each call returns (or raises) the next scripted item, or,
+    scripted by preset name, its preset's item whichever call asks first.
+    """
 
-    def __init__(self, script: list[Reply | CallFailed | tuple[threading.Event, Reply]]):
-        self.script = list(script)
+    def __init__(self, script: list[Scripted] | dict[str, Scripted]):
+        self.script = dict(script) if isinstance(script, dict) else list(script)
         self.requests: list[Request] = []
 
     def run(self, request: Request, cancelled: threading.Event) -> Reply:
         self.requests.append(request)
-        item = self.script.pop(0)
+        if isinstance(self.script, dict):
+            item = self.script[request.preset.name]
+        else:
+            item = self.script.pop(0)
         if isinstance(item, tuple):
             # (gate, reply): wait for the test to open the gate, as a slow call would.
             gate, item = item

@@ -190,6 +190,17 @@ def test_hands_from_before_the_record_show_claudes_logged_answers_with_real_name
     )
 
 
+def test_a_deeper_answer_logged_before_the_first_one_still_replays_second():
+    # Each call is logged when it ends, and the deeper one can end first.
+    deeper = logged("h1:1:5", "BB", kind="ask", preset="deep", chosen=["check", 0])
+    entries = [deeper, logged("h1:1:5", "BB", preset="standard")]
+    detail = hand_detail(log_of(*WON), "h1", HERO, {}, entries)
+    [decision] = [e for e in detail["streets"][1]["events"] if e["kind"] == "decision"]
+    advice = decision["advice"]
+    assert [a["preset"] for a in advice["answers"]] == ["standard", "deep"]
+    assert (advice["action"], advice["preset"]) == ("CHECK", "deep")
+
+
 def test_a_logged_name_follows_the_starting_stack_when_positions_were_counted_differently():
     log = log_of(*hand(1, H, *WON[2:-1], alex=600))
     entries = [logged("h1:1:5", "SB", alex_bb=30.0, preset="standard")]

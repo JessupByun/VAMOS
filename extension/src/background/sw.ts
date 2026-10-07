@@ -9,7 +9,7 @@ import {
   type WorkerToContent,
   type WorkerToPanel,
 } from "../shared/protocol";
-import { HostRetry } from "./retry";
+import { HostRetry, hostDown } from "./retry";
 import { GameTabs } from "./tabs";
 
 // The native host lives as long as a PokerNow table tab is open: it is launched when the
@@ -53,7 +53,9 @@ function table(gameId: string): TableMemory {
 }
 
 function remember(message: HostToWorker) {
-  if (message.type === "settings" || message.type === "costs") latest.set(message.type, message);
+  if (message.type === "settings" || message.type === "costs" || message.type === "api_status") {
+    latest.set(message.type, message);
+  }
   else if (message.type === "players") table(message.gameId).players = message;
   else if (message.type === "history") table(message.gameId).history = message;
   else if (message.type === "hand") {
@@ -107,8 +109,10 @@ function connectHost() {
   setStatus({ type: "backend", state: "connecting" });
   const port = chrome.runtime.connectNative(HOST_NAME);
   host = port;
+  let started = false;
   port.onMessage.addListener((message: HostToWorker) => {
     if (message.type === "ready") {
+      started = true;
       retry.ready(Date.now());
       setStatus({
         type: "backend",
@@ -142,8 +146,7 @@ function connectHost() {
     }
     // A table is still open, so the backend should be running: relaunch with backoff.
     const wait = retry.failed(Date.now());
-    const seconds = Math.round(wait / 1000);
-    setStatus({ type: "backend", state: "down", detail: `${reason} (retrying in ${seconds}s)` });
+    setStatus(hostDown(reason, started, wait));
     retryTimer = setTimeout(connectHost, wait);
   });
   port.postMessage({ type: "hello", extensionVersion: chrome.runtime.getManifest().version });

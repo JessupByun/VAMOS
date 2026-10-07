@@ -5,6 +5,7 @@ import {
   isClaude,
   type PlayerInfo,
   type Players,
+  pausedWhy,
   type SpotFacts,
   troubleText,
 } from "../../shared/protocol";
@@ -52,11 +53,12 @@ function ActionCard({ store }: { store: Store }) {
   let body;
   if (!ready || !heroSeat || turn === null) {
     body = (
-      <div class={`action-card waiting ${status.state}`}>
+      <div class={`action-card waiting ${status.state}${status.fix ? " fix" : ""}`}>
         <span class="brand">{BRAND}</span>
         <span class="status">{statusText(status)}</span>
         {ready && problem && <span class="wait warn">· {problem}</span>}
         {ready && !problem && <span class="wait">· {heroSeat ? "waiting for your turn" : "not seated"}</span>}
+        {!ready && status.fix && <span class="todo">{status.fix}</span>}
       </div>
     );
   } else {
@@ -179,7 +181,8 @@ function aiLabel(model: string): string {
 function ClaudeCard({ facts, advice }: { facts: SpotFacts; advice: ClaudeAdvice }) {
   if (advice.action === null) {
     // No answer yet, or none coming: the stats stay up, with the reason when there is one.
-    const failed = advice.state === "failed";
+    // After Ask deeper, the first call may still answer when the deeper one has failed.
+    const failed = advice.state === "failed" && !advice.answers.some((a) => a.state === "thinking");
     return (
       <div class="action-card claude">
         <Source kind="claude" label={aiLabel(advice.asked)} />
@@ -223,6 +226,7 @@ function WhoIsThis(props: {
   info: PlayerInfo;
   profiles: Players["profiles"];
   onAssign: (playerId: string, profile: string | null) => void;
+  paused: string | null;
 }) {
   const choose = (event: Event) => {
     const value = (event.currentTarget as HTMLSelectElement).value;
@@ -234,7 +238,8 @@ function WhoIsThis(props: {
       {/* The seat is narrow: the menu says "Match profile"; its full name is for the reader. */}
       <select
         aria-label={`Match a profile for ${props.info.name}`}
-        title="Match existing player profile"
+        title={props.paused ?? "Match existing player profile"}
+        disabled={props.paused !== null}
         onChange={choose}
       >
         <option value="">Match profile</option>
@@ -254,6 +259,7 @@ function Badge(props: {
   info: PlayerInfo | undefined;
   profiles: Players["profiles"];
   onAssign: (playerId: string, profile: string | null) => void;
+  paused: string | null;
 }) {
   const { seat, info } = props;
   if (!info) return null;
@@ -263,7 +269,7 @@ function Badge(props: {
   const style = { left: `${rect.left}px`, top: `${rect.bottom + 2}px`, width: `${rect.width}px` };
   let body;
   if (info.status === "unknown") {
-    body = <WhoIsThis info={info} profiles={props.profiles} onAssign={props.onAssign} />;
+    body = <WhoIsThis info={info} profiles={props.profiles} onAssign={props.onAssign} paused={props.paused} />;
   } else {
     // The person (their profile's name when known, or "You") and tonight's numbers; the
     // profile itself is in the side panel.
@@ -281,7 +287,9 @@ export function Overlay(props: {
   store: Store;
   onAssign: (playerId: string, profile: string | null) => void;
 }) {
-  const { seats, players, heroSeat, showBadges } = useStore(props.store);
+  const { seats, players, heroSeat, showBadges, status } = useStore(props.store);
+  // Picks made while the backend is down would go nowhere.
+  const paused = pausedWhy(status);
   const byId = new Map(players?.players.map((p) => [p.id, p]));
   // The hero's own numbers tonight, under the hero's seat like everyone else's.
   const hero = players?.players.find((p) => p.hero);
@@ -295,6 +303,7 @@ export function Overlay(props: {
           info={hero}
           profiles={players?.profiles ?? []}
           onAssign={props.onAssign}
+          paused={paused}
         />
       )}
       {showBadges &&
@@ -305,6 +314,7 @@ export function Overlay(props: {
           info={byId.get(seat.id)}
           profiles={players?.profiles ?? []}
           onAssign={props.onAssign}
+          paused={paused}
         />
       ))}
     </>

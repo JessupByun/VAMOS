@@ -1,9 +1,10 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { expect, type Page, test } from "@playwright/test";
 
 import {
+  CLAUDE_ANSWER,
   EXTENSION_ID,
   GAME_ID,
   type Harness,
@@ -16,6 +17,8 @@ import {
 
 const POLL_MS = 2000;
 const PANEL_URL = `chrome-extension://${EXTENSION_ID}/src/sidepanel/index.html`;
+const START_FIX = "Run uv run vamos install in the VAMOS folder, then reload VAMOS";
+const NO_REPLY = "no reply from VAMOS's backend";
 
 let harness: Harness;
 
@@ -39,6 +42,12 @@ async function openTable() {
   await page.goto(`${ORIGIN}/games/${GAME_ID}`);
   await expect(pillStatus(page)).toHaveText(/^active \(v\d+\.\d+\.\d+\)/);
   return page;
+}
+
+async function openPanel() {
+  const panel = await harness.context.newPage();
+  await panel.goto(PANEL_URL);
+  return panel;
 }
 
 /** A live panel answers a snapshot request through panel -> worker -> content -> host. */
@@ -421,6 +430,41 @@ async function heroTurn(page: Page) {
   );
 }
 
+/** The hero's turn on a K♠ 7♦ 2♣ flop after calling from the small blind: Claude decides. */
+async function flopTurn(page: Page) {
+  harness.addLogLines([
+    ...HAND_START,
+    `"new guy @ ${STRANGER_ID}" folds`,
+    `"TestHero @ ${HERO_ID}" calls 0.20`,
+    `"alex @ ${KNOWN_ID}" checks`,
+    "Flop:  [K♠, 7♦, 2♣]",
+  ]);
+  await heroTurn(page);
+  await page.evaluate(() => {
+    for (const bet of document.querySelectorAll(".table-player-bet-value")) bet.remove();
+    const pot = document.querySelector(".table-pot-size .normal-value");
+    if (pot) pot.textContent = "0.40";
+    document.querySelector(".table-cards.run-1")!.innerHTML = ["card-s card-s-K", "card-d card-s-7", "card-c card-s-2"]
+      .map((cls) => `<div class="card-container ${cls} flipped"></div>`)
+      .join("");
+  });
+}
+
+/** PokerNow's decision clock on the hero's seat, with `seconds` left and its bar shrinking. */
+async function runClock(page: Page, seconds: number) {
+  await page.evaluate((left) => {
+    const seat = document.querySelector(".you-player");
+    seat?.insertAdjacentHTML("beforeend", '<div class="time-to-talk"><div class="normal-time"></div></div>');
+    const bar = seat?.querySelector<HTMLElement>(".normal-time");
+    const ends = performance.now() + left * 1000;
+    const draw = () => {
+      if (bar) bar.style.width = `${Math.max(0, (ends - performance.now()) / 300)}%`; // a 30 s clock
+    };
+    draw();
+    setInterval(draw, 100);
+  }, seconds);
+}
+
 test("the action card shows facts on the hero's turn only once the log has caught up", async () => {
   const page = await openTable();
   const card = page.locator("#vamos-root .action-card");
@@ -579,22 +623,7 @@ test("after the flop the card shows Claude's answer and the panel its reasoning"
   const panel = await harness.context.newPage();
   await panel.goto(PANEL_URL);
   const card = page.locator("#vamos-root .action-card");
-  harness.addLogLines([
-    ...HAND_START,
-    `"new guy @ ${STRANGER_ID}" folds`,
-    `"TestHero @ ${HERO_ID}" calls 0.20`,
-    `"alex @ ${KNOWN_ID}" checks`,
-    "Flop:  [K♠, 7♦, 2♣]",
-  ]);
-  await heroTurn(page);
-  await page.evaluate(() => {
-    for (const bet of document.querySelectorAll(".table-player-bet-value")) bet.remove();
-    const pot = document.querySelector(".table-pot-size .normal-value");
-    if (pot) pot.textContent = "0.40";
-    document.querySelector(".table-cards.run-1")!.innerHTML = ["card-s card-s-K", "card-d card-s-7", "card-c card-s-2"]
-      .map((cls) => `<div class="card-container ${cls} flipped"></div>`)
-      .join("");
-  });
+  await flopTurn(page);
   await expect(card.locator(".source")).toHaveText("VAMOS! AI (Claude Opus 5.5 · low)");
   await expect(card.locator(".action")).toHaveText("BET $0.20 (1bb)");
   // Colored by what it says (a bet); who said it is in the label.
@@ -604,6 +633,8 @@ test("after the flop the card shows Claude's answer and the panel its reasoning"
   await expect(panel.locator(".advice .why")).toHaveText("alex folds to small bets.");
   await expect(panel.locator(".advice .plan")).toHaveText("Next: Check behind if alex calls and the turn is a club.");
   await expect(panel.getByRole("button", { name: "Ask deeper" })).toBeVisible();
+  // 25 seconds with no clock on the table: time enough for a deeper answer.
+  await expect(panel.locator(".hurry")).toHaveCount(0);
   await expect(panel.locator(".stat.tonight .value")).toHaveText("$0.00");
   await expect(panel.locator(".stat.tonight .label")).toHaveText("This session");
   await expect(panel.locator(".spend-note")).toHaveText(
@@ -687,6 +718,232 @@ test("after the flop the card shows Claude's answer and the panel its reasoning"
   expect(flop.length).toBeGreaterThan(1); // thinking, then answered, then asked deeper
   expect(new Set(flop.map((r) => r.shownAt)).size).toBe(1);
   for (const r of records) expect(Date.parse(r.at)).toBeGreaterThanOrEqual(Date.parse(r.shownAt));
+});
+
+test("Ask deeper while the first answer is still thinking lets both finish, one under the other", async () => {
+  const page = await openTable();
+  const panel = await openPanel();
+  const card = page.locator("#vamos-root .action-card");
+  const answers = panel.locator(".decision.live .answer");
+  harness.setClaudeAnswer({ ...CLAUDE_ANSWER, wait_seconds: 4 });
+  await flopTurn(page);
+  await expect(answers).toHaveCount(1);
+  await expect(answers.nth(0).locator(".waiting")).toHaveText("Thinking...");
+
+  harness.setClaudeAnswer({ reason: "Player A traps.", strategy: [{ action: "check", size_pct_pot: 0, freq: 1 }], plan: "" });
+  await panel.getByRole("button", { name: "Ask deeper" }).click();
+  // The deeper answer comes first, and the first call keeps thinking.
+  await expect(answers).toHaveCount(2);
+  await expect(answers.nth(1).locator(".pick")).toHaveText("CHECK");
+  await expect(answers.nth(0).locator(".waiting")).toHaveText("Thinking...");
+  await expect(card.locator(".action")).toHaveText("CHECK");
+  await expect(card.locator(".source")).toHaveText("VAMOS! AI (Claude Opus 5.5 · medium)");
+
+  // Then the first one arrives above it, to compare; the card keeps the deeper answer.
+  await expect(answers.nth(0).locator(".pick")).toHaveText("BET $0.20 (1bb)");
+  await expect(answers.nth(0).locator(".source")).toHaveText("VAMOS! AI (Claude Opus 5.5 · low)");
+  await expect(answers.nth(1).locator(".pick")).toHaveText("CHECK");
+  await expect(card.locator(".action")).toHaveText("CHECK");
+  // Both ran to the end, and each is logged.
+  await expect.poll(() => harness.hostLog()).toMatch(/kind=advice preset=standard outcome=done/);
+  expect(harness.hostLog()).toMatch(/kind=ask preset=deep outcome=done/);
+  expect(harness.hostLog()).not.toMatch(/outcome=cancelled/);
+});
+
+test("with little time on the clock, Ask deeper still runs but says its answer may come too late", async () => {
+  const page = await openTable();
+  const panel = await openPanel();
+  const card = page.locator("#vamos-root .action-card");
+  const ask = panel.getByRole("button", { name: "Ask deeper" });
+  const hurry = panel.locator(".hurry");
+  await flopTurn(page);
+  await expect(card.locator(".action")).toHaveText("BET $0.20 (1bb)");
+  await expect(ask).toBeVisible();
+  await expect(hurry).toHaveCount(0);
+  // 13 seconds on the table's clock leave Claude about 8, with 5 kept for you to act.
+  await runClock(page, 13);
+  await expect(hurry).toHaveText("Little time left on the clock: the deeper answer may not arrive in time.");
+  await ask.click();
+  await expect(panel.locator(".decision.live .answer")).toHaveCount(2);
+  await expect(panel.locator(".decision.live .answer").nth(1).locator(".pick")).toHaveText("BET $0.20 (1bb)");
+  await expect(hurry).toHaveCount(0);
+});
+
+test("a call failing for the API credits warns in the side panel until a call gets through", async () => {
+  const page = await openTable();
+  const panel = await openPanel();
+  const card = page.locator("#vamos-root .action-card");
+  const warning = panel.locator(".api-problem");
+  await expect(panel.locator(".state")).toHaveText(/active/);
+  await expect(warning).toHaveCount(0);
+  harness.setClaudeAnswer({ fail: "out of API credits" });
+  await flopTurn(page);
+  await expect(card.locator(".warn")).toHaveText("no answer: out of API credits");
+  const credits = "Out of API credits: add credits in the Anthropic Console";
+  await expect(warning).toHaveText(credits);
+  // A panel opened later says so from the start.
+  const later = await openPanel();
+  await expect(later.locator(".api-problem")).toHaveText(credits);
+
+  harness.setClaudeAnswer(CLAUDE_ANSWER);
+  await panel.getByRole("button", { name: "Ask deeper" }).click();
+  await expect(card.locator(".action")).toHaveText("BET $0.20 (1bb)");
+  await expect(warning).toHaveCount(0);
+  await expect(later.locator(".api-problem")).toHaveCount(0);
+});
+
+test("when Chrome cannot start the backend, the card and the side panel say how to fix it", async () => {
+  harness.breakHost("unregistered");
+  const page = await harness.context.newPage();
+  await page.goto(`${ORIGIN}/games/${GAME_ID}`);
+  const card = page.locator("#vamos-root .action-card");
+  await expect(pillStatus(page)).toHaveText(
+    /^down: the backend could not start \(Specified native messaging host not found\), retrying in \d+s$/,
+  );
+  await expect(card.locator(".todo")).toHaveText(START_FIX);
+  const panel = await openPanel();
+  await expect(panel.locator(".state")).toContainText("the backend could not start");
+  await expect(panel.locator(".fix")).toHaveText(START_FIX);
+
+  // Registered again: the next try starts it, and the fix goes away.
+  harness.breakHost(null);
+  await expect(pillStatus(page)).toHaveText(/^active/, { timeout: 20_000 });
+  await expect(card.locator(".todo")).toHaveCount(0);
+  await expect(panel.locator(".fix")).toHaveCount(0);
+});
+
+test("while the backend is down, the switches and the badges' profile picks are paused and say why", async () => {
+  const page = await openTable();
+  const panel = await openPanel();
+  const aiSwitch = panel.getByRole("switch", { name: /AI Advice/ });
+  const dial = panel.locator(".segmented input");
+  const pick = badge(page, STRANGER_ID).locator("select");
+  await expect(aiSwitch).toBeEnabled();
+  await expect(pick).toBeEnabled();
+  await expect(panel.locator(".paused-why")).toHaveCount(0);
+
+  // The backend dies, and starting it again fails.
+  harness.breakHost("exits");
+  process.kill(harness.latestHostPid() as number, "SIGKILL");
+  await expect(page.locator("#vamos-root .todo")).toHaveText(START_FIX);
+  await expect(panel.locator(".fix")).toHaveText(START_FIX);
+  const why = "VAMOS's backend is not running";
+  await expect(aiSwitch).toBeDisabled();
+  await expect(aiSwitch).toHaveAttribute("title", why);
+  await expect(dial).toHaveCount(2);
+  for (const input of await dial.all()) await expect(input).toBeDisabled();
+  await expect(panel.locator(".paused-why")).toHaveText(`${why}, so these controls are paused.`);
+  await expect(pick).toBeDisabled();
+  await expect(pick).toHaveAttribute("title", why);
+
+  harness.breakHost(null);
+  await expect(pillStatus(page)).toHaveText(/^active/, { timeout: 20_000 });
+  await expect(aiSwitch).toBeEnabled();
+  await expect(pick).toBeEnabled();
+  await expect(pick).toHaveAttribute("title", "Match existing player profile");
+  await expect(panel.locator(".paused-why")).toHaveCount(0);
+});
+
+test("Save draft and the replayer say when they fail instead of waiting forever", async () => {
+  const page = await openTable();
+  const panel = await openPanel();
+  harness.addLogLines(HAND_START.map((line) => line.replace("A♠, 10♦", "A♠, A♦")));
+  harness.addLogLines([
+    `"new guy @ ${STRANGER_ID}" folds`,
+    `"TestHero @ ${HERO_ID}" raises to 0.60`,
+    `"alex @ ${KNOWN_ID}" folds`,
+    `Uncalled bet of 0.40 returned to "TestHero @ ${HERO_ID}"`,
+    `"TestHero @ ${HERO_ID}" collected 0.40 from pot`,
+    "-- ending hand #1 --",
+  ]);
+  const picker = panel.getByRole("combobox", { name: "Replay an earlier hand" });
+  await expect(picker.locator("option")).toHaveCount(2);
+  const replay = panel.locator("section.replay");
+  const alex = panel.locator(".players li.player", { has: panel.locator(".who", { hasText: /^alex$/ }) });
+  const draft = alex.locator(".draft-failed");
+
+  // A backend that hangs answers nothing: after a few seconds each says so.
+  const pid = harness.latestHostPid() as number;
+  process.kill(pid, "SIGSTOP");
+  try {
+    await picker.selectOption({ index: 1 });
+    await expect(replay.locator(".muted")).toHaveText("Loading...");
+    await alex.getByRole("button", { name: "Save draft" }).click();
+    await expect(alex.locator(".saved")).toHaveText("Saving the draft...");
+    await expect(replay.locator(".replay-failed p")).toHaveText(`Could not load this hand: ${NO_REPLY}.`);
+    await expect(draft).toHaveText(`Draft not saved: ${NO_REPLY}`);
+  } finally {
+    process.kill(pid, "SIGCONT");
+  }
+  // Once it answers again, both arrive.
+  await expect(replay.locator("h2")).toHaveText("Hand replayer · #1");
+  await expect(alex.locator(".saved")).toHaveText(/^Draft saved to drafts\/\d{4}-\d{2}-\d{2}-alex\.md$/);
+  await expect(draft).toHaveCount(0);
+
+  // A draft that cannot be written says why.
+  const saved = /drafts\/\S+/.exec((await alex.locator(".saved").textContent()) ?? "")?.[0] ?? "";
+  const file = join(harness.dataDir, "..", saved);
+  chmodSync(file, 0o400);
+  try {
+    await alex.getByRole("button", { name: "Save draft" }).click();
+    await expect(draft).toHaveText("Draft not saved: could not write to the drafts folder (Permission denied)");
+  } finally {
+    chmodSync(file, 0o644);
+  }
+});
+
+test("notes count their characters near the limit and say when they were cut", async () => {
+  await openTable();
+  const panel = await openPanel();
+  const notes = panel.getByRole("textbox", { name: "Notes on alex" });
+  const count = panel.locator(".notes-count");
+  await notes.fill("x".repeat(1700));
+  await expect(count).toHaveCount(0);
+  await notes.fill("x".repeat(1850));
+  await expect(count).toHaveText("1,850 of 2,000 characters");
+  await notes.fill("y".repeat(2100));
+  await expect(count).toHaveText("Cut at 2,000 characters: the rest was not kept.");
+  await expect(notes).toHaveValue("y".repeat(2000));
+  // The backend keeps what the field shows.
+  const saved = () => {
+    const path = join(harness.dataDir, `games/${GAME_ID}.notes.json`);
+    return existsSync(path) ? (JSON.parse(readFileSync(path, "utf8")) as Record<string, string>) : {};
+  };
+  await expect.poll(() => saved()[KNOWN_ID]).toBe("y".repeat(2000));
+  await notes.fill("tilted");
+  await expect(count).toHaveCount(0);
+});
+
+/** A ledger row as the backend writes it: local time, no zone. */
+function costRow(dollars: number) {
+  const now = new Date();
+  const at = new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 19);
+  return `${JSON.stringify({
+    at,
+    model: "claude-opus-5-5",
+    kind: "advice",
+    input_tokens: 0,
+    output_tokens: 0,
+    cache_read_tokens: 0,
+    cache_write_5m_tokens: 0,
+    cache_write_1h_tokens: 0,
+    dollars,
+  })}\n`;
+}
+
+test("the side panel's costs are read again when it opens and when a setting changes", async () => {
+  await openTable();
+  const panel = await openPanel();
+  const total = panel.locator(".stat.all .value");
+  await expect(total).toHaveText("$0.00");
+  // Calls billed meanwhile, with no call of this backend's to say so.
+  appendFileSync(join(harness.dataDir, "costs.jsonl"), costRow(1.25));
+  await panel.getByRole("switch", { name: /Per-Player Stats/ }).click();
+  await expect(total).toHaveText("$1.25");
+  await expect(panel.locator(".stat.tonight .value")).toHaveText("$1.25");
+  appendFileSync(join(harness.dataDir, "costs.jsonl"), costRow(1.25));
+  const later = await openPanel();
+  await expect(later.locator(".stat.all .value")).toHaveText("$2.50");
 });
 
 // Not a check: screenshots of the card and side panel for reviewing the design by eye.

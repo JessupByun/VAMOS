@@ -80,7 +80,9 @@ HAND = [
 
 
 @pytest.fixture
-def backend(tmp_path):
+def backend(tmp_path, monkeypatch):
+    # Whether this machine has an API key must not change what the backend says.
+    monkeypatch.setattr("vamos.host.server.api_key", lambda: "sk-test")
     profiles = tmp_path / "profiles"
     profiles.mkdir()
     (profiles / "alex.md").write_text(ALEX)
@@ -88,7 +90,7 @@ def backend(tmp_path):
 
 
 def test_hello_reports_ready_with_settings_and_costs(backend):
-    ready, settings, costs = backend.handle({"type": "hello"})
+    ready, settings, costs, api = backend.handle({"type": "hello"})
     assert ready == {"type": "ready", "version": VERSION, "recording": False}
     assert settings == {
         "type": "settings",
@@ -113,6 +115,21 @@ def test_hello_reports_ready_with_settings_and_costs(backend):
         "showBadges": True,
     }
     assert (costs["type"], costs["session"], costs["overCap"]) == ("costs", 0, False)
+    assert api == {"type": "api_status", "problem": None}
+
+
+def test_a_missing_api_key_is_said_from_the_start(tmp_path, monkeypatch):
+    import vamos.host.server as server
+
+    monkeypatch.setattr(server, "api_key", lambda: None)
+    api = Backend(tmp_path / "data", tmp_path / "profiles").handle({"type": "hello"})[-1]
+    assert api == {
+        "type": "api_status",
+        "problem": "No API key: put ANTHROPIC_API_KEY in the .env file in the VAMOS folder",
+    }
+    monkeypatch.setattr(server, "api_key", lambda: "sk-test")
+    api = Backend(tmp_path / "data", tmp_path / "profiles").handle({"type": "hello"})[-1]
+    assert api["problem"] is None
 
 
 def test_seated_players_resolve_to_profiles_or_ask(backend):
@@ -180,14 +197,14 @@ def test_serve_survives_a_bad_message(backend):
     stdin = io.BytesIO(frame({"type": "seats"}) + frame({"type": "hello"}))
     stdout = io.BytesIO()
     serve(stdin, stdout, backend)
-    assert [m["type"] for m in read_all(stdout)] == ["ready", "settings", "costs"]
+    assert [m["type"] for m in read_all(stdout)] == ["ready", "settings", "costs", "api_status"]
 
 
 def test_serve_skips_a_message_that_is_not_json(backend, caplog):
     stdin = io.BytesIO(struct.pack("<I", 5) + b"{oops" + frame({"type": "hello"}))
     stdout = io.BytesIO()
     serve(stdin, stdout, backend)
-    assert [m["type"] for m in read_all(stdout)] == ["ready", "settings", "costs"]
+    assert [m["type"] for m in read_all(stdout)] == ["ready", "settings", "costs", "api_status"]
     assert "[VAMOS] skipped a message from Chrome: 5-byte message is not JSON" in caplog.text
 
 
@@ -201,7 +218,7 @@ def test_a_damaged_identity_file_does_not_stop_the_backend(tmp_path):
     stdin = io.BytesIO(frame({"type": "hello"}) + frame(SEATS))
     stdout = io.BytesIO()
     serve(stdin, stdout, Backend(data, profiles))
-    ready, _, _, players = read_all(stdout)
+    ready, *_, players = read_all(stdout)
     assert ready["type"] == "ready"
     [problem] = players["problems"]
     assert problem.startswith("data/identity.json was damaged, so the players you matched")
@@ -716,8 +733,8 @@ def test_a_profile_with_odd_frontmatter_still_lists_the_players(tmp_path):
 def test_turning_claude_off_stops_calls_and_keeps_the_facts(tmp_path):
     backend, fake, _ = claude_backend(tmp_path, [])
     backend.handle(page(*FLOP_HAND))
-    [settings] = backend.handle({"type": "settings", "aiOn": False})
-    assert settings["aiOn"] is False
+    settings, costs = backend.handle({"type": "settings", "aiOn": False})
+    assert (settings["aiOn"], costs["type"]) == (False, "costs")
     [reply] = backend.handle(FLOP_TURN)
     found = reply["facts"]
     assert (found["advice"], found["aiOff"]) == (None, True) and found["madeHand"]
@@ -1013,3 +1030,125 @@ def test_every_saved_game_is_kept_however_old(tmp_path):
     # A backend starting, as at every table opened, deletes nothing: the user analyzes them later.
     Backend(tmp_path / "data", tmp_path / "profiles")
     assert sorted(p.name for p in games.iterdir()) == names
+
+
+def sent_of(sent: queue.Queue, kind: str) -> dict:
+    """The next message of one type the backend sent on its own (from a Claude call)."""
+    while (message := sent.get(timeout=3))["type"] != kind:
+        pass
+    return message
+
+
+def test_a_key_or_credit_failure_warns_until_a_call_gets_through(tmp_path):
+    from vamos.brain.provider import CallFailed
+
+    backend, _, sent = claude_backend(
+        tmp_path, [CallFailed("out of API credits"), Reply(BET_HALF, "end_turn", {})]
+    )
+    backend.handle(page(*FLOP_HAND))
+    backend.handle(FLOP_TURN)
+    assert sent_of(sent, "api_status") == {
+        "type": "api_status",
+        "problem": "Out of API credits: add credits in the Anthropic Console",
+    }
+    assert backend.handle({"type": "hello"})[-1]["problem"].startswith("Out of API credits")
+    backend.handle({"type": "ask", "gameId": GAME, "preset": "deep"})
+    assert sent_of(sent, "api_status") == {"type": "api_status", "problem": None}
+
+
+def test_costs_are_sent_again_when_asked_and_after_a_settings_change(tmp_path):
+    from vamos.brain.costs import CallCost
+
+    at = [datetime(2026, 10, 7, 21, 0).astimezone()]
+    backend = Backend(tmp_path / "data", tmp_path / "profiles", FakeProvider([]), now=lambda: at[0])
+    backend.ledger.record(
+        CallCost("2026-10-07T20:30:00", "claude-opus-5-5", "advice", 0, 0, 0, 0, 0, 0.5)
+    )
+    [costs] = backend.handle({"type": "costs_request"})
+    assert (costs["type"], costs["session"], costs["allTime"]) == ("costs", 0.5, 0.5)
+    # Three hours without a call end the session, with no call to say so.
+    at[0] += timedelta(hours=3)
+    replies = backend.handle({"type": "settings", "aiOn": False})
+    [costs] = [r for r in replies if r["type"] == "costs"]
+    assert (costs["session"], costs["month"], costs["allTime"]) == (0, 0.5, 0.5)
+
+
+def test_notes_past_the_limit_are_cut_and_the_cut_is_logged(tmp_path, caplog):
+    from vamos.host.server import NOTES_LIMIT
+
+    backend, _, _ = claude_backend(tmp_path, [])
+    backend.handle(SEATS)
+    text = "x" * (NOTES_LIMIT + 5)
+    backend.handle({"type": "notes", "gameId": GAME, "playerId": "Qw3rTy7UiO", "text": text})
+    saved = json.loads((tmp_path / f"data/games/{GAME}.notes.json").read_text())
+    assert saved == {"Qw3rTy7UiO": "x" * NOTES_LIMIT}
+    assert f"cut notes on Qw3rTy7UiO from {NOTES_LIMIT + 5} to {NOTES_LIMIT}" in caplog.text
+
+
+def test_the_notes_limit_is_the_side_panels():
+    from vamos.config import REPO_ROOT
+    from vamos.host.server import NOTES_LIMIT
+
+    protocol = (REPO_ROOT / "extension/src/shared/protocol.ts").read_text()
+    assert f"export const NOTES_LIMIT = {NOTES_LIMIT:_};" in protocol
+
+
+def test_a_draft_that_cannot_be_written_says_why(tmp_path):
+    backend, _, _ = claude_backend(tmp_path, [])
+    backend.handle(SEATS)
+    (tmp_path / "drafts").write_text("a file where the folder should be")
+    [failed] = backend.handle({"type": "save_draft", "gameId": GAME, "playerId": "Qw3rTy7UiO"})
+    assert failed == {
+        "type": "draft_failed",
+        "playerId": "Qw3rTy7UiO",
+        "error": "could not write to the drafts folder (File exists)",
+    }
+
+
+def test_a_hand_that_cannot_be_replayed_says_why(tmp_path, monkeypatch, caplog):
+    import vamos.host.server as server
+
+    backend, _, _ = claude_backend(tmp_path, [])
+    request = {"type": "hand_detail_request", "gameId": GAME, "key": "h2"}
+    [failed] = backend.handle(request)
+    assert failed == {
+        "type": "hand_detail_failed",
+        "gameId": GAME,
+        "key": "h2",
+        "error": "VAMOS has not seen your seat at this table yet",
+    }
+    backend.handle({**SEATS, "hero": {"id": "heroid0001", "name": "Hero"}})
+    backend.handle(page(*HERO_HAND))
+    [failed] = backend.handle({**request, "key": "h9"})
+    assert failed["error"] == "this hand is not in this session's log"
+
+    def broken(*args):
+        raise KeyError("street")
+
+    monkeypatch.setattr(server, "hand_detail", broken)
+    [failed] = backend.handle(request)
+    assert failed["error"] == "VAMOS hit an error on this hand (logged in data/logs/host.log)"
+    assert "could not replay hand h2" in caplog.text
+
+
+def test_the_card_says_until_when_claude_is_waited_for(tmp_path):
+    from datetime import UTC
+
+    clock, wall = [100.0], datetime(2026, 10, 7, 21, 0, tzinfo=UTC)
+    gate = threading.Event()
+    backend = Backend(
+        tmp_path / "data",
+        tmp_path / "profiles",
+        FakeProvider([(gate, Reply(BET_HALF, "end_turn", {}))]),
+        clock=lambda: clock[0],
+        now=lambda: wall + timedelta(seconds=clock[0] - 100),
+    )
+    backend.handle(page(*FLOP_HAND))
+    [reply] = backend.handle(FLOP_TURN)
+    # With no clock read yet, VAMOS waits 25 seconds from the start of the turn.
+    assert reply["facts"]["answerBy"] == round((wall.timestamp() + 25) * 1000)
+    clock[0] += 2
+    [reply] = backend.handle({"type": "clock", "gameId": GAME, "secondsLeft": 12})
+    # Five of the table's 12 seconds are left for the hero to act.
+    assert reply["facts"]["answerBy"] == round((wall.timestamp() + 2 + 7) * 1000)
+    gate.set()

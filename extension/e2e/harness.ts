@@ -32,11 +32,11 @@ const TABLE_HTML = `<div class="table">${seat(1, "TestHero", HERO_ID, "you-playe
 const WATCHING_HTML = TABLE_HTML.replace(" you-player", "");
 
 // Profiles get the first pseudonyms, so alex is "Player A" in every prompt.
-const CLAUDE_ANSWER = JSON.stringify({
+export const CLAUDE_ANSWER = {
   reason: "Player A folds to small bets.",
   strategy: [{ action: "bet", size_pct_pot: 50, freq: 1 }],
   plan: "Check behind if Player A calls and the turn is a club.",
-});
+};
 
 // Made-up numbers, in the shape of a real profile's frontmatter and stats.
 const PROFILE = `---
@@ -103,8 +103,16 @@ export interface Harness {
   hostStarts: () => number;
   latestHostPid: () => number | null;
   recordedPages: () => RecordedPage[];
-  /** Claude's canned answer from the next call on, e.g. a mixed strategy. */
+  /**
+   * Claude's canned answer from the next call on, e.g. a mixed strategy. Two keys are for
+   * the test: `wait_seconds` makes Claude slow, `fail` fails the call with that reason.
+   */
   setClaudeAnswer: (answer: object) => void;
+  /**
+   * From the next launch on, Chrome cannot start the backend: it is not registered with
+   * Chrome ("unregistered"), or it exits at once ("exits"); null works normally again.
+   */
+  breakHost: (how: "unregistered" | "exits" | null) => void;
   /** Close the browser, let the host exit, and delete the test's temp folder (about 6 MB). */
   close: () => Promise<void>;
 }
@@ -119,25 +127,22 @@ export async function launch(): Promise<Harness> {
 
   // Claude's answer is canned, so no test ever reaches the API.
   const canned = join(root, "claude-answer.json");
-  writeFileSync(canned, CLAUDE_ANSWER);
+  writeFileSync(canned, JSON.stringify(CLAUDE_ANSWER));
   const launcher = join(root, "vamos-host");
-  writeFileSync(
-    launcher,
-    `#!/bin/sh\nVAMOS_DATA_DIR="${dataDir}" VAMOS_PROFILES_DIR="${profilesDir}" VAMOS_CANNED_CLAUDE="${canned}" VAMOS_RECORD=1 exec "${PYTHON}" -m vamos host "$@"\n`,
-  );
+  const launcherScript = `#!/bin/sh\nVAMOS_DATA_DIR="${dataDir}" VAMOS_PROFILES_DIR="${profilesDir}" VAMOS_CANNED_CLAUDE="${canned}" VAMOS_RECORD=1 exec "${PYTHON}" -m vamos host "$@"\n`;
+  writeFileSync(launcher, launcherScript);
   chmodSync(launcher, 0o755);
   const hostsDir = join(userDataDir, "NativeMessagingHosts");
   mkdirSync(hostsDir, { recursive: true });
-  writeFileSync(
-    join(hostsDir, "com.vamos.host.json"),
-    JSON.stringify({
-      name: "com.vamos.host",
-      description: "VAMOS backend (e2e)",
-      path: launcher,
-      type: "stdio",
-      allowed_origins: [`chrome-extension://${EXTENSION_ID}/`],
-    }),
-  );
+  const manifestPath = join(hostsDir, "com.vamos.host.json");
+  const manifest = JSON.stringify({
+    name: "com.vamos.host",
+    description: "VAMOS backend (e2e)",
+    path: launcher,
+    type: "stdio",
+    allowed_origins: [`chrome-extension://${EXTENSION_ID}/`],
+  });
+  writeFileSync(manifestPath, manifest);
 
   // Newest first, like PokerNow; created_at is epoch ms x 100 plus a sequence number.
   const rows: LogRow[] = [];
@@ -198,6 +203,11 @@ export async function launch(): Promise<Harness> {
   return {
     context,
     setClaudeAnswer: (answer) => writeFileSync(canned, JSON.stringify(answer)),
+    breakHost: (how) => {
+      if (how === "unregistered") rmSync(manifestPath, { force: true });
+      else writeFileSync(manifestPath, manifest);
+      writeFileSync(launcher, how === "exits" ? "#!/bin/sh\nexit 1\n" : launcherScript);
+    },
     addLogRows,
     addLogLines,
     dataDir,

@@ -238,3 +238,22 @@ def test_a_passed_decision_stops_a_real_connection_at_once():
     assert time.monotonic() - passed[0] < 2
     assert error.value.usage["input_tokens"] == 500
     server.close()
+
+
+def test_the_end_to_end_tests_canned_claude_can_answer_slowly_or_fail(tmp_path):
+    canned = tmp_path / "answer.json"
+    text = '{"reason": "x", "strategy": [], "plan": ""}'
+    canned.write_text(text)
+    claude = provider.CannedProvider(canned)
+    assert claude.run(request(), threading.Event()).text == text
+    canned.write_text('{"fail": "out of API credits"}')
+    with pytest.raises(CallFailed, match="out of API credits"):
+        claude.run(request(), threading.Event())
+    # A slow answer is stopped when the decision passes, as a real one would be.
+    canned.write_text('{"wait_seconds": 5, "reason": "x", "strategy": [], "plan": ""}')
+    stopped = threading.Event()
+    threading.Timer(0.05, stopped.set).start()
+    with pytest.raises(CallFailed, match=provider.STOPPED):
+        claude.run(request(), stopped)
+    canned.write_text('{"wait_seconds": 0.01, "reason": "x", "strategy": [], "plan": ""}')
+    assert claude.run(request(), threading.Event()).text == text
