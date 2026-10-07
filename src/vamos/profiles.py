@@ -46,6 +46,8 @@ def _strings(value: object, field: str) -> tuple[str, ...]:
 
 
 def parse_profile(key: str, text: str) -> Profile:
+    # Windows editors save a byte-order mark and \r\n line ends.
+    text = text.removeprefix("\ufeff").replace("\r\n", "\n").replace("\r", "\n")
     match = _FRONTMATTER.match(text)
     if match is None:
         raise ValueError("missing the --- frontmatter block at the top")

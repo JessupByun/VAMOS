@@ -58,6 +58,24 @@ def test_parse_profile_rejects_malformed_frontmatter(text, message):
         parse_profile("x", text)
 
 
+@pytest.mark.parametrize(
+    "encode",
+    [
+        lambda text: text.replace("\n", "\r\n").encode(),  # Windows line endings
+        lambda text: "\ufeff".encode() + text.encode(),  # a byte-order mark
+        lambda text: text.encode("utf-8-sig").replace(b"\n", b"\r\n"),  # both
+    ],
+)
+def test_profiles_saved_by_windows_editors_are_read(tmp_path, encode):
+    (tmp_path / "alex.md").write_bytes(encode(ALEX))
+    loaded = load_profiles(tmp_path)
+    assert loaded.problems == ()
+    profile = loaded.profiles["alex"]
+    assert (profile.name, profile.player_ids, profile.text) == ("alex", ("Qw3rTy7UiO",), ALEX)
+    assert profile.body == "# alex\n\n## Summary\nLoose-passive."
+    assert parse_profile("alex", encode(ALEX).decode()).text == ALEX
+
+
 def test_load_profiles_skips_underscore_files_and_reports_bad_ones(tmp_path):
     write(tmp_path, "alex.md", ALEX)
     write(tmp_path, "_TEMPLATE.md", "---\nplayer_id: AbCdEf1234\n---\n")
