@@ -1076,6 +1076,27 @@ def test_costs_are_sent_again_when_asked_and_after_a_settings_change(tmp_path):
     assert (costs["session"], costs["month"], costs["allTime"]) == (0, 0.5, 0.5)
 
 
+def test_the_costs_say_what_is_estimated_and_leave_out_test_replays(tmp_path):
+    from dataclasses import replace
+
+    from vamos.brain.costs import CallCost
+
+    at = datetime(2026, 10, 7, 21, 0).astimezone()
+    backend = Backend(tmp_path / "data", tmp_path / "profiles", FakeProvider([]), now=lambda: at)
+    stopped = CallCost("2026-10-07T20:30:00", "claude-opus-5-5", "advice", 0, 0, 0, 0, 0, 0.12)
+    for cost in (
+        CallCost("2026-10-07T20:00:00", "claude-opus-5-5", "advice", 0, 0, 0, 0, 0, 0.5),
+        replace(stopped, usage="estimated"),
+        replace(stopped, dollars=0.0, usage="unknown"),
+        CallCost("2026-10-07T20:40:00", "claude-opus-5-5", "replay", 0, 0, 0, 0, 0, 3.0),
+    ):
+        backend.ledger.record(cost)
+    [costs] = backend.handle({"type": "costs_request"})
+    assert (costs["session"], costs["month"], costs["allTime"]) == (0.62, 0.62, 0.62)
+    assert costs["estimated"]["session"] == {"dollars": 0.12, "calls": 1}
+    assert costs["unknown"] == {"session": 1, "month": 1, "allTime": 1}
+
+
 def test_notes_past_the_limit_are_cut_and_the_cut_is_logged(tmp_path, caplog):
     from vamos.host.server import NOTES_LIMIT
 

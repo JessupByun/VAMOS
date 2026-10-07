@@ -38,8 +38,8 @@ from pathlib import Path
 from typing import Any
 
 from vamos.brain.answer import Answer, BadAnswer, Choice, Spot, settle
-from vamos.brain.costs import TOKENS, Ledger, known, price
-from vamos.brain.provider import CallFailed, Provider, Request
+from vamos.brain.costs import TOKENS, CallCost, Ledger, known, price
+from vamos.brain.provider import STOPPED, CallFailed, Provider, Request
 from vamos.engine.facts import format_chips, format_money
 from vamos.jsonl import append_lines
 
@@ -71,9 +71,16 @@ class Job:
     kind: str = "advice"  # the cost ledger's label: advice, preflop or ask
 
 
+def prefix_hash(request: Request) -> str:
+    """Which cached prefix (the profiles sent) a request reads, without storing it again."""
+    system = "\n".join(block["text"] for block in request.system)
+    return hashlib.sha256(system.encode()).hexdigest()[:16]
+
+
 class Call:
     def __init__(self, job: Job, deadline: float, started: float):
         self.job = job
+        self.prefix = prefix_hash(job.request)
         self.deadline = deadline
         self.started = started
         self.ended: float | None = None  # when it stopped thinking, however it ended
@@ -90,6 +97,7 @@ class Call:
         self.attempts = 0  # each at most one API request: a second when tried again
         self.usage: dict[str, int] = {}  # tokens over every attempt, when any are known
         self.dollars = 0.0
+        self.estimate: CallCost | None = None  # stopped before Claude's first event
         self.over = threading.Event()  # its thread has ended, and logged it
 
     @property
@@ -354,6 +362,8 @@ class Advisor:
                 reply = self._provider.run(call.job.request, call.cancelled, call.replied)
             except CallFailed as failure:
                 self._record(call, failure.usage)
+                if failure.reason == STOPPED and not known(failure.usage):
+                    self._estimate(call)
                 reason = failure.reason
                 if reason in ACCOUNT_PROBLEMS:
                     self._on_account(reason)
@@ -415,11 +425,13 @@ class Advisor:
                 f"dollars={call.dollars:.4f}",
             ]
         elif call.attempts:
-            parts.append("tokens=unknown")  # stopped before Claude's first event
+            parts.append("tokens=unknown")  # stopped or turned away before Claude's first event
+        if call.estimate is not None:
+            estimated = call.estimate.usage == "estimated"
+            parts.append(f"estimate={call.estimate.dollars:.4f}" if estimated else "estimate=none")
         log.info("[VAMOS] Claude call %s", " ".join(parts))
         if self._advice_log is None:
             return
-        system = "\n".join(block["text"] for block in request.system)
         answer = call.answer
         entry = {
             "at": self._now().isoformat(timespec="seconds"),
@@ -436,8 +448,7 @@ class Advisor:
             "attempts": call.attempts,
             "usage": call.usage or None,
             "dollars": round(call.dollars, 6) if call.usage else None,
-            # Which profiles the answer saw, without storing them again.
-            "prefix": hashlib.sha256(system.encode()).hexdigest()[:16],
+            "prefix": call.prefix,  # which profiles the answer saw
             # Only a hand that was sent: one refused for a real name in it must not be replayed.
             "spot": request.messages[-1]["content"] if request.messages and call.attempts else None,
             "answer": call.raw,
@@ -457,10 +468,25 @@ class Advisor:
         for name in TOKENS:
             call.usage[name] = call.usage.get(name, 0) + int(usage.get(name) or 0)
         try:
-            cost = price(call.model, usage, call.job.kind, self._now())
+            cost = price(call.model, usage, call.job.kind, self._now(), call.prefix)
             call.dollars += cost.dollars
             with self._ledger_lock:
                 self._ledger.record(cost)
+        except Exception:
+            log.exception("[VAMOS] could not record a call's cost")
+            return
+        self._on_cost()
+
+    def _estimate(self, call: Call) -> None:
+        """
+        A request stopped before Claude's first event never learns what it used: the ledger
+        prices it like the latest one on the same prefix, so the side panel counts it too.
+        """
+        try:
+            with self._ledger_lock:
+                call.estimate = self._ledger.estimate(
+                    call.model, call.prefix, call.job.kind, self._now()
+                )
         except Exception:
             log.exception("[VAMOS] could not record a call's cost")
             return

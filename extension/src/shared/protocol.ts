@@ -485,6 +485,9 @@ export interface ApiStatus {
   problem: string | null;
 }
 
+type Figure = "session" | "month" | "allTime";
+
+/** Play at the table only: the developer's test replays are left out. */
 export interface Costs {
   type: "costs";
   /** Dollars. */
@@ -493,6 +496,63 @@ export interface Costs {
   allTime: number;
   overCap: boolean;
   softCap: number;
+  /** Of each figure, what was estimated for calls stopped before Claude's first reply. */
+  estimated: Record<Figure, { dollars: number; calls: number }>;
+  /** Per figure, the calls stopped before Claude's first reply with nothing comparable to estimate from. */
+  unknown: Record<Figure, number>;
+}
+
+const FIGURES: [Figure, string][] = [
+  ["session", "this session"],
+  ["month", "this month"],
+  ["allTime", "all time"],
+];
+
+/**
+ * The figures where `count` is not 0, those in a row with the same value merged, each with
+ * the figures it is for ("" when it is all three).
+ */
+function byFigure<T>(value: (figure: Figure) => T, count: (value: T) => number): { value: T; where: string }[] {
+  const groups: { value: T; same: string; names: string[] }[] = [];
+  for (const [figure, name] of FIGURES) {
+    const v = value(figure);
+    if (count(v) === 0) continue;
+    const last = groups.at(-1);
+    if (last?.same === JSON.stringify(v)) last.names.push(name);
+    else groups.push({ value: v, same: JSON.stringify(v), names: [name] });
+  }
+  const alike = groups.length === 1 && groups[0]?.names.length === FIGURES.length;
+  return groups.map((g) => ({ value: g.value, where: alike ? "" : ` ${g.names.join(" and ")}` }));
+}
+
+const inList = (parts: string[]) =>
+  parts.length < 2 ? parts.join("") : `${parts.slice(0, -1).join(", ")}, and ${parts.at(-1)}`;
+const callCount = (count: number) => `${count} call${count === 1 ? "" : "s"}`;
+const about = (dollars: number) => (dollars > 0 && dollars < 0.005 ? "under $0.01" : `about $${dollars.toFixed(2)}`);
+
+/**
+ * How much of the costs is estimated, for calls stopped before Claude answered, and how many
+ * such calls had nothing comparable to estimate them from; null when there are none.
+ */
+export function estimateNote(costs: Costs): string | null {
+  const notes: string[] = [];
+  const estimated = byFigure((figure) => costs.estimated[figure], (e) => e.calls);
+  if (estimated.length > 0) {
+    const parts = estimated.map(({ value, where }, i) =>
+      i === 0
+        ? `${about(value.dollars)} estimated for ${callCount(value.calls)} stopped before Claude answered${where}`
+        : `${about(value.dollars)} for ${value.calls}${where}`,
+    );
+    notes.push(`Includes ${inList(parts)}.`);
+  }
+  const unknown = byFigure((figure) => costs.unknown[figure], (count) => count);
+  if (unknown.length > 0) {
+    const parts = unknown.map(({ value, where }, i) =>
+      i === 0 ? `${callCount(value)} stopped before Claude answered${where}` : `${value}${where}`,
+    );
+    notes.push(`Leaves out ${inList(parts)}: nothing comparable to estimate from.`);
+  }
+  return notes.length > 0 ? notes.join(" ") : null;
 }
 
 export interface SnapshotRequest {

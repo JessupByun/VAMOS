@@ -294,3 +294,6 @@ def test_the_end_to_end_tests_canned_claude_can_answer_slowly_or_fail(tmp_path):
     replying = threading.Event()
     assert claude.run(request(), threading.Event(), replying).text == text
     assert replying.is_set()  # Claude's first event comes at once, then it thinks
+    canned.write_text('{"usage": {"input_tokens": 9}, "reason": "x", "strategy": [], "plan": ""}')
+    reply = claude.run(request(), threading.Event())
+    assert (reply.text, reply.usage) == (text, {"input_tokens": 9})

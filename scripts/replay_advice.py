@@ -9,9 +9,9 @@ do. The new answers are shown next to the logged ones and saved to data/replays/
 each spot that answered or failed at the table is replayed once, next to the answer logged
 with the same preset when Ask deeper logged two; calls stopped when the hero acted (or
 refused before sending) only when named with --lines. Spends real money (about 1-2 cents per
-spot on Opus 5.5 low), recorded in the cost ledger as "replay", which "This session" leaves
-out, and stops once --budget is spent; --dry-run prints each rebuilt message without calling
-Claude.
+spot on Opus 5.5 low), recorded in the cost ledger as "replay", which the side panel's costs
+leave out, and stops once --budget is spent; --dry-run prints each rebuilt message without
+calling Claude.
 
 Run: uv run python scripts/replay_advice.py [--preset standard|deep] [--effort low|medium]
      [--lines 5,6,7] [--budget DOLLARS] [--dry-run]

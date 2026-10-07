@@ -168,6 +168,15 @@ def test_rate_limits_and_unreadable_answers_near_the_deadline_are_not_retried(ri
     assert len(r.provider.requests) == 1
 
 
+def test_a_failure_before_claudes_first_event_costs_nothing(rig):
+    # Turned away (rate limited, overloaded, no credits): Claude did no work, so no estimate.
+    r = rig([CallFailed("rate limited")])
+    r.advisor.start("g", r.job(), r.clock.t + 20)
+    r.updated()
+    r.logged()
+    assert not r.ledger.path.exists()
+
+
 def test_asking_opus_keeps_the_first_answer_up_meanwhile(rig):
     gate = threading.Event()
     r = rig([BET, (gate, answer(("check", 0, 1.0), note="Player A traps"))])
@@ -323,6 +332,9 @@ def test_a_deeper_call_still_held_back_when_the_decision_passes_is_never_sent(ri
     ]
     assert entries[0]["spot"] is None  # never sent, so never replayed
     assert len(r.provider.requests) == 1
+    # Only the request that was sent is in the cost ledger.
+    [row] = [json.loads(line) for line in r.ledger.path.read_text().splitlines()]
+    assert (row["kind"], row["usage"]) == ("advice", "unknown")
     [deep] = [line for line in claude_lines(caplog) if "preset=deep" in line]
     assert deep.endswith("outcome=cancelled seconds=0.00 attempts=0")
 
@@ -467,6 +479,9 @@ def test_every_call_gets_one_line_in_the_host_log_with_its_tokens(rig, caplog):
         "seconds=0.00 attempts=1 input=100 cache_read=9000 cache_write=0 output=300 "
         "dollars=0.0082"
     ]
+    # The ledger row names the prefix it read, so a stopped call on it can be estimated.
+    [row] = [json.loads(line) for line in r.ledger.path.read_text().splitlines()]
+    assert (row["prefix"], row["usage"]) == (entry["prefix"], "reported")
 
 
 def test_a_call_cancelled_before_claudes_first_event_is_still_logged(rig, caplog):
@@ -484,13 +499,46 @@ def test_a_call_cancelled_before_claudes_first_event_is_still_logged(rig, caplog
         1,
     )
     assert entry["spot"] == "Hand so far: Player A checks"  # sent, so kept for replays
-    # Stopped before Claude's first event: whatever it costs is not known here.
+    # Stopped before Claude's first event: Claude never says what it used.
     assert (entry["usage"], entry["dollars"]) == (None, None)
-    assert not r.ledger.path.exists()
+    # With no earlier call on these profiles, nothing to estimate it from: counted at $0.
+    [row] = [json.loads(line) for line in r.ledger.path.read_text().splitlines()]
+    assert (row["usage"], row["dollars"], row["prefix"]) == ("unknown", 0, entry["prefix"])
     assert claude_lines(caplog) == [
         "[VAMOS] Claude call game=g node=h1:1:8 kind=advice preset=standard outcome=cancelled "
-        "seconds=1.50 attempts=1 tokens=unknown"
+        "seconds=1.50 attempts=1 tokens=unknown estimate=none"
     ]
+
+
+def test_a_call_stopped_before_claudes_first_event_is_estimated_from_the_last_like_it(rig, caplog):
+    caplog.set_level(logging.INFO, logger="vamos.brain")
+    gate = threading.Event()
+    billed = []
+    r = rig([BET, (threading.Event(), gate, BET)])
+    r.advisor._on_cost = lambda: billed.append(True)
+    r.advisor.start("g", r.job("h1:1:8"), r.clock.t + 20)
+    r.updated()
+    r.advisor.start("g", r.job("h1:2:9"), r.clock.t + 20)
+    r.sent(2)
+    r.advisor.stop("g")  # the hero acted while Claude had not begun to answer
+    first, stopped = r.logged()
+    assert stopped["prefix"] == first["prefix"]
+    rows = [json.loads(line) for line in r.ledger.path.read_text().splitlines()]
+    assert [(row["usage"], row["prefix"]) for row in rows] == [
+        ("reported", first["prefix"]),
+        ("estimated", first["prefix"]),
+    ]
+    # The first call's input and cache read, without its output: 100 x $4 + 9k x $0.20.
+    assert (rows[1]["input_tokens"], rows[1]["cache_read_tokens"], rows[1]["output_tokens"]) == (
+        100,
+        9000,
+        0,
+    )
+    assert rows[1]["dollars"] == 0.0022
+    assert billed == [True, True]  # the side panel hears of both
+    assert claude_lines(caplog)[1].endswith("attempts=1 tokens=unknown estimate=0.0022")
+    totals = r.ledger.totals(datetime(2026, 10, 2, 13, 30))
+    assert totals["estimated"]["session"] == {"dollars": 0.0022, "calls": 1}
 
 
 class StoppedAfterFirstEvent:
@@ -554,12 +602,15 @@ def test_refused_calls_are_logged_without_the_hand(rig, caplog):
 
 def test_a_timed_out_call_is_logged_once(rig):
     gate = threading.Event()
-    r = rig([(gate, BET)])
+    r = rig([(threading.Event(), gate, BET)])
     r.advisor.start("g", r.job(), r.clock.t + 10)
     r.clock.t += 11
     r.updated()
     [entry] = r.logged()
     assert (entry["state"], entry["reason"], entry["seconds"]) == ("failed", "timed out", 11)
+    # Stopped at the deadline before Claude's first event: counted like any stopped call.
+    [row] = [json.loads(line) for line in r.ledger.path.read_text().splitlines()]
+    assert row["usage"] == "unknown"
 
 
 def test_a_retried_call_is_one_entry_with_both_attempts_tokens(rig):

@@ -6,8 +6,8 @@ Each decision is rebuilt from the game's rows up to that moment, and the prompt 
 the backend's own builder (Backend.prompt_for), so it is what play would have sent: the
 profiles of the players dealt in, pseudonyms, this session's read as it stood, the notes.
 The answers are saved to data/replays/ next to what the hero actually did. Costs real money
-(about a cent a spot), recorded in the cost ledger as "replay", which "This session" leaves
-out; --dry-run only counts the spots and prints one prompt.
+(about a cent a spot), recorded in the cost ledger as "replay", which the side panel's costs
+leave out; --dry-run only counts the spots and prints one prompt.
 Run: uv run python scripts/replay_saved_preflop.py [--games DIR] [--min-players 3]
      [--limit N] [--first-in] [--budget DOLLARS] [--dry-run]
 """

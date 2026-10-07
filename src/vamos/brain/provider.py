@@ -249,9 +249,9 @@ def _failure(error: Exception, usage: dict[str, Any]) -> CallFailed:
 class CannedProvider:
     """
     End-to-end tests: every call answers with the file's text, so they never reach the API.
-    The file is read on each call, so a test can change the answer between decisions. Two
-    keys in it are for the test, not the answer: "wait_seconds" makes Claude slow, and
-    "fail" fails the call with that reason.
+    The file is read on each call, so a test can change the answer between decisions. Three
+    keys in it are for the test, not the answer: "wait_seconds" makes Claude slow, "fail"
+    fails the call with that reason, and "usage" is the tokens Claude reports, to be billed.
     """
 
     def __init__(self, path: Path):
@@ -270,13 +270,14 @@ class CannedProvider:
             canned = json.loads(text)
         except ValueError:
             return Reply(text, "end_turn", {})
-        if not isinstance(canned, dict) or not {"wait_seconds", "fail"} & canned.keys():
+        if not isinstance(canned, dict) or not {"wait_seconds", "fail", "usage"} & canned.keys():
             return Reply(text, "end_turn", {})
+        usage = canned.pop("usage", None) or {}
         if cancelled.wait(float(canned.pop("wait_seconds", 0))):
             raise CallFailed(STOPPED)
         if "fail" in canned:
             raise CallFailed(str(canned["fail"]))
-        return Reply(json.dumps(canned), "end_turn", {})
+        return Reply(json.dumps(canned), "end_turn", usage)
 
 
 type Scripted = (

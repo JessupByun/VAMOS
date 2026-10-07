@@ -3,7 +3,7 @@ from datetime import datetime
 
 import pytest
 
-from vamos.brain.costs import Ledger, price
+from vamos.brain.costs import CallCost, Ledger, price
 
 AT = datetime(2026, 10, 2, 21, 0, 0)
 
@@ -63,7 +63,14 @@ def test_totals_by_session_month_and_all_time(tmp_path):
     ):
         ledger.record(price("claude-opus-5-5", {"output_tokens": output}, "advice", when))
     totals = ledger.totals(datetime(2026, 10, 2, 21, 0))
-    assert totals == {"session": 0.6, "month": 0.8, "allTime": 1.8, "overCap": True}
+    assert totals == {
+        "session": 0.6,
+        "month": 0.8,
+        "allTime": 1.8,
+        "overCap": True,
+        "estimated": {key: {"dollars": 0, "calls": 0} for key in ("session", "month", "allTime")},
+        "unknown": {"session": 0, "month": 0, "allTime": 0},
+    }
 
 
 def test_tonight_runs_back_to_the_last_long_pause_whatever_restarted_in_between(tmp_path):
@@ -92,15 +99,112 @@ def test_a_torn_last_line_is_skipped(tmp_path):
     assert ledger.totals(AT)["allTime"] == pytest.approx(2.0)
 
 
-def test_offline_replays_count_in_the_month_but_not_at_the_table(tmp_path):
-    from datetime import datetime
-
-    from vamos.brain.costs import CallCost, Ledger
-
+def test_the_developers_test_replays_are_left_out_of_every_figure(tmp_path):
     ledger = Ledger(tmp_path / "costs.jsonl")
-    for kind, dollars in (("advice", 0.01), ("replay", 1.00)):
+    for kind, dollars in (("advice", 0.01), ("replay", 1.00), ("ask", 0.02), ("preflop", 0.03)):
         ledger.record(
             CallCost("2026-10-06T20:00:00", "claude-opus-5-5", kind, 0, 0, 0, 0, 0, dollars)
         )
     totals = ledger.totals(datetime(2026, 10, 6, 20, 30))
-    assert (totals["session"], totals["month"]) == (0.01, 1.01)
+    assert (totals["session"], totals["month"], totals["allTime"]) == (0.06, 0.06, 0.06)
+    assert len(ledger.path.read_text().splitlines()) == 4  # the replay stays in the file
+
+
+def row(at, prefix, input_tokens, cache_read, write_5m=0, write_1h=0, output=100):
+    """A request Claude reported, on the cached prefix `prefix`."""
+    usage = {
+        "input_tokens": input_tokens,
+        "output_tokens": output,
+        "cache_read_input_tokens": cache_read,
+        "cache_creation": {
+            "ephemeral_5m_input_tokens": write_5m,
+            "ephemeral_1h_input_tokens": write_1h,
+        },
+    }
+    return price("claude-opus-5-5", usage, "advice", at, prefix)
+
+
+def test_a_request_stopped_before_claudes_first_event_is_priced_like_the_last_like_it(tmp_path):
+    ledger = Ledger(tmp_path / "costs.jsonl")
+    for cost in (
+        row(datetime(2026, 10, 2, 20, 0), "p1", 900, 0, write_5m=40_000),  # wrote the cache
+        row(datetime(2026, 10, 2, 20, 5), "p1", 1_000, 40_000, write_1h=2_000, output=500),
+        row(datetime(2026, 10, 2, 20, 6), "p2", 5_000, 0),  # other profiles at the table
+    ):
+        ledger.record(cost)
+    cost = ledger.estimate("claude-opus-5-5", "p1", "ask", AT)
+    # The latest call on the same prefix, without its output: 1k x $4 + 40k x $0.20 + 2k x $8.
+    assert cost.dollars == pytest.approx((4_000 + 8_000 + 16_000) / 1e6)
+    assert (cost.input_tokens, cost.cache_read_tokens, cost.output_tokens) == (1_000, 40_000, 0)
+    assert (cost.cache_write_5m_tokens, cost.cache_write_1h_tokens) == (0, 2_000)
+    assert (cost.kind, cost.prefix, cost.usage, cost.at) == (
+        "ask",
+        "p1",
+        "estimated",
+        AT.isoformat(),
+    )
+    assert json.loads(ledger.path.read_text().splitlines()[-1])["usage"] == "estimated"
+    # An estimate is never the model for the next one: Claude's own counts are.
+    ledger.record(row(datetime(2026, 10, 2, 20, 30), "p1", 2_000, 40_000))
+    assert ledger.estimate("claude-opus-5-5", "p1", "advice", AT).input_tokens == 2_000
+
+
+def test_nothing_comparable_is_never_estimated(tmp_path):
+    ledger = Ledger(tmp_path / "costs.jsonl")
+    ledger.record(row(datetime(2026, 10, 2, 20, 0), "p1", 1_000, 40_000))
+    # Rows from before prefixes were recorded match nothing.
+    ledger.record(CallCost("2026-10-02T20:01:00", "claude-opus-5-5", "advice", 1, 1, 1, 0, 0, 1.0))
+    for prefix in ("p2", ""):
+        cost = ledger.estimate("claude-opus-5-5", prefix, "advice", AT)
+        assert (cost.usage, cost.dollars, cost.input_tokens, cost.cache_read_tokens) == (
+            "unknown",
+            0,
+            0,
+            0,
+        )
+    assert [json.loads(line).get("usage") for line in ledger.path.read_text().splitlines()] == [
+        "reported",
+        "reported",
+        "unknown",
+        "unknown",
+    ]
+
+
+def test_old_rows_read_as_reported_and_without_a_prefix(tmp_path):
+    path = tmp_path / "costs.jsonl"
+    old = {
+        "at": "2026-10-02T20:00:00",
+        "model": "claude-opus-5-5",
+        "kind": "advice",
+        "input_tokens": 1,
+        "output_tokens": 1,
+        "cache_read_tokens": 0,
+        "cache_write_5m_tokens": 0,
+        "cache_write_1h_tokens": 0,
+        "dollars": 0.5,
+    }
+    path.write_text(json.dumps(old) + "\n")
+    totals = Ledger(path).totals(AT)
+    assert (totals["allTime"], totals["estimated"]["allTime"]) == (0.5, {"dollars": 0, "calls": 0})
+
+
+def test_each_figure_says_how_much_of_it_is_estimated(tmp_path):
+    ledger = Ledger(tmp_path / "costs.jsonl")
+    last_month = datetime(2026, 9, 30, 22, 0)
+    earlier = datetime(2026, 10, 1, 22, 0)
+    ledger.record(row(last_month, "p1", 1_000, 40_000))
+    ledger.estimate("claude-opus-5-5", "p1", "advice", last_month)  # $0.012
+    ledger.estimate("claude-opus-5-5", "p9", "advice", last_month)  # nothing comparable
+    ledger.estimate("claude-opus-5-5", "p1", "advice", earlier)
+    ledger.estimate("claude-opus-5-5", "p1", "advice", AT)
+    ledger.estimate("claude-opus-5-5", "p1", "advice", AT)
+    ledger.estimate("claude-opus-5-5", "p9", "advice", AT)
+    ledger.estimate("claude-opus-5-5", "p1", "replay", AT)  # a test replay: left out
+    totals = ledger.totals(datetime(2026, 10, 2, 21, 30))
+    assert totals["estimated"] == {
+        "session": {"dollars": 0.024, "calls": 2},
+        "month": {"dollars": 0.036, "calls": 3},
+        "allTime": {"dollars": 0.048, "calls": 4},
+    }
+    assert totals["unknown"] == {"session": 1, "month": 1, "allTime": 2}
+    assert totals["session"] == 0.024

@@ -7,6 +7,7 @@ import {
   type ClaudeAdvice,
   type ClaudeAnswer,
   type Costs,
+  estimateNote,
   type HandDetail,
   type HandInfo,
   type HistoryEntry,
@@ -859,6 +860,7 @@ function Spend({ costs }: { costs: Costs }) {
     ["month", "This month", costs.month],
     ["all", "All time", costs.allTime],
   ];
+  const estimated = estimateNote(costs);
   return (
     <section class="card">
       <h2>API costs</h2>
@@ -870,12 +872,13 @@ function Spend({ costs }: { costs: Costs }) {
           </div>
         ))}
       </div>
+      {estimated && <p class="muted small spend-estimate">{estimated}</p>}
       {costs.overCap && (
         <p class="over small">Past this session's {dollars(costs.softCap)} soft cap; advice keeps coming.</p>
       )}
       <p class="muted small spend-note">
-        Counted from the calls VAMOS records. The Anthropic Console is exact, and also counts anything else that
-        uses your API key.
+        Counted from VAMOS's calls at the table. The Anthropic Console is exact, and also counts anything else that
+        uses your API key, such as test replays.
       </p>
     </section>
   );

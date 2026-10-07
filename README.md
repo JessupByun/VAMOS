@@ -39,8 +39,11 @@ Everything else is maintained by Claude:
 - The side panel's switches: AI Advice (with it off no Claude call is made; the preflop rules and chart still answer), VAMOS! HUD (the card on the table) and Per-Player Stats (the badges under each seat).
   While the backend is not running, the switches, the model, notes, profile matches and Save draft are paused and say why.
 - Notes on a player keep up to 2,000 characters: the field counts them near the limit and says when text was cut.
-- The side panel's API costs count the Claude calls VAMOS records (`data/costs.jsonl`), read again every minute and when a setting changes.
-  The Anthropic Console is exact: it counts anything else that uses your API key, and any charge for calls VAMOS stopped before Claude's first reply (whether those are billed is unverified; VAMOS logs them in `data/advice.jsonl` without a cost).
+- The side panel's API costs (This session, This month, All time) count VAMOS's Claude calls at the table (`data/costs.jsonl`), read again every minute and when a setting changes.
+  A call stopped before Claude's first reply (you acted first, or its time ran out) never gets Claude's token counts, so it is estimated from the latest call with the same opponents' profiles (its input and cached tokens, without output), and a note under the figures says how much of them is estimated.
+  With no such call to go by, a stopped call counts $0 and the note says so.
+  The developer's test replays (`scripts/replay_advice.py`, `scripts/replay_saved_preflop.py`) stay in `data/costs.jsonl` but are left out of all three figures.
+  The Anthropic Console is exact: it counts anything else that uses your API key, test replays included.
 - Problems are said, never hidden: when PokerNow's log stops answering, the card and the side panel say why and when VAMOS tries again (for example "PokerNow's log is not answering (HTTP 404), retrying in 8 s"); the side panel counts the log lines VAMOS could not read this session (each one is in `data/logs/host.log`), and if `data/identity.json` (your seat matches) is ever damaged, VAMOS keeps it aside as `identity.damaged-<date>-<time>.json`, starts without it and says so under Players.
   A missing or rejected API key, or running out of API credits, shows as a yellow line at the top of the side panel until a call gets through again.
   When Chrome cannot start the backend, the card and the side panel say to run `uv run vamos install` in this folder and then reload VAMOS.

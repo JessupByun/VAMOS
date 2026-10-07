@@ -106,8 +106,9 @@ export interface Harness {
   latestHostPid: () => number | null;
   recordedPages: () => RecordedPage[];
   /**
-   * Claude's canned answer from the next call on, e.g. a mixed strategy. Two keys are for
-   * the test: `wait_seconds` makes Claude slow, `fail` fails the call with that reason.
+   * Claude's canned answer from the next call on, e.g. a mixed strategy. Three keys are for
+   * the test: `wait_seconds` makes Claude slow, `fail` fails the call with that reason, and
+   * `usage` is the tokens Claude reports, to be billed.
    */
   setClaudeAnswer: (answer: object) => void;
   /**

@@ -851,8 +851,9 @@ test("after the flop the card shows Claude's answer and the panel its reasoning"
   await expect(panel.locator(".stat.tonight .value")).toHaveText("$0.00");
   await expect(panel.locator(".stat.tonight .label")).toHaveText("This session");
   await expect(panel.locator(".spend-note")).toHaveText(
-    "Counted from the calls VAMOS records. The Anthropic Console is exact, and also counts anything else that uses your API key.",
+    "Counted from VAMOS's calls at the table. The Anthropic Console is exact, and also counts anything else that uses your API key, such as test replays.",
   );
+  await expect(panel.locator(".spend-estimate")).toHaveCount(0);
   // Every Claude call leaves one line in the host log, however it ended.
   await expect
     .poll(() => harness.hostLog())
@@ -1129,19 +1130,21 @@ test("notes count their characters near the limit and say when they were cut", a
 });
 
 /** A ledger row as the backend writes it: local time, no zone. */
-function costRow(dollars: number) {
+function costRow(dollars: number, kind = "advice", usage = "reported") {
   const now = new Date();
   const at = new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 19);
   return `${JSON.stringify({
     at,
     model: "claude-opus-5-5",
-    kind: "advice",
+    kind,
     input_tokens: 0,
     output_tokens: 0,
     cache_read_tokens: 0,
     cache_write_5m_tokens: 0,
     cache_write_1h_tokens: 0,
     dollars,
+    prefix: "",
+    usage,
   })}\n`;
 }
 
@@ -1158,6 +1161,57 @@ test("the side panel's costs are read again when it opens and when a setting cha
   appendFileSync(join(harness.dataDir, "costs.jsonl"), costRow(1.25));
   const later = await openPanel();
   await expect(later.locator(".stat.all .value")).toHaveText("$2.50");
+});
+
+test("a call stopped before Claude answered is estimated in the costs, and test replays are left out", async () => {
+  const page = await openTable();
+  const panel = await openPanel();
+  const card = page.locator("#vamos-root .action-card");
+  const total = panel.locator(".stat.all .value");
+  const estimate = panel.locator(".spend-estimate");
+  // The flop: Claude answers and reports its tokens, 1k in x $4 + 40k read x $0.20 + 200 out x $20.
+  harness.setClaudeAnswer({
+    ...CLAUDE_ANSWER,
+    usage: { input_tokens: 1000, cache_read_input_tokens: 40_000, output_tokens: 200 },
+  });
+  await flopTurn(page);
+  await expect(card.locator(".action")).toHaveText("BET $0.20 (1bb)");
+  await expect(total).toHaveText("$0.02");
+  await expect(estimate).toHaveCount(0);
+
+  // The turn: the hero acts before Claude has answered.
+  await page.evaluate(() => document.querySelector(".you-player")?.classList.remove("decision-current"));
+  await expect(card).toContainText("waiting for your turn");
+  harness.setClaudeAnswer({ ...CLAUDE_ANSWER, wait_seconds: 20 });
+  harness.addLogLines([`${H} bets 0.20`, `${D} calls 0.20`, "Turn: K♠, 7♦, 2♣ [9♥]"]);
+  await page.evaluate(() => {
+    const pot = document.querySelector(".table-pot-size .normal-value");
+    if (pot) pot.textContent = "0.80";
+    document
+      .querySelector(".table-cards.run-1")
+      ?.insertAdjacentHTML("beforeend", '<div class="card-container card-h card-s-9 flipped"></div>');
+    document.querySelector(".you-player")?.classList.add("decision-current");
+  });
+  await expect(panel.locator(".decision.live .street")).toHaveText("Turn");
+  await expect(panel.locator(".decision.live .answer .waiting")).toHaveText("Thinking...");
+  await page.evaluate(() => document.querySelector(".you-player")?.classList.remove("decision-current"));
+
+  // Priced like the flop's call on the same profiles, without its output: about $0.012.
+  await expect.poll(() => harness.hostLog()).toMatch(/outcome=cancelled .*tokens=unknown estimate=0\.0120/);
+  await expect(total).toHaveText("$0.03");
+  await expect(panel.locator(".stat.tonight .value")).toHaveText("$0.03");
+  await expect(estimate).toHaveText("Includes about $0.01 estimated for 1 call stopped before Claude answered.");
+
+  // A test replay stays in the ledger but out of every figure; a stopped call with nothing to
+  // estimate it from is said.
+  appendFileSync(join(harness.dataDir, "costs.jsonl"), costRow(1.25, "replay") + costRow(0, "advice", "unknown"));
+  await panel.getByRole("switch", { name: /Per-Player Stats/ }).click();
+  await expect(estimate).toHaveText(
+    "Includes about $0.01 estimated for 1 call stopped before Claude answered. " +
+      "Leaves out 1 call stopped before Claude answered: nothing comparable to estimate from.",
+  );
+  await expect(total).toHaveText("$0.03");
+  await expect(panel.locator(".stat.month .value")).toHaveText("$0.03");
 });
 
 // Not a check: screenshots of the card and side panel for reviewing the design by eye.

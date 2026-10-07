@@ -3,13 +3,15 @@ What Claude costs, from each response's own token counts.
 
 Every request whose usage is known, in part or in full, is priced with the model's rates and
 appended to data/costs.jsonl; the side panel shows this session, this calendar month and all
-time. A request stopped before Claude's first event has no usage, so it is not here (it is
-in data/advice.jsonl and host.log); the Anthropic Console is exact. Going past the session's
-soft cap only warns.
+time of play at the table (the developer's test replays stay in the file but are left out).
+A request stopped before Claude's first event never learns its usage: it is estimated from
+the latest request with the same model and cached prefix, or, with none to go by, counted
+at $0 as unknown, and the side panel says how much of each figure is estimated. The
+Anthropic Console is exact. Going past the session's soft cap only warns.
 """
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -36,6 +38,11 @@ class CallCost:
     cache_write_5m_tokens: int
     cache_write_1h_tokens: int
     dollars: float
+    # The cached prefix's hash, as in data/advice.jsonl: "" before 2026-10-07 and in replays.
+    prefix: str = ""
+    # "reported" by Claude, or for a request stopped before Claude's first event "estimated"
+    # (see Ledger.estimate) or "unknown" (nothing comparable: counted at $0).
+    usage: str = "reported"
 
 
 def known(usage: dict[str, Any]) -> bool:
@@ -48,7 +55,7 @@ def _get(obj: Any, name: str) -> int:
     return int(value or 0)
 
 
-def price(model: str, usage: Any, kind: str, at: datetime) -> CallCost:
+def price(model: str, usage: Any, kind: str, at: datetime, prefix: str = "") -> CallCost:
     """Cost of one response; `usage` is the SDK's usage object (or a dict with its fields)."""
     rates = PRICES[model]
     created = (
@@ -85,16 +92,17 @@ def price(model: str, usage: Any, kind: str, at: datetime) -> CallCost:
         write_5m,
         write_1h,
         round(dollars, 6),
+        prefix,
     )
 
 
-BREAK = timedelta(hours=3)  # a pause this long between calls ends "tonight"
+BREAK = timedelta(hours=3)  # a pause this long between calls ends the session
 
 
-def _tonight(calls: list[CallCost], now: datetime) -> list[CallCost]:
+def _session(calls: list[CallCost], now: datetime) -> list[CallCost]:
     """
     The calls of the current session: back from now to the first pause of BREAK or more, so
-    a restarted backend (a refreshed tab) keeps counting the same night.
+    a restarted backend (a refreshed tab) keeps counting the same session.
     """
     out: list[CallCost] = []
     later = now
@@ -123,6 +131,37 @@ class Ledger:
         self.record(cost)
         return cost
 
+    def estimate(self, model: str, prefix: str, kind: str, at: datetime) -> CallCost:
+        """
+        Record a request stopped before Claude's first event, whose usage is never known: it
+        is priced with the input, cache read and cache write of the latest request Claude
+        reported with the same model and prefix, without output, or at $0 as "unknown" when
+        there is none.
+        """
+        like = next(
+            (
+                c
+                for c in reversed(self._all())
+                if prefix and c.prefix == prefix and c.model == model and c.usage == "reported"
+            ),
+            None,
+        )
+        if like is None:
+            when = at.isoformat(timespec="seconds")
+            cost = CallCost(when, model, kind, 0, 0, 0, 0, 0, 0.0, prefix, "unknown")
+        else:
+            usage = {
+                "input_tokens": like.input_tokens,
+                "cache_read_input_tokens": like.cache_read_tokens,
+                "cache_creation": {
+                    "ephemeral_5m_input_tokens": like.cache_write_5m_tokens,
+                    "ephemeral_1h_input_tokens": like.cache_write_1h_tokens,
+                },
+            }
+            cost = replace(price(model, usage, kind, at, prefix), usage="estimated")
+        self.record(cost)
+        return cost
+
     def _all(self) -> list[CallCost]:
         if not self.path.exists():
             return []
@@ -134,15 +173,31 @@ class Ledger:
                 continue  # a torn last line from a crash is skipped, not fatal
         return out
 
-    def totals(self, now: datetime) -> dict[str, float | bool]:
-        calls = self._all()
+    def totals(self, now: datetime) -> dict[str, Any]:
+        """
+        Dollars this session, this month and all time, with how much of each is estimated
+        and how many stopped requests each leaves out for want of anything comparable.
+        """
+        # Play at the table only: the developer's test replays are not the user's.
+        calls = [c for c in self._all() if c.kind != "replay"]
         month = now.strftime("%Y-%m")
-        # "This session" is spending at the table: offline replays count in the month and the
-        # total, but not there.
-        session = sum(c.dollars for c in _tonight([c for c in calls if c.kind != "replay"], now))
-        return {
-            "session": round(session, 4),
-            "month": round(sum(c.dollars for c in calls if c.at.startswith(month)), 4),
-            "allTime": round(sum(c.dollars for c in calls), 4),
-            "overCap": session > self.soft_cap,
+        figures = {
+            "session": _session(calls, now),
+            "month": [c for c in calls if c.at.startswith(month)],
+            "allTime": calls,
         }
+        out: dict[str, Any] = {
+            name: round(sum(c.dollars for c in rows), 4) for name, rows in figures.items()
+        }
+        out["overCap"] = sum(c.dollars for c in figures["session"]) > self.soft_cap
+        out["estimated"] = {
+            name: {
+                "dollars": round(sum(c.dollars for c in rows if c.usage == "estimated"), 4),
+                "calls": sum(c.usage == "estimated" for c in rows),
+            }
+            for name, rows in figures.items()
+        }
+        out["unknown"] = {
+            name: sum(c.usage == "unknown" for c in rows) for name, rows in figures.items()
+        }
+        return out
