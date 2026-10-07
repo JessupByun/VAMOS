@@ -15,10 +15,9 @@ extension/playwright-report/
 # Secrets
 .env
 
-# Private data: profiles and drafts are Jessup's, data/ is VAMOS's local state
+# Private data: the profiles (only their rulebook is tracked), drafts and data/ stay local
 profiles/*
-!profiles/_TEMPLATE.md
-!profiles/_PROMPT.md
+!profiles/_GUIDELINES.md
 drafts/*
 !drafts/README.md
 /data/

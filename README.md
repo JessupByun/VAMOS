@@ -8,7 +8,7 @@ VAMOS only reads and displays; it never clicks or types into PokerNow.
 
 | Folder | What you do there |
 |---|---|
-| `profiles/` | One `<name>.md` per opponent, written and updated by you. Start from `_TEMPLATE.md`; `_PROMPT.md` is the prompt for generating one in a separate AI chat. VAMOS reads these and never changes them. |
+| `profiles/` | One `<name>.md` per opponent. VAMOS owns these and keeps them up to date from your games, following the rulebook in `_GUIDELINES.md`: exact stats, written reads on each player, and the exploits that work against them. Every earlier version is kept in `data/profile-history/<name>/`. |
 | `drafts/` | What the side panel's Save draft writes: one file per player and game, such as `2026-10-05-alex.md`. Saving again in the same game replaces it, so make your edits in `profiles/`: review the draft, merge what is useful into that player's profile, then delete it. |
 | `.env` | Your `ANTHROPIC_API_KEY` (see `.env.example`). Never shared or committed. |
 

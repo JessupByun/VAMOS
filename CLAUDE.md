@@ -43,20 +43,20 @@ After a backend change, the same reload restarts the backend (Chrome launches it
 - `scripts/` developer tools, one purpose each (listed under Commands): corpus fetchers, the push/fold generators, and the three replays.
 - `docs/pokernow.md` verified facts about PokerNow's log endpoint, log lines and DOM; `docs/log-grammar.md` the full line grammar with evidence. Read both before touching parsing or DOM code.
 - `tests/` pytest suite, one test file per module.
-- `profiles/` the user's opponent profiles, gitignored except `_TEMPLATE.md` and `_PROMPT.md`.
+- `profiles/` the opponent profiles, owned by VAMOS and written only under the rulebook `profiles/_GUIDELINES.md` (the one tracked file there); every earlier version is in `data/profile-history/<name>/`.
 - `drafts/` the side panel's Save draft output (`<date>-<name>.md`), gitignored except its `README.md`; the user reviews and merges them by hand.
-- `data/` VAMOS's own local state, gitignored and never pruned: identity map, advice log, cost ledger, logs, `settings.json` (the dial, the AI switch `aiOn`, the table switches `showCard` and `showBadges`, and the hero's own names to keep out of prompts), `games/` with each game's log rows, per-player notes (`<game>.notes.json`) and the advice shown at each of the hero's decisions (`<game>.decisions.jsonl`), and when used `recordings/`, `replays/` and `test-seats/`.
+- `data/` VAMOS's own local state, gitignored and never pruned: identity map, advice log, cost ledger, logs, `settings.json` (the dial, the AI switch `aiOn`, the table switches `showCard` and `showBadges`, and the hero's own names to keep out of prompts), `games/` with each game's log rows, per-player notes (`<game>.notes.json`) and the advice shown at each of the hero's decisions (`<game>.decisions.jsonl`), `profile-history/<name>/` with every version of each profile, and when used `recordings/`, `replays/`, `reports/` and `test-seats/`.
 
 ## Rules
 
 ### Scope
 - VAMOS only reads and displays. It never clicks, types into, or otherwise operates PokerNow.
-- Profiles belong to the user. VAMOS reads `profiles/*.md` (skipping files that start with `_`) and never writes them.
-- Save draft writes this session's read and notes to `drafts/` only; it never creates or edits a profile, and nothing merges drafts automatically. Updating profiles from inside VAMOS stays off: the user merges by hand from full logs.
+- VAMOS owns the opponent profiles (the user's decision, 2026-10-07): they are the source of truth about each player, kept current after sessions from the saved games and written only under `profiles/_GUIDELINES.md`, with every earlier version kept in `data/profile-history/<name>/`. A profile is created only when the user asks, under the name the user chooses. The profile loader skips files that start with `_`.
+- Save draft writes this session's read and notes to `drafts/` only; it never creates or edits a profile.
 - This session's read is counted from the current game's log only; it is the one stats count in v1. "This session" API cost runs back to the last 3-hour pause between calls, so restarts do not reset it.
 - The extension closes the backend 15 s after the last table tab goes away, so a refresh keeps the same backend.
 - The action card always sits at the top middle of the table, just above the pot, even over a seat.
-- No log ingestion, stats engine, or automatic learning in v1. Deferred features (range tables, HRC tables, review mode's adherence stats, training mode) are built only when the user asks; the hand replayer was built on request (2026-10-05).
+- Learning happens only through the profiles: exact per-player counts from the saved games plus written reads, under the rulebook. No other stats engine or automatic learning. Deferred features (range tables, HRC tables, review mode's adherence stats, training mode) are built only when the user asks; the hand replayer was built on request (2026-10-05).
 - Claude runs on Opus 5.5 only, before and after the flop: effort low by default, medium as the deeper option. Sonnet 5.5 and Haiku 4.5 were dropped after blind comparisons on logged spots; never Claude Fable 5.1.
 - Ask the user before any non-trivial design choice the plan does not cover.
 
