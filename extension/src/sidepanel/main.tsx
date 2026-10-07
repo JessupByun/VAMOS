@@ -213,6 +213,9 @@ function connect() {
     void chrome.runtime.lastError;
     if (port === next) port = null;
     status = { type: "backend", state: "connecting" };
+    // A restarted worker pauses every table's poller, so word that PokerNow answers again may
+    // never come; the worker sends the problems still current once the panel is back.
+    logTroubles.clear();
     notifyAll();
     setTimeout(connect, retryDelay);
     retryDelay = Math.min(retryDelay * 2, RECONNECT_MAX_MS);

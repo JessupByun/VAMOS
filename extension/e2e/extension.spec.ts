@@ -256,6 +256,49 @@ test("pill and side panel recover when Chrome stops the service worker", async (
   await expectPanelRoundTrip(panel);
 });
 
+test("a log problem does not outlast a service worker restart, and one still current is said again", async () => {
+  const page = await openTable();
+  await expect.poll(pageCount).toBe(1);
+  const panel = await openPanel();
+  const card = page.locator("#vamos-root .action-card");
+  const problem = panel.locator(".log-problem");
+  const reason = /PokerNow's log is not answering \(HTTP 404\), retrying in \d+ s/;
+  harness.failLog(404);
+  await expect(problem).toHaveText(reason);
+
+  // Chrome stops the worker, and PokerNow is fine again by the time the tab polls once more.
+  // The table reconnects first (the panel is held back here, since a panel first would hear
+  // "no PokerNow table open" from the new worker and start over anyway).
+  const cdp = await harness.context.newCDPSession(page);
+  await cdp.send("ServiceWorker.enable");
+  const held = await harness.context.newCDPSession(panel);
+  await held.send("Debugger.enable");
+  await held.send("Debugger.pause");
+  await cdp.send("ServiceWorker.stopAllWorkers");
+  harness.failLog(null);
+  await expect.poll(() => harness.hostStarts(), { timeout: 15_000 }).toBe(2);
+  await expect(pillStatus(page)).toHaveText(/^active/);
+  await held.send("Debugger.resume");
+  await held.detach();
+  await expectPanelRoundTrip(panel);
+  const answered = harness.logRequests().length;
+  await expect.poll(() => harness.logRequests().length, { timeout: 15_000 }).toBeGreaterThan(answered);
+  await expect(problem).toHaveCount(0);
+  await expect(card).not.toContainText("PokerNow's log");
+
+  // A problem that is still current when the worker restarts is said again, in the open panel
+  // and in one opened later.
+  harness.failLog(404);
+  await expect(problem).toHaveText(reason);
+  await cdp.send("ServiceWorker.stopAllWorkers");
+  await expect.poll(() => harness.hostStarts(), { timeout: 15_000 }).toBe(3);
+  await expectPanelRoundTrip(panel);
+  await expect(problem).toHaveText(reason, { timeout: 20_000 });
+  await expect(card).toContainText(reason);
+  const later = await openPanel();
+  await expect(later.locator(".log-problem")).toHaveText(reason);
+});
+
 test("a side panel open with no table survives an idle worker stop", async () => {
   const panel = await harness.context.newPage();
   await panel.goto(PANEL_URL);
