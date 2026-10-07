@@ -170,6 +170,22 @@ Player stacks: #1 {A} (1000) | #2 {B} (1000)
     assert log.hands[0].big_blind == 4000
 
 
+def test_a_queued_stack_reset_is_a_table_row_that_leaves_the_hand_alone():
+    queued = (
+        f"WARNING: the admin queued the stack change for the player {A} "
+        "reseting to 50.00 chips in the next hand."
+    )
+    lines = HEADS_UP.split("\n")
+    lines.insert(6, queued)  # mid-hand, after the big blind
+    log = build_hands(rows("\n".join([queued, *lines])))
+    assert log.unknown == []
+    assert [(e.kind, e.detail, e.amount) for _, e in log.table] == [
+        ("stack_change_queued", "reset", 5000)
+    ] * 2
+    [hand] = log.hands
+    assert (hand.pot, hand.balanced, hand.ended) == (20000, True, True)
+
+
 def test_a_new_start_leaves_the_previous_hand_incomplete():
     log = build_hands(
         rows(f"""\

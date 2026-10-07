@@ -6,11 +6,12 @@ Only No-Limit Hold'em cash hands are parsed; every other variant is recognized a
 
 ## Sources and confidence
 
-- `verified` means the line occurs in a real export or in the VAMOS live recording.
+- `verified` means the line occurs in a real export, in the VAMOS live recording or in the rows VAMOS saved from real games.
 - `parser-only` means only parser code, a synthetic fixture or an unrecorded claim supports it.
 - J is Jaaaayden/pokernow-tracker `pnt/logs`: 25 real CSV exports from 2026-07-23 to 2026-09-12, 128,065 rows, 6,631 hands, all NLH cash, MIT licensed.
 - JT is the same repo's `tests/fixtures`: 6 unredacted copies of J games that differ from J only by extra `Your hand is` rows.
 - R is the VAMOS live recording from the P0 guest table: 23 unique rows from 2026-10-02.
+- S is the rows VAMOS saved live from the user's own games in `data/games/` (gitignored, never in the repository): 15 games and 21,643 rows from 2026-10-04 to 2026-10-07, every one of which fullmatches a pattern in this file.
 - L is 12 legacy CSV exports attached to GitHub issues (pn2ps, PokerNowKit, evo converter) from 2020-05 to 2023-10: 12,117 rows, including 88 PLO Hi and 48 PLO Hi/Lo hands.
 - J and JT are fetched into the gitignored `tests/corpus/` by `scripts/fetch_corpus.py`, and `tests/test_log_corpus.py` (`uv run pytest -m corpus`) re-checks the key invariants on every run: every row parses, every finished hand balances, and every all-in player puts in exactly their stack.
 - L was examined during research only and is not part of the repository.
@@ -670,16 +671,19 @@ The admin updated the player "JS @ WZHH2swU87" stack from 42.65 to 142.65.
 #### admin_queued_stack_change (verified)
 
 ```
-^WARNING: the admin queued the stack change for the player P (?P<dir>adding|removing) (?P<amt>N) chips in the next hand\.$
+^WARNING: the admin queued the stack change for the player P (?:(?P<dir>adding|removing)|(?P<reset>reseting to)) (?P<amt>N) chips in the next hand\.$
 ```
 
 ```
 WARNING: the admin queued the stack change for the player "LingWae @ FQN9hzhzP_" adding 500 chips in the next hand.
 WARNING: the admin queued the stack change for the player "bick and dalls @ gpP9uUffpu" removing 500 chips in the next hand.
+WARNING: the admin queued the stack change for the player "Hero @ heroid0001" reseting to 50.00 chips in the next hand.
 ```
 
 - It is an announcement, usually mid-hand (68 of 90), and must not touch the current hand.
-- J counts: 90 (37 adding, 53 removing); L: 13.
+- `adding` and `removing` carry the change, while `reseting to` (PokerNow's spelling) carries the new stack; VAMOS keeps the reset as `detail: "reset"`.
+- The reset example is from S with the player replaced; its 6 rows (3 games) all came between hands, and the next `Player stacks` row showed the reset stack each time (the later one when two were queued before the same hand).
+- J counts: 90 (37 adding, 53 removing); L: 13; S: 6 resets, 2 removing.
 
 #### admin_force_away, admin_remove_player and admin_game_stop (verified)
 

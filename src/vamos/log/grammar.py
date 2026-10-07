@@ -317,14 +317,15 @@ def _stack_update(m: re.Match) -> Event:
 
 @_rule(
     rf"WARNING: the admin queued the stack change for the player {_P} "
-    rf"(?P<dir>adding|removing) (?P<amt>{_N}) chips in the next hand\."
+    rf"(?:(?P<dir>adding|removing)|(?P<reset>reseting to)) (?P<amt>{_N}) chips in the next hand\."
 )
 def _queued_stack(m: re.Match) -> Event:
+    # "adding" and "removing" carry the change; a reset ("reseting", sic) the new stack.
     return Event(
         "stack_change_queued",
         player=_player(m),
         amount=_amount(m.group("amt")),
-        detail=m.group("dir"),
+        detail=m.group("dir") or "reset",
     )
 
 

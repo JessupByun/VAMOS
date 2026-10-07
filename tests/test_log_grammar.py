@@ -147,6 +147,28 @@ def test_table_rows():
     assert (rebuy.kind, rebuy.amount) == ("rebought", 100000)
 
 
+@pytest.mark.parametrize(
+    ("change", "detail", "amount"),
+    [
+        ("adding 500", "adding", 50000),
+        ("removing 30.00", "removing", 3000),
+        # PokerNow's own spelling; the amount is the new stack, not a change.
+        ("reseting to 50.00", "reset", 5000),
+    ],
+)
+def test_queued_admin_stack_changes(change, detail, amount):
+    e = parse_line(
+        'WARNING: the admin queued the stack change for the player "Hero @ heroid0001" '
+        f"{change} chips in the next hand."
+    )
+    assert (e.kind, e.player, e.detail, e.amount) == (
+        "stack_change_queued",
+        Player("Hero", "heroid0001"),
+        detail,
+        amount,
+    )
+
+
 def test_multiline_config_entry():
     e = parse_line(
         "Game Config Changes\n* Blind Schedule: L1: 10/20 » L1: 5/10\n* Double Board: off » always"
