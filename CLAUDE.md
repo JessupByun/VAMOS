@@ -17,8 +17,8 @@ uv run vamos install         # register the native host with Chrome (re-run if t
 uv run vamos install --record   # test tables only: save raw log pages to data/recordings/
 uv run vamos verify <game_id> <export.csv>   # live-built hands vs PokerNow's exported log
 uv run python scripts/replay_preflop_routes.py   # preflop coverage on the saved games: chart, rule or Claude
-uv run python scripts/replay_advice.py --dry-run # logged spots through today's prompt (without --dry-run it calls Claude and costs money)
-uv run python scripts/replay_saved_preflop.py --dry-run   # saved games' Claude preflop spots through Claude (costs money without --dry-run)
+uv run python scripts/replay_advice.py --dry-run # logged spots through today's prompt (without --dry-run it calls Claude and costs money, up to --budget, $3 by default)
+uv run python scripts/replay_saved_preflop.py --dry-run   # saved games' Claude preflop spots through Claude (costs money without --dry-run, up to --budget, $3 by default)
 uv run python scripts/gen_matchups.py && uv run python scripts/gen_preflop_tables.py   # regenerate the push/fold chart
 
 cd extension
@@ -40,7 +40,7 @@ After a backend change, the same reload restarts the backend (Chrome launches it
 - `src/vamos/history.py` the side panel's replayer: this session's finished hands, and one hand street by street with what VAMOS showed at each of the hero's decisions (recorded by the server in `data/games/<game>.decisions.jsonl`, with when the card first showed each decision and when its advice changed) before the hero's action. Hands from before that record began fall back on the game's Claude calls in `data/advice.jsonl` (Claude's answers only, names mapped back by starting stack).
 - `src/vamos/session.py` one game: the live log rows, the hands rebuilt from them, and this session's read per player (`reads()`), which goes to Claude with each opponent and to the side panel. The rows are appended to `data/games/<game>.jsonl` (every game is kept, for the user to analyze), so a restarted backend picks the session up where it was; on (re)start the content script asks the backend where to resume (`resume_request`) and the poller walks back to that row; when the backend holds nothing of the game, the poller walks the whole log back to the game's start with `before_at`, in turns with the live polls.
 - `src/vamos/preflop/` the heads-up push/fold chart: `lookup.py` and `tables.py` load it at the table, with the hand-class constants in `matchups.py` and the positions in `tree.py`; `payoffs.py`, the solving code in `solver.py` and the tree building only regenerate and check it. `docs/preflop.md` says what answers each preflop spot and how each part was checked; read it before changing the chart or the rules.
-- `scripts/` developer tools, one purpose each (listed under Commands): corpus fetchers, the push/fold generators, and the two replays.
+- `scripts/` developer tools, one purpose each (listed under Commands): corpus fetchers, the push/fold generators, and the three replays.
 - `docs/pokernow.md` verified facts about PokerNow's log endpoint, log lines and DOM; `docs/log-grammar.md` the full line grammar with evidence. Read both before touching parsing or DOM code.
 - `tests/` pytest suite, one test file per module.
 - `profiles/` the user's opponent profiles, gitignored except `_TEMPLATE.md` and `_PROMPT.md`.

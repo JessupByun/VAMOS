@@ -22,7 +22,7 @@ from datetime import datetime
 from pathlib import Path
 
 from vamos.brain.answer import BadAnswer, settle
-from vamos.brain.costs import Ledger, price
+from vamos.brain.costs import Ledger
 from vamos.brain.provider import PRESETS, AnthropicProvider, CallFailed, FakeProvider, Request
 from vamos.brain.pseudonyms import LeakError
 from vamos.brain.spot import betting, legal
@@ -134,6 +134,7 @@ def main() -> None:
                 request = Request(
                     PRESETS[args.preset], blocks, [{"role": "user", "content": message}]
                 )
+                model = request.preset.model
                 started = time.monotonic()
                 record = {
                     "game": game_id,
@@ -148,11 +149,10 @@ def main() -> None:
                     "did": did(action, spot.big_blind or 1),
                     "message": message,
                 }
+                cost = None
                 try:
                     reply = provider.run(request, threading.Event())
-                    cost = price(request.preset.model, reply.usage, "replay", datetime.now())
-                    ledger.record(cost)
-                    spent += cost.dollars
+                    cost = ledger.charge(model, reply.usage, "replay", datetime.now())
                     answer = settle(
                         reply.text, betting(hand, hero, spot), spot.node, pseudonyms.reveal
                     )
@@ -164,10 +164,15 @@ def main() -> None:
                         "chosen": [answer.chosen.action, round(answer.chosen.to / bb, 2)],
                         "reason": answer.reason,
                         "plan": answer.plan,
-                        "dollars": cost.dollars,
+                        "dollars": cost.dollars if cost else 0.0,
                     }
-                except (CallFailed, BadAnswer) as error:
+                except CallFailed as error:
+                    # Billed for what Claude had read and written before it failed.
+                    cost = ledger.charge(model, error.usage, "replay", datetime.now())
                     record["failed"] = str(error)
+                except BadAnswer as error:
+                    record["failed"] = str(error)
+                spent += cost.dollars if cost else 0.0
                 record["seconds"] = round(time.monotonic() - started, 2)
                 out.parent.mkdir(parents=True, exist_ok=True)
                 with out.open("a") as f:

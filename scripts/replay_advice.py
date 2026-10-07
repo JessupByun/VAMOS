@@ -5,12 +5,15 @@ change on real hands before playing with it.
 Each spot in data/advice.jsonl is rebuilt into PokerNow log lines (from the hand JSON that
 was sent, under the same pseudonyms), so the engine computes today's facts with today's
 code; the system prompt holds today's profiles of the players in that spot, as live calls
-do. The new answers are shown next to the logged ones and saved to data/replays/. Spends
-real money (about 1-2 cents per spot on Opus 5.5 low); --dry-run prints a rebuilt message
+do. The new answers are shown next to the logged ones and saved to data/replays/. By default
+the calls that answered or failed at the table are replayed; those stopped when the hero
+acted (or refused before sending) only when named with --lines. Spends real money (about 1-2
+cents per spot on Opus 5.5 low), recorded in the cost ledger as "replay", which "This
+session" leaves out, and stops once --budget is spent; --dry-run prints each rebuilt message
 without calling Claude.
 
 Run: uv run python scripts/replay_advice.py [--preset standard|deep] [--effort low|medium]
-     [--lines 5,6,7] [--dry-run]
+     [--lines 5,6,7] [--budget DOLLARS] [--dry-run]
 """
 
 import argparse
@@ -23,7 +26,7 @@ from datetime import datetime
 
 from vamos.brain import prompt
 from vamos.brain.answer import BadAnswer, settle
-from vamos.brain.costs import price
+from vamos.brain.costs import Ledger
 from vamos.brain.provider import PRESETS, AnthropicProvider, CallFailed, Request
 from vamos.brain.pseudonyms import HERO, Pseudonyms
 from vamos.brain.spot import betting, claude_facts, legal
@@ -109,14 +112,21 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--preset", default="standard", choices=list(PRESETS))
     parser.add_argument("--effort", help="override the preset's effort (low, medium, high, ...)")
-    parser.add_argument("--lines", help="1-based lines of data/advice.jsonl (default: all)")
+    parser.add_argument(
+        "--lines",
+        help="1-based lines of data/advice.jsonl (default: every call that answered or failed)",
+    )
+    parser.add_argument("--budget", type=float, default=3.0, help="stop once this much is spent")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
     logged = [json.loads(line) for line in (DATA_DIR / "advice.jsonl").read_text().splitlines()]
     wanted = (
-        {int(n) for n in args.lines.split(",")} if args.lines else set(range(1, len(logged) + 1))
+        {int(n) for n in args.lines.split(",")}
+        if args.lines
+        else {n for n, e in enumerate(logged, 1) if e.get("state") not in ("cancelled", "refused")}
     )
+    ledger = Ledger(DATA_DIR / "costs.jsonl")
     profiles = load_profiles(PROFILES_DIR)
     names = Pseudonyms()
     settings = (
@@ -172,6 +182,9 @@ def main() -> None:
         if args.dry_run:
             print(f"--- line {number}\n{message}\n")
             continue
+        if spent >= args.budget:
+            print(f"budget of ${args.budget:.2f} reached, stopping")
+            break
         preset = PRESETS[args.preset]
         if args.effort:
             preset = dataclasses.replace(preset, effort=args.effort)
@@ -180,10 +193,13 @@ def main() -> None:
         try:
             reply = provider.run(request, threading.Event())
         except CallFailed as failure:
+            cost = ledger.charge(preset.model, failure.usage, "replay", datetime.now())
+            spent += cost.dollars if cost else 0.0
             print(f"line {number}: failed ({failure.reason})")
             continue
         seconds = round(time.monotonic() - started, 2)
-        spent += price(request.preset.model, reply.usage, "replay", datetime.now()).dollars
+        cost = ledger.charge(preset.model, reply.usage, "replay", datetime.now())
+        spent += cost.dollars if cost else 0.0
         try:
             answer = settle(reply.text, betting(hand, hero, state), entry["node"], names.reveal)
             new = {
