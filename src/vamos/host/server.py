@@ -1073,6 +1073,8 @@ def serve(stdin: BinaryIO, stdout: BinaryIO, backend: Backend) -> None:
             for reply in replies:
                 emit(reply)
     backend.emit = lambda message: None
+    # Calls still running are stopped, and logged, before the host exits.
+    backend.advisor.close()
 
 
 def main() -> None:
@@ -1083,7 +1085,9 @@ def main() -> None:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    # The HTTP client logs every API request at INFO; advice.jsonl and costs.jsonl have them.
+    # The HTTP client logs every API request at INFO. The advisor's own line per Claude call
+    # covers each of them (a call's attempts are its requests) with what it was for and how
+    # it ended, so the client's line would only repeat it.
     logging.getLogger("httpx2").setLevel(logging.WARNING)
     # stdout carries framed messages only; a stray print would corrupt the stream.
     stdout = sys.stdout.buffer

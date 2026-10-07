@@ -11,9 +11,12 @@ fails or answers nonsense leaves the facts on the card with the reason. A failur
 pass on its own (Claude overloaded, a dropped connection, an unreadable answer) is tried
 once more if enough time is left.
 
-Every call that answers or fails is appended to data/advice.jsonl, under pseudonyms: the
-hand as sent, Claude's raw answer and what the card showed, so real spots can be replayed
-through a changed prompt (scripts/replay_advice.py; it cannot be rebuilt afterwards).
+Every call is appended to data/advice.jsonl once it has ended, however it ended (answered,
+failed, timed out, cancelled, or refused before sending), under pseudonyms: the hand as
+sent, Claude's raw answer, what the card showed, the seconds from its start and the tokens
+known, so real spots can be replayed through a changed prompt (scripts/replay_advice.py; it
+cannot be rebuilt afterwards). A refused call was never sent, so its hand is not kept. Each
+call also gets one line in data/logs/host.log.
 """
 
 import hashlib
@@ -30,7 +33,7 @@ from pathlib import Path
 from typing import Any
 
 from vamos.brain.answer import Answer, BadAnswer, Choice, Spot, settle
-from vamos.brain.costs import Ledger, price
+from vamos.brain.costs import TOKENS, Ledger, known, price
 from vamos.brain.provider import CallFailed, Provider, Request
 from vamos.engine.facts import format_chips, format_money
 
@@ -60,11 +63,17 @@ class Call:
         self.job = job
         self.deadline = deadline
         self.started = started
+        self.ended: float | None = None  # when it stopped thinking, however it ended
         self.cancelled = threading.Event()
         self.state = "thinking"  # thinking, done, failed or cancelled
+        self.refused = False  # failed without being sent
         self.answer: Answer | None = None
         self.reason: str | None = None
         self.raw: str | None = None  # Claude's answer as sent, under pseudonyms
+        self.attempts = 0  # each at most one API request: a second when tried again
+        self.usage: dict[str, int] = {}  # tokens over every attempt, when any are known
+        self.dollars = 0.0
+        self.over = threading.Event()  # its thread has ended, and logged it
 
     @property
     def model(self) -> str:
@@ -169,6 +178,8 @@ class Advisor:
         # Per game, every call about the latest call's node in the order asked, so a deeper
         # answer is shown under the first one rather than in its place.
         self._node_calls: dict[str, list[Call]] = {}
+        # Calls whose thread has not yet ended: replaced or cancelled ones too.
+        self._running: set[Call] = set()
 
     def asked(self, game_id: str, node: str, preset: str | None = None) -> bool:
         """Whether Claude was asked about `node` (with `preset`, if given)."""
@@ -199,8 +210,13 @@ class Advisor:
             if refuse is None and deadline - self._clock() < MIN_SECONDS:
                 refuse = "not enough time on the clock"
             if refuse is not None:
-                call.state, call.reason = "failed", refuse
-                return True
+                call.state, call.reason, call.refused = "failed", refuse, True
+                call.ended = call.started
+            else:
+                self._running.add(call)
+        if call.refused:
+            self._log(game_id, call)
+            return True
         threading.Thread(target=self._run, args=(game_id, call), daemon=True).start()
         threading.Thread(target=self._watch, args=(game_id, call), daemon=True).start()
         return True
@@ -220,6 +236,19 @@ class Advisor:
             self._node_calls.pop(game_id, None)
             if call is not None:
                 self._cancel(call)
+
+    def close(self, wait: float = 2.0) -> None:
+        """
+        The backend is closing: stop every call still running and give each a moment to end,
+        so it is logged too.
+        """
+        with self._lock:
+            running = list(self._running)
+            for call in running:
+                self._cancel(call)
+        until = time.monotonic() + wait
+        for call in running:
+            call.over.wait(max(0.0, until - time.monotonic()))
 
     def view(self, game_id: str, node: str) -> dict[str, Any] | None:
         """The card's advice for `node`, or None when Claude was not asked about it."""
@@ -255,6 +284,7 @@ class Advisor:
     def _cancel(self, call: Call) -> None:
         if call.state == "thinking":
             call.state = "cancelled"
+            call.ended = self._clock()
         call.cancelled.set()
 
     def _watch(self, game_id: str, call: Call) -> None:
@@ -264,72 +294,107 @@ class Advisor:
                     return
                 left = call.deadline - self._clock()
             if left <= 0:
-                self._finish(game_id, call, reason="timed out")
+                # The card says so now; the call is logged once its request has stopped.
+                if self._finish(game_id, call, reason="timed out"):
+                    self._on_update(game_id)
                 call.cancelled.set()
                 return
             call.cancelled.wait(min(left, 0.25))
 
-    def _again(self, call: Call, attempt: int, reason: str) -> bool:
+    def _retry(self, call: Call, reason: str) -> bool:
         return (
-            attempt == 1
-            and not call.cancelled.is_set()
+            not call.cancelled.is_set()
             and reason.startswith(RETRYABLE)
             and call.deadline - self._clock() >= RETRY_SECONDS
         )
 
     def _run(self, game_id: str, call: Call) -> None:
+        try:
+            answer, reason = self._ask(call)
+            current = self._finish(game_id, call, answer, reason)
+            # Once its last request has ended, so the tokens are known, however it ended.
+            self._log(game_id, call)
+            if current:
+                self._on_update(game_id)
+        finally:
+            with self._lock:
+                self._running.discard(call)
+            call.over.set()
+
+    def _ask(self, call: Call) -> tuple[Answer | None, str | None]:
+        """Claude's answer, or why there is none; a failure that may pass is tried once more."""
+        reason = "internal error"
         for attempt in (1, 2):
+            if attempt == 2 and not self._retry(call, reason):
+                break
+            call.attempts = attempt
             try:
                 reply = self._provider.run(call.job.request, call.cancelled)
             except CallFailed as failure:
                 self._record(call, failure.usage)
-                if self._again(call, attempt, failure.reason):
-                    continue
-                self._finish(game_id, call, reason=failure.reason)
-                return
+                reason = failure.reason
+                continue
             except Exception:
                 log.exception("[VAMOS] Claude call crashed")
-                self._finish(game_id, call, reason="internal error")
-                return
+                return None, "internal error"
             self._record(call, reply.usage)
             call.raw = reply.text
             try:
                 # Each preset draws its own roll, so a deeper answer is a fresh draw from its
                 # own mix rather than one tied to the first answer's.
                 seed = f"{call.job.node}:{call.job.request.preset.name}"
-                answer = settle(reply.text, call.job.spot, seed, call.job.reveal)
+                return settle(reply.text, call.job.spot, seed, call.job.reveal), None
             except BadAnswer as error:
                 log.warning("[VAMOS] unusable answer: %s", error)
-                if self._again(call, attempt, "unreadable answer"):
-                    continue
-                self._finish(game_id, call, reason="unreadable answer")
-                return
+                reason = "unreadable answer"
             except Exception:
                 log.exception("[VAMOS] could not read Claude's answer")
-                self._finish(game_id, call, reason="internal error")
-                return
-            self._finish(game_id, call, answer=answer)
-            return
+                return None, "internal error"
+        return None, reason
 
     def _finish(
         self, game_id: str, call: Call, answer: Answer | None = None, reason: str | None = None
-    ) -> None:
+    ) -> bool:
+        """Settle a call still thinking; True when it is the one the card shows."""
         with self._lock:
             if call.state != "thinking":
-                return  # timed out, cancelled or replaced meanwhile
+                return False  # timed out, cancelled or replaced meanwhile
             call.state = "done" if answer is not None else "failed"
             call.answer, call.reason = answer, reason
+            call.ended = self._clock()
             if answer is not None:
                 self._answered[game_id] = call
-            current = self._calls.get(game_id) is call
-        self._log_advice(game_id, call)
-        if current:
-            self._on_update(game_id)
+            return self._calls.get(game_id) is call
 
-    def _log_advice(self, game_id: str, call: Call) -> None:
+    def _log(self, game_id: str, call: Call) -> None:
+        """A call that has ended: one line in host.log, one entry in data/advice.jsonl."""
+        state = "refused" if call.refused else call.state
+        ended = call.ended if call.ended is not None else self._clock()
+        seconds = round(ended - call.started, 2)
+        request = call.job.request
+        parts = [
+            f"game={game_id}",
+            f"node={call.job.node}",
+            f"kind={call.job.kind}",
+            f"preset={request.preset.name}",
+            f"outcome={state}",
+            *([f"reason={json.dumps(call.reason)}"] if call.reason else []),
+            f"seconds={seconds:.2f}",
+            f"attempts={call.attempts}",
+        ]
+        if call.usage:
+            parts += [
+                f"input={call.usage['input_tokens']}",
+                f"cache_read={call.usage['cache_read_input_tokens']}",
+                f"cache_write={call.usage['cache_creation_input_tokens']}",
+                f"output={call.usage['output_tokens']}",
+                f"dollars={call.dollars:.4f}",
+            ]
+        elif call.attempts:
+            parts.append("tokens=unknown")  # stopped before Claude's first event
+        log.info("[VAMOS] Claude call %s", " ".join(parts))
         if self._advice_log is None:
             return
-        request = call.job.request
         system = "\n".join(block["text"] for block in request.system)
         answer = call.answer
         entry = {
@@ -338,15 +403,19 @@ class Advisor:
             "node": call.job.node,
             "kind": call.job.kind,
             "model": call.model,
-            "preset": call.job.request.preset.name,
-            "state": call.state,
+            "preset": request.preset.name,
+            "state": state,  # done, failed, cancelled or refused
             "reason": call.reason,
-            # From the call's start: how long it took, and how long it was allowed.
-            "seconds": round(self._clock() - call.started, 2),
-            "allowed": round(call.deadline - call.started, 1),
+            # From the call's start: how long until it ended, and how long it was allowed.
+            "seconds": seconds,
+            "allowed": round(max(call.deadline - call.started, 0.0), 1),
+            "attempts": call.attempts,
+            "usage": call.usage or None,
+            "dollars": round(call.dollars, 6) if call.usage else None,
             # Which profiles the answer saw, without storing them again.
             "prefix": hashlib.sha256(system.encode()).hexdigest()[:16],
-            "spot": request.messages[-1]["content"] if request.messages else None,
+            # Only a hand that was sent: one refused for a real name in it must not be replayed.
+            "spot": request.messages[-1]["content"] if request.messages and call.attempts else None,
             "answer": call.raw,
             "mix": [[c.action, c.to, round(c.freq, 4)] for c in answer.mix] if answer else None,
             "chosen": [answer.chosen.action, answer.chosen.to] if answer else None,
@@ -360,11 +429,16 @@ class Advisor:
             log.exception("[VAMOS] could not log advice")
 
     def _record(self, call: Call, usage: dict[str, Any]) -> None:
-        if not any(isinstance(v, int) and v for v in usage.values()):
+        """One request's tokens, whenever any are known: billed, and added to the call's."""
+        if not known(usage):
             return
+        for name in TOKENS:
+            call.usage[name] = call.usage.get(name, 0) + int(usage.get(name) or 0)
         try:
+            cost = price(call.model, usage, call.job.kind, self._now())
+            call.dollars += cost.dollars
             with self._ledger_lock:
-                self._ledger.record(price(call.model, usage, call.job.kind, self._now()))
+                self._ledger.record(cost)
         except Exception:
             log.exception("[VAMOS] could not record a call's cost")
             return

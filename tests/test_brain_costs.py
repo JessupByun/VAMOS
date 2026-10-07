@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 
 import pytest
@@ -37,6 +38,19 @@ def test_sdk_style_usage_objects_work_too():
     assert price("claude-opus-5-5", Usage(), "advice", AT).dollars == pytest.approx(
         (400 + 200) / 1e6
     )
+
+
+def test_a_response_is_charged_whenever_any_of_its_tokens_are_known(tmp_path):
+    ledger = Ledger(tmp_path / "costs.jsonl")
+    # Stopped before Claude's first event: nothing is known, so nothing is written.
+    assert ledger.charge("claude-opus-5-5", {}, "advice", AT) is None
+    assert ledger.charge("claude-opus-5-5", {"input_tokens": 0}, "advice", AT) is None
+    assert not ledger.path.exists()
+    cost = ledger.charge("claude-opus-5-5", {"input_tokens": 500, "output_tokens": 1}, "ask", AT)
+    assert cost is not None and cost.kind == "ask"
+    assert cost.dollars == pytest.approx((2_000 + 20) / 1e6)
+    [row] = ledger.path.read_text().splitlines()
+    assert json.loads(row)["dollars"] == cost.dollars
 
 
 def test_totals_by_session_month_and_all_time(tmp_path):

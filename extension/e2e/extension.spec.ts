@@ -502,6 +502,13 @@ test("after the flop the card shows Claude's answer and the panel its reasoning"
   await expect(panel.getByRole("button", { name: "Ask deeper" })).toBeVisible();
   await expect(panel.locator(".stat.tonight .value")).toHaveText("$0.00");
   await expect(panel.locator(".stat.tonight .label")).toHaveText("This session");
+  await expect(panel.locator(".spend-note")).toHaveText(
+    "Counted from the calls VAMOS records. The Anthropic Console is exact, and also counts anything else that uses your API key.",
+  );
+  // Every Claude call leaves one line in the host log, however it ended.
+  await expect
+    .poll(() => harness.hostLog())
+    .toMatch(/Claude call game=e2etest node=\S+ kind=advice preset=standard outcome=done seconds=\S+ attempts=1/);
   await expect(panel.locator(".players li.me .group-head .label")).toHaveText("Current session");
   // The current hand: the hero's cards, the flop face up and the turn and river face down.
   await expect(panel.locator(".hand-head .mine .pcard")).toHaveText(["A♠", "10♦"]);
@@ -542,6 +549,7 @@ test("after the flop the card shows Claude's answer and the panel its reasoning"
   await expect(answers.nth(1).locator(".pick")).toHaveText("BET $0.20 (1bb)");
   await expect(panel.getByRole("button", { name: "Ask deeper" })).toHaveCount(0);
   await expect(card.locator(".source")).toHaveText("VAMOS! AI (Claude Opus 5.5 · medium)");
+  await expect.poll(() => harness.hostLog()).toMatch(/Claude call game=e2etest node=\S+ kind=ask preset=deep outcome=done/);
 
   await page.evaluate(() => document.querySelector(".you-player")?.classList.remove("decision-current"));
   await expect(card).toContainText("waiting for your turn");

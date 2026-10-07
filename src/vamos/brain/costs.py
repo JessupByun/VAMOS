@@ -1,9 +1,11 @@
 """
 What Claude costs, from each response's own token counts.
 
-Every call is priced from `usage` with the model's rates and appended to data/costs.jsonl;
-the side panel shows this session, this calendar month and all time. Going past the
-session's soft cap only warns.
+Every request whose usage is known, in part or in full, is priced with the model's rates and
+appended to data/costs.jsonl; the side panel shows this session, this calendar month and all
+time. A request stopped before Claude's first event has no usage, so it is not here (it is
+in data/advice.jsonl and host.log); the Anthropic Console is exact. Going past the session's
+soft cap only warns.
 """
 
 import json
@@ -18,6 +20,7 @@ PRICES = {
     "claude-opus-5-5": {"input": 4.00, "output": 20.00, "cache_read": 0.20},
 }
 SOFT_CAP = 5.00  # dollars per session
+TOKENS = ("input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")
 
 
 @dataclass(frozen=True)
@@ -31,6 +34,11 @@ class CallCost:
     cache_write_5m_tokens: int
     cache_write_1h_tokens: int
     dollars: float
+
+
+def known(usage: dict[str, Any]) -> bool:
+    """Whether a response's usage holds any tokens: none arrive before Claude's first event."""
+    return any(isinstance(usage.get(name), int) and usage[name] for name in TOKENS)
 
 
 def _get(obj: Any, name: str) -> int:
@@ -106,6 +114,14 @@ class Ledger:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.path.open("a") as f:
             f.write(json.dumps(asdict(cost), sort_keys=True) + "\n")
+
+    def charge(self, model: str, usage: dict[str, Any], kind: str, at: datetime) -> CallCost | None:
+        """Price and record one request's usage, whenever any of its tokens are known."""
+        if not known(usage):
+            return None
+        cost = price(model, usage, kind, at)
+        self.record(cost)
+        return cost
 
     def _all(self) -> list[CallCost]:
         if not self.path.exists():

@@ -18,7 +18,7 @@ Everything else is maintained by Claude:
 |---|---|
 | `src/` | The backend that Chrome starts when a PokerNow table opens. |
 | `extension/` | The Chrome extension: the card and badges on the table, and the side panel. |
-| `data/` | VAMOS's own state: saved games (all kept, for analyzing later), settings, seat matches, costs and logs. The one thing to edit by hand is `heroNames` in `data/settings.json`: your real name and nicknames, which are replaced with "Hero" before anything reaches Claude. |
+| `data/` | VAMOS's own state: saved games (all kept, for analyzing later), settings, seat matches, a record of every Claude call (`advice.jsonl`), costs and logs. The one thing to edit by hand is `heroNames` in `data/settings.json`: your real name and nicknames, which are replaced with "Hero" before anything reaches Claude. |
 | `docs/` | Reference notes: PokerNow's log and page, and how preflop advice works. |
 | `scripts/` | Developer tools. |
 | `tests/` | The test suite. |
@@ -32,6 +32,8 @@ Everything else is maintained by Claude:
   In the menu the session's biggest pots are bold with their pot, results are green or red, and hands where you never called, bet or raised are dimmed.
   Hands are kept on this Mac only, in `data/games/` (under 1 MB per session), and never deleted, so every game stays there to analyze later; the replayer makes no AI calls.
 - The side panel's switches: AI Advice (with it off no Claude call is made; the preflop rules and chart still answer), VAMOS! HUD (the card on the table) and Per-Player Stats (the badges under each seat).
+- The side panel's API costs count the Claude calls VAMOS records (`data/costs.jsonl`).
+  The Anthropic Console is exact: it counts anything else that uses your API key, and any charge for calls VAMOS stopped before Claude's first reply (whether those are billed is unverified; VAMOS logs them in `data/advice.jsonl` without a cost).
 - Amounts show in dollars and big blinds, e.g. `RAISE TO $0.60 (3bb)`.
 - Claude sees opponents only under pseudonyms (Player A, Player B, ...); no real name or nickname is sent.
 

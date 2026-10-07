@@ -127,6 +127,21 @@ def test_sdk_errors_become_plain_reasons():
         AnthropicProvider(NS(messages=NS(stream=stream))).run(request(), threading.Event())
 
 
+def test_a_failure_after_claudes_first_event_keeps_what_was_billed():
+    response = httpx2.Response(
+        529, request=httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
+    )
+
+    class Overloaded(FakeStream):
+        def __iter__(self):
+            yield NS(type="message_start", message=NS(usage=USAGE))
+            raise anthropic.APIStatusError("Overloaded", response=response, body=None)
+
+    with pytest.raises(CallFailed, match=r"^Claude unavailable \(529\)$") as error:
+        AnthropicProvider(client_with(Overloaded([], message()))).run(request(), threading.Event())
+    assert error.value.usage["cache_read_input_tokens"] == 9000
+
+
 @pytest.mark.parametrize(
     ("status", "error", "text"),
     [

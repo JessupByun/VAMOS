@@ -1,4 +1,5 @@
 import json
+import logging
 import queue
 import threading
 from datetime import datetime
@@ -8,7 +9,7 @@ import pytest
 from vamos.brain.advisor import Advisor, Job, with_dollars
 from vamos.brain.answer import Spot
 from vamos.brain.costs import Ledger
-from vamos.brain.provider import PRESETS, CallFailed, FakeProvider, Reply, Request
+from vamos.brain.provider import PRESETS, STOPPED, CallFailed, FakeProvider, Reply, Request
 
 SPOT = Spot(pot=180, to_call=0, street_bet=0, price=0, min_raise=20, behind=940, big_blind=20)
 USAGE = {"input_tokens": 100, "output_tokens": 300, "cache_read_input_tokens": 9000}
@@ -37,10 +38,10 @@ class Clock:
 @pytest.fixture
 def rig(tmp_path):
     class Rig:
-        def __init__(self, script):
+        def __init__(self, script, provider=None):
             self.updates: queue.Queue[str] = queue.Queue()
             self.clock = Clock()
-            self.provider = FakeProvider(script)
+            self.provider = provider or FakeProvider(script)
             self.ledger = Ledger(tmp_path / "costs.jsonl")
             self.advice_log = tmp_path / "advice.jsonl"
             self.advisor = Advisor(
@@ -52,12 +53,17 @@ def rig(tmp_path):
                 advice_log=self.advice_log,
             )
 
-        def job(self, node="h1:1:8", preset="standard"):
-            request = Request(PRESETS[preset], [{"type": "text", "text": "prefix"}], [])
+        def job(self, node="h1:1:8", preset="standard", message=None):
+            messages = [{"role": "user", "content": message}] if message else []
+            request = Request(PRESETS[preset], [{"type": "text", "text": "prefix"}], messages)
             return Job(node, request, SPOT, lambda s: s.replace("Player A", "alex"))
 
         def updated(self):
             return self.updates.get(timeout=3)
+
+        def logged(self):
+            self.advisor.close()  # every call has ended and been logged
+            return [json.loads(line) for line in self.advice_log.read_text().splitlines()]
 
     return Rig
 
@@ -213,6 +219,142 @@ def test_answers_and_failures_are_logged_under_pseudonyms(rig):
     assert (first["model"], first["preset"]) == ("claude-opus-5-5", "standard")
     assert "Player A calls too much" in first["answer"]  # as Claude wrote it
     assert (second["state"], second["reason"], second["answer"]) == ("failed", "rate limited", None)
+
+
+def claude_lines(caplog):
+    return [m for m in caplog.messages if m.startswith("[VAMOS] Claude call")]
+
+
+def test_every_call_gets_one_line_in_the_host_log_with_its_tokens(rig, caplog):
+    caplog.set_level(logging.INFO, logger="vamos.brain")
+    r = rig([BET])
+    r.advisor.start("g", r.job(), r.clock.t + 20)
+    r.updated()
+    [entry] = r.logged()
+    assert (entry["state"], entry["attempts"], entry["dollars"]) == ("done", 1, 0.0082)
+    assert entry["usage"] == {
+        "input_tokens": 100,
+        "output_tokens": 300,
+        "cache_read_input_tokens": 9000,
+        "cache_creation_input_tokens": 0,
+    }
+    assert claude_lines(caplog) == [
+        "[VAMOS] Claude call game=g node=h1:1:8 kind=advice preset=standard outcome=done "
+        "seconds=0.00 attempts=1 input=100 cache_read=9000 cache_write=0 output=300 "
+        "dollars=0.0082"
+    ]
+
+
+def test_a_call_cancelled_before_claudes_first_event_is_still_logged(rig, caplog):
+    caplog.set_level(logging.INFO, logger="vamos.brain")
+    gate = threading.Event()
+    r = rig([(gate, BET)])
+    r.advisor.start("g", r.job(message="Hand so far: Player A checks"), r.clock.t + 20)
+    r.clock.t += 1.5
+    r.advisor.stop("g")  # the hero acted
+    [entry] = r.logged()
+    assert (entry["node"], entry["state"], entry["seconds"], entry["attempts"]) == (
+        "h1:1:8",
+        "cancelled",
+        1.5,
+        1,
+    )
+    assert entry["spot"] == "Hand so far: Player A checks"  # sent, so kept for replays
+    # Stopped before Claude's first event: whatever it costs is not known here.
+    assert (entry["usage"], entry["dollars"]) == (None, None)
+    assert not r.ledger.path.exists()
+    assert claude_lines(caplog) == [
+        "[VAMOS] Claude call game=g node=h1:1:8 kind=advice preset=standard outcome=cancelled "
+        "seconds=1.50 attempts=1 tokens=unknown"
+    ]
+
+
+class StoppedAfterFirstEvent:
+    """Claude's first event (and with it the input's usage) arrived, then the decision passed."""
+
+    def __init__(self):
+        self.requests = []
+
+    def run(self, request, cancelled):
+        self.requests.append(request)
+        cancelled.wait(3)
+        raise CallFailed(STOPPED, {"input_tokens": 700, "output_tokens": 1})
+
+
+def test_a_call_cancelled_after_claudes_first_event_is_billed_and_logged(rig):
+    r = rig([], provider=StoppedAfterFirstEvent())
+    r.advisor.start("g", r.job(), r.clock.t + 20)
+    r.advisor.start("g", r.job(preset="deep"), r.clock.t + 20)  # Ask deeper stops it
+    entries = sorted(r.logged(), key=lambda e: e["preset"])  # each logs as its thread ends
+    assert [(e["preset"], e["state"], e["dollars"]) for e in entries] == [
+        ("deep", "cancelled", 0.00282),
+        ("standard", "cancelled", 0.00282),
+    ]
+    assert entries[1]["usage"]["input_tokens"] == 700
+    rows = [json.loads(line) for line in r.ledger.path.read_text().splitlines()]
+    assert [(row["kind"], row["input_tokens"]) for row in rows] == [
+        ("advice", 700),
+        ("advice", 700),
+    ]
+
+
+def test_refused_calls_are_logged_without_the_hand(rig, caplog):
+    caplog.set_level(logging.INFO, logger="vamos.brain")
+    r = rig([])
+    hand = "Hand so far: alex checks"  # a name the check caught
+    r.advisor.start("g", r.job(message=hand), r.clock.t + 20, refuse="blocked: a real name")
+    r.advisor.start("g", r.job("h1:2:9", message="Hand so far"), r.clock.t + 2)
+    first, second = r.logged()
+    assert (first["state"], first["reason"], first["attempts"], first["seconds"]) == (
+        "refused",
+        "blocked: a real name",
+        0,
+        0,
+    )
+    # Never sent, so never kept: a replay must not send a prompt the name check blocked.
+    assert first["spot"] is None and second["spot"] is None
+    assert (second["state"], second["reason"]) == ("refused", "not enough time on the clock")
+    # The card still reads it as a failure with its reason.
+    assert r.advisor.view("g", "h1:2:9")["state"] == "failed"
+    assert claude_lines(caplog) == [
+        "[VAMOS] Claude call game=g node=h1:1:8 kind=advice preset=standard outcome=refused "
+        'reason="blocked: a real name" seconds=0.00 attempts=0',
+        "[VAMOS] Claude call game=g node=h1:2:9 kind=advice preset=standard outcome=refused "
+        'reason="not enough time on the clock" seconds=0.00 attempts=0',
+    ]
+    assert r.provider.requests == []
+
+
+def test_a_timed_out_call_is_logged_once(rig):
+    gate = threading.Event()
+    r = rig([(gate, BET)])
+    r.advisor.start("g", r.job(), r.clock.t + 10)
+    r.clock.t += 11
+    r.updated()
+    [entry] = r.logged()
+    assert (entry["state"], entry["reason"], entry["seconds"]) == ("failed", "timed out", 11)
+
+
+def test_a_retried_call_is_one_entry_with_both_attempts_tokens(rig):
+    partial = {"input_tokens": 100, "output_tokens": 0, "cache_read_input_tokens": 9000}
+    r = rig([CallFailed("Claude unavailable (529)", partial), BET])
+    r.advisor.start("g", r.job(), r.clock.t + 20)
+    r.updated()
+    [entry] = r.logged()
+    assert (entry["state"], entry["attempts"]) == ("done", 2)
+    assert (entry["usage"]["input_tokens"], entry["usage"]["cache_read_input_tokens"]) == (
+        200,
+        18000,
+    )
+    assert len(r.ledger.path.read_text().splitlines()) == 2  # each request is billed
+
+
+def test_a_call_still_running_when_the_backend_closes_is_stopped_and_logged(rig):
+    gate = threading.Event()
+    r = rig([(gate, BET)])
+    r.advisor.start("g", r.job(), r.clock.t + 20)
+    [entry] = r.logged()
+    assert entry["state"] == "cancelled"
 
 
 def test_sizes_in_claudes_text_also_show_in_dollars():

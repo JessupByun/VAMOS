@@ -207,27 +207,29 @@ def _shut(stream: Any) -> bool:
 
 
 def _failure(error: Exception, usage: dict[str, Any]) -> CallFailed:
+    """The reason for the card, with the usage seen before the error: an error can arrive
+    mid-stream (Claude overloaded, a dropped connection) after the input was billed."""
     import anthropic
 
     # Out of credits comes as a 402 billing error, or as a 400 naming the credit balance.
     if isinstance(error, anthropic.APIStatusError) and (
         error.status_code == 402 or "credit balance" in str(error).lower()
     ):
-        return CallFailed("out of API credits")
+        return CallFailed("out of API credits", usage)
     if isinstance(error, anthropic.AuthenticationError):
-        return CallFailed("API key rejected")
+        return CallFailed("API key rejected", usage)
     if isinstance(error, anthropic.PermissionDeniedError):
-        return CallFailed("API key not allowed to use this model")
+        return CallFailed("API key not allowed to use this model", usage)
     if isinstance(error, anthropic.RateLimitError):
-        return CallFailed("rate limited")
+        return CallFailed("rate limited", usage)
     if isinstance(error, anthropic.BadRequestError):
-        return CallFailed("request rejected")
+        return CallFailed("request rejected", usage)
     if isinstance(error, anthropic.APITimeoutError):
         return CallFailed("timed out", usage)
     if isinstance(error, anthropic.APIConnectionError):
-        return CallFailed("no connection to Claude")
+        return CallFailed("no connection to Claude", usage)
     if isinstance(error, anthropic.APIStatusError):
-        return CallFailed(f"Claude unavailable ({error.status_code})")
+        return CallFailed(f"Claude unavailable ({error.status_code})", usage)
     return CallFailed(f"unexpected error ({type(error).__name__})", usage)
 
 

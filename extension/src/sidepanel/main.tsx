@@ -677,6 +677,10 @@ function Spend({ costs }: { costs: Costs }) {
       {costs.overCap && (
         <p class="over small">Past this session's {dollars(costs.softCap)} soft cap; advice keeps coming.</p>
       )}
+      <p class="muted small spend-note">
+        Counted from the calls VAMOS records. The Anthropic Console is exact, and also counts anything else that
+        uses your API key.
+      </p>
     </section>
   );
 }
