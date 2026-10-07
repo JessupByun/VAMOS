@@ -13,9 +13,9 @@ export interface Handover<Tab> {
  * The PokerNow tabs open on each game, and which of them speaks for it. One tab per game polls
  * the log, since PokerNow's rate limit is per IP and a second poller doubles the requests: the
  * first to ask, until it closes or reloads, when another tab on the game takes over. Chrome
- * slows a hidden tab's timers (to about once a minute after 5 minutes, or freezes them with
- * Energy Saver), so a hidden polling tab also hands over: to a tab on the game the user looks
- * at, or else to one showing the hero's turn. And while some tab on a game sees the hero
+ * may slow a background tab's timers and can freeze background tabs to save energy, so a hidden
+ * polling tab also hands over: to a tab on the game the user looks at, or else to one where
+ * the hero's turn begins. And while some tab on a game sees the hero
  * seated, a tab that does not (still loading, or watching) does not report the table, so the
  * backend keeps the hero's seat and turn.
  */
@@ -53,11 +53,18 @@ export class GameTabs<Tab> {
     return this.follow(tab, gameId);
   }
 
-  /** The hero's turn began (`showing`) or ended in `tab`: when polling moves because of it, where. */
+  /**
+   * The hero's turn began (`showing`) or ended in `tab`: when polling moves because of it, where.
+   * Only a turn beginning moves it; one ending never does, so two hidden tabs on the game never
+   * pass polling back and forth.
+   */
   turn(tab: Tab, gameId: string, showing: boolean): Handover<Tab> | null {
     this.games.set(tab, gameId);
-    if (showing) this.turns.add(tab);
-    else this.turns.delete(tab);
+    if (!showing) {
+      this.turns.delete(tab);
+      return null;
+    }
+    this.turns.add(tab);
     return this.follow(tab, gameId);
   }
 

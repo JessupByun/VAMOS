@@ -105,3 +105,17 @@ def test_a_damaged_file_that_cannot_be_moved_still_starts_empty(tmp_path, monkey
     assert identity.problem.endswith(
         f"; it could not be moved aside (see {tmp_path.name}/logs/host.log)"
     )
+
+
+def test_an_answer_keeps_matches_written_to_the_file_meanwhile(tmp_path):
+    path = tmp_path / "identity.json"
+    identity = IdentityMap(path)
+    identity.assign("phone00001", "alex")
+    # Something else (the profile update) records another account while this map is open.
+    path.write_text('{"phone00001": "alex", "phone00002": "rj"}')
+    identity.assign("phone00003", "sam")
+    assert json.loads(path.read_text()) == {
+        "phone00001": "alex",
+        "phone00002": "rj",
+        "phone00003": "sam",
+    }

@@ -155,7 +155,7 @@ export function startSession(gameId: string): () => void {
         }
       } else if (message.type === "resume") {
         if (message.gameId === gameId) {
-          poller.resume(message.after, message.handedOverAt);
+          poller.resume(message.after, message.handedOverAt, message.retryAt);
           resumed = true;
         }
       } else if (message.type === "poll_stop") {

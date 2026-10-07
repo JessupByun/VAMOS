@@ -87,13 +87,27 @@ class IdentityMap:
 
     def assign(self, pn_id: str, profile: str | None) -> None:
         """Record the user's answer: a profile key, or None for "no profile"."""
+        self._reread()
         self._answers[pn_id] = profile
         self._save()
 
     def forget(self, pn_id: str) -> None:
         """Drop an answer, so the table asks again."""
+        self._reread()
         if self._answers.pop(pn_id, "missing") != "missing":
             self._save()
+
+    def _reread(self) -> None:
+        # The file may have changed since it was loaded (the profile update records the
+        # accounts the user names); writing back an old copy would undo that.
+        try:
+            answers = json.loads(self.path.read_text())
+        except (OSError, ValueError):
+            return
+        if isinstance(answers, dict) and all(
+            v is None or isinstance(v, str) for v in answers.values()
+        ):
+            self._answers = answers
 
     def _save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)

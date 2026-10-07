@@ -317,6 +317,47 @@ def test_ask_deeper_goes_once_the_first_call_times_out_before_its_first_event(ri
     assert len(r.provider.requests) == 2
 
 
+def test_a_deeper_call_whose_wait_used_up_the_clock_is_never_sent(rig):
+    # Both calls on a decision share its deadline, as the server sets them.
+    never, gate = threading.Event(), threading.Event()
+    r = rig({"standard": (never, gate, BET), "deep": BET})
+    r.advisor.start("g", r.job(), r.clock.t + 10)
+    r.advisor.start("g", r.job(preset="deep"), r.clock.t + 10)
+    assert held_back(r)
+    r.clock.t += 11  # the deadline passes before Claude's first event
+    r.updated()
+    deadline = time.monotonic() + 2
+    while (
+        len([a for a in r.advisor.view("g", "h1:1:8")["answers"] if a["state"] != "thinking"]) < 2
+    ):
+        assert time.monotonic() < deadline
+        time.sleep(0.01)
+    time.sleep(0.1)  # a request sent late would show up by now
+    assert len(r.provider.requests) == 1
+    states = {
+        a["preset"]: (a["state"], a["reason"]) for a in r.advisor.view("g", "h1:1:8")["answers"]
+    }
+    assert states["deep"][0] == "failed"
+    assert states["deep"][1] in ("timed out", "not enough time on the clock")
+    gate.set()
+
+
+def test_a_first_reply_starting_just_before_the_deadline_leaves_the_deeper_call_unsent(rig):
+    first, gate = threading.Event(), threading.Event()
+    r = rig({"standard": (first, gate, BET), "deep": BET})
+    r.advisor.start("g", r.job(), r.clock.t + 10)
+    r.advisor.start("g", r.job(preset="deep"), r.clock.t + 10)
+    assert held_back(r)
+    r.clock.t += 9  # one second left: too little for an answer
+    first.set()
+    r.updated()
+    assert {
+        a["preset"]: (a["state"], a["reason"]) for a in r.advisor.view("g", "h1:1:8")["answers"]
+    }["deep"] == ("failed", "not enough time on the clock")
+    assert len(r.provider.requests) == 1
+    gate.set()
+
+
 def test_a_deeper_call_still_held_back_when_the_decision_passes_is_never_sent(rig, caplog):
     caplog.set_level(logging.INFO, logger="vamos.brain")
     never, gate = threading.Event(), threading.Event()

@@ -467,6 +467,18 @@ describe("log poller", () => {
     poller.stop();
   });
 
+  it("taking polling over keeps to the back-off PokerNow asked of the other tab", async () => {
+    server.add(1);
+    const poller = startLogPoller("g1", deliver);
+    const retryAt = Date.now() + 60_000;
+    poller.resume(server.newest(), Date.now(), retryAt);
+    await vi.advanceTimersByTimeAsync(60_000 - 1);
+    expect(server.requests).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(server.requests).toHaveLength(1);
+    poller.stop();
+  });
+
   it("clears its report when paused, since nothing is being retried", async () => {
     server.respond = () => new Response("", { status: 404 });
     const poller = startLogPoller("g1", deliver, report);

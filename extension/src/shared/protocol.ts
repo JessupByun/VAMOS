@@ -477,6 +477,8 @@ export interface Resume {
    * open: when that tab was told to stop (epoch ms), so the first request keeps clear of its last.
    */
   handedOverAt?: number;
+  /** When PokerNow last asked the tab polling until now to wait until (epoch ms), if it did. */
+  retryAt?: number;
 }
 
 /** Why Claude's calls fail for the API key or its credits, in plain words with the fix; null once one gets through. */

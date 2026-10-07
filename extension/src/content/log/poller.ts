@@ -27,7 +27,7 @@ export interface LogPoller {
    * skipped. `handedOverAt` is when another tab on the game stopped polling for this one to
    * take over: the first request keeps the minimum gap from that tab's last.
    */
-  resume: (after: string | null, handedOverAt?: number) => void;
+  resume: (after: string | null, handedOverAt?: number, retryAt?: number) => void;
   /** Poll nothing until the next resume(), e.g. while the backend is away. */
   pause: () => void;
   /** Poll as soon as the minimum gap allows, e.g. when the hero's turn starts. */
@@ -213,7 +213,7 @@ export function startLogPoller(
       running = false;
       clearTimeout(timer);
     },
-    resume: (after, handedOverAt) => {
+    resume: (after, handedOverAt, retryAt) => {
       if (stopped) return;
       generation += 1;
       cursor = after;
@@ -226,7 +226,12 @@ export function startLogPoller(
       running = true;
       // A request still on its way schedules the next one; otherwise keep PokerNow's gap, also
       // from a request the tab polling until now may have sent just before it stopped.
-      const earliest = Math.max(lastStart + delay, (handedOverAt ?? -Infinity) + MIN_GAP_MS);
+      // A back-off PokerNow asked of that tab stands for this one too.
+      const earliest = Math.max(
+        lastStart + delay,
+        (handedOverAt ?? -Infinity) + MIN_GAP_MS,
+        retryAt ?? -Infinity,
+      );
       if (!inFlight) schedule(Math.max(0, earliest - Date.now()));
     },
     pause: () => {

@@ -99,6 +99,20 @@ describe("GameTabs", () => {
     expect(tabs.poller("g1")).toBe("B");
   });
 
+  it("never passes polling back and forth between hidden tabs as turns begin and end", () => {
+    const tabs = new GameTabs<string>();
+    tabs.show("A", "g1", false);
+    tabs.claim("A", "g1");
+    tabs.show("B", "g1", false);
+    expect(tabs.turn("B", "g1", true)).toEqual({ gameId: "g1", from: "A", to: "B" });
+    expect(tabs.turn("A", "g1", true)).toBeNull();
+    // B's turn ends first: polling stays with B.
+    expect(tabs.turn("B", "g1", false)).toBeNull();
+    expect(tabs.poller("g1")).toBe("B");
+    expect(tabs.turn("A", "g1", false)).toBeNull();
+    expect(tabs.poller("g1")).toBe("B");
+  });
+
   it("hands polling from a closed tab to one the user looks at, else one showing the hero's turn", () => {
     const tabs = new GameTabs<string>();
     for (const tab of ["A", "B", "C", "D"]) tabs.show(tab, "g1", tab === "A" || tab === "D");

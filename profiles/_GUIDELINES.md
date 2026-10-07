@@ -31,7 +31,7 @@ tag: Calling station            # 1 to 3 standard poker words, shown on the seat
 player_id: Qw3rTy7UiO           # the player's main PokerNow account only
 hands: 912                     # every hand counted in this profile, ring and heads-up
 sessions: [HU 2026-09-30, A 2026-09-30, ..., N 2026-10-07]
-games: {I: pglExampleGameId000000002, J: pglExampleGameId000000003}   # label -> PokerNow game, for sessions VAMOS counted
+games: {O: pglExampleGameId000000000 through hand 136}   # label -> PokerNow game and the last hand counted
 hole_cards_known: HU, A, B, C all (240); later sessions only showdowns and shows
 net: -42.60 (HU -12.00, A -18.50, ...)   # total, then each session by label, in dollars
 excluded: [Oct 3 by group decision]       # sessions left out and why; omit when none
@@ -100,13 +100,16 @@ Never count, cite or describe an excluded session, and list it under `excluded` 
 
 ## Updating after a session
 
+After a session, jes asks Claude in this project to update the profiles: the `update-profiles` skill (`.claude/skills/update-profiles/`) prepares the counts and hand records with `scripts/prepare_profile_update.py` and runs the `update-profiles` workflow, on jes's subscription and never his API credits.
+Session labels and excluded games live in `data/profile-sessions.json`.
+
 1. Take the session's exact counts, split ring and heads-up, and add them to the totals.
 2. Read every hand the player played in the session (the digest), with every shown hand.
 3. Update each section: confirm, sharpen or revise reads; add new patterns with their evidence; update the exploits and their order.
 4. Update the frontmatter: `hands`, `sessions`, `games`, `hole_cards_known`, `net` and `last_updated`.
 5. Add the Changelog line.
 6. A session already listed in `games` is never added twice.
-   A session counted partway (an update during play) is listed as `K: pglExampleGameId000000001 through hand 140`, and the next update adds only the hands after it.
+   Each session is listed with the last hand counted, `O: pglExampleGameId000000000 through hand 136`, so a game that goes on after an update (a pause on the same link) adds only the hands after it.
 
 ## Size and compaction
 

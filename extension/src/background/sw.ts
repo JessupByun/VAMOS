@@ -42,7 +42,8 @@ const tables = new Map<string, TableMemory>();
 const tabs = new GameTabs<chrome.runtime.Port>();
 // Per game, when polling last moved away from a tab that is still open: the next poller's
 // first request keeps clear of that tab's last.
-const handedOverAt = new Map<string, number>();
+// When polling last moved, per game, and the retry time PokerNow asked for then, if any.
+const handedOverAt = new Map<string, { at: number; retryAt?: number }>();
 // Per game, why its log poller is failing, for tabs and panels that open meanwhile.
 const logTrouble = new Map<string, LogStatus>();
 
@@ -102,7 +103,8 @@ function setLogStatus(status: LogStatus, from?: chrome.runtime.Port) {
 function handOver({ gameId, from, to }: Handover<chrome.runtime.Port>) {
   if (from !== undefined) {
     from.postMessage({ type: "poll_stop", gameId } satisfies WorkerToContent);
-    handedOverAt.set(gameId, Date.now());
+    // The next tab keeps to the back-off PokerNow asked of the last one.
+    handedOverAt.set(gameId, { at: Date.now(), retryAt: logTrouble.get(gameId)?.trouble?.retryAt });
     // Its retry countdown no longer stands; the next poller reports its own problems.
     setLogStatus({ type: "log_status", gameId, trouble: null });
   }
@@ -140,7 +142,10 @@ function connectHost() {
       if (message.type === "resume") {
         const movedAt = handedOverAt.get(message.gameId);
         handedOverAt.delete(message.gameId);
-        const resume = movedAt === undefined ? message : { ...message, handedOverAt: movedAt };
+        const resume =
+          movedAt === undefined
+            ? message
+            : { ...message, handedOverAt: movedAt.at, ...(movedAt.retryAt ? { retryAt: movedAt.retryAt } : {}) };
         tabs.poller(message.gameId)?.postMessage(resume satisfies WorkerToContent);
         return;
       }

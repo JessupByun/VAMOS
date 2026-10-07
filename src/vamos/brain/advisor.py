@@ -337,6 +337,18 @@ class Advisor:
             for earlier in call.after:  # an Ask deeper waits for the cache, as above
                 while not (earlier.replied.wait(0.02) or call.cancelled.is_set()):
                     pass
+            if (
+                call.after
+                and not call.cancelled.is_set()
+                and call.deadline - self._clock() < MIN_SECONDS
+            ):
+                # The wait used up the time: sending now would only be stopped and billed.
+                call.refused = True
+                current = self._finish(game_id, call, None, "not enough time on the clock")
+                self._log(game_id, call)
+                if current:
+                    self._on_update(game_id)
+                return
             answer, reason = self._ask(call)
             current = self._finish(game_id, call, answer, reason)
             # Once its last request has ended, so the tokens are known, however it ended.

@@ -130,8 +130,8 @@ test("polling follows the tab the user looks at, or the one showing the hero's t
   const second = await openTable();
   await expect(second.locator("#vamos-root .action-card")).toContainText("waiting for your turn");
 
-  // The user switches to the second tab. Chrome would slow the hidden first tab's polling to
-  // about once a minute, so the second picks the log up after the newest row the backend holds.
+  // The user switches to the second tab. Chrome may slow or freeze a background tab's timers,
+  // so the second picks the log up after the newest row the backend holds.
   let newest = harness.logRows()[0]?.created_at;
   await harness.setVisible(first, false);
   await harness.setVisible(second, true);
