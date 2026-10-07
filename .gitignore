@@ -18,6 +18,8 @@ extension/playwright-report/
 # Private data: the profiles (only their rulebook is tracked), drafts and data/ stay local
 profiles/*
 !profiles/_GUIDELINES.md
+# Claude Code's per-machine settings
+.claude/settings.local.json
 drafts/*
 !drafts/README.md
 /data/
