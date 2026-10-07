@@ -907,7 +907,10 @@ def test_earlier_hands_replay_with_the_advice_given_even_after_a_restart(tmp_pat
     backend.handle({"type": "turn", "gameId": GAME, "table": None})
     replies = backend.handle(page(*finished))
     [history] = [m for m in replies if m["type"] == "history"]
-    assert [(h["key"], h["resultBb"], h["decisions"]) for h in history["hands"]] == [("h2", 1.0, 1)]
+    # A rule answered: not one of VAMOS's AI decisions.
+    assert [(h["key"], h["resultBb"], h["aiDecisions"]) for h in history["hands"]] == [
+        ("h2", 1.0, 0)
+    ]
 
     def replay(b):
         [detail] = b.handle({"type": "hand_detail_request", "gameId": GAME, "key": "h2"})
@@ -1009,7 +1012,7 @@ def test_hands_played_before_the_record_replay_claudes_answers_from_the_advice_l
         (209, "-- ending hand #2 --"),
     ]
     [history] = [m for m in backend.handle(page(*finished)) if m["type"] == "history"]
-    assert [h["decisions"] for h in history["hands"]] == [1]
+    assert [h["aiDecisions"] for h in history["hands"]] == [1]
     [detail] = backend.handle({"type": "hand_detail_request", "gameId": GAME, "key": "h2"})
     [decision] = [e for e in detail["streets"][0]["events"] if e["kind"] == "decision"]
     [answer] = decision["advice"]["answers"]

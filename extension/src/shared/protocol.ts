@@ -166,13 +166,15 @@ export interface HistoryEntry {
   /** Won or lost without its sign: "$0.60 (3bb)". */
   result: string;
   folded: boolean;
-  /** Decisions VAMOS answered in the hand. */
-  decisions: number;
+  /** The hero's decisions in the hand where VAMOS's AI had an answer on the card. */
+  aiDecisions: number;
   /** The final pot, "$11.20 (56bb)", and in big blinds. */
   pot: string;
   potBb: number;
   /** No call, bet or raise of the hero's own: blinds posted, then folded or checked. */
   quiet: boolean;
+  /** Anyone showed cards, even one card after winning without a call. */
+  showdown: boolean;
   /** One of this session's biggest pots among the hands the hero played. */
   big: boolean;
 }

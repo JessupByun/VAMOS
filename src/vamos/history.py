@@ -73,8 +73,11 @@ def hand_list(
     log: HandLog, hero: str, decisions: dict[str, Message], logged: Sequence[Message] = ()
 ) -> list[Message]:
     """The hero's finished hands this session, newest first, for the replayer's menu."""
-    nodes = set(decisions) | {str(e.get("node")) for e in logged}
-    advised = Counter(node.split(":")[0] for node in nodes)
+    # The decisions the replay shows an AI answer at: what the card recorded, else (for hands
+    # from before the record began) a Claude call in the advice log that answered.
+    answered = {node for node, record in decisions.items() if _ai_answered(record)}
+    from_log = {str(e.get("node")) for e in logged if e.get("answer") and e.get("chosen")}
+    ai = Counter(node.split(":")[0] for node in answered | (from_log - set(decisions)))
     out = []
     for hand in log.hands:
         pid = _seated_as(hand, log, hero)
@@ -93,13 +96,15 @@ def hand_list(
                 # Won or lost, without the sign: "$0.60 (3bb)".
                 "result": format_money(abs(net(hand, pid)), hand.big_blind or 1),
                 "folded": pid in hand.folded(),
-                "decisions": advised[key],
+                "aiDecisions": ai[key],
                 "pot": format_money(pot, bb),
                 "potBb": _bb(pot, bb),
                 # No call, bet or raise of the hero's own: blinds posted, then folded or checked.
                 "quiet": not any(
                     a.player == pid and a.kind in ("call", "bet", "raise") for a in hand.actions
                 ),
+                # Anyone's cards shown, even one card after winning without a call.
+                "showdown": bool(hand.shows),
             }
         )
     played = sorted(e["potBb"] for e in out if not e["quiet"])
@@ -107,6 +112,14 @@ def hand_list(
     for entry in out:
         entry["big"] = not entry["quiet"] and entry["potBb"] >= line
     return out[::-1]
+
+
+def _ai_answered(record: Message) -> bool:
+    """Whether VAMOS's AI had an answer on the card at this decision (the first or a deeper one)."""
+    advice = record.get("advice")
+    return (
+        isinstance(advice, dict) and advice.get("source") == "Claude" and bool(advice.get("action"))
+    )
 
 
 def _bb(cents: int, bb: int) -> float:

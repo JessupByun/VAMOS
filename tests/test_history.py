@@ -52,7 +52,8 @@ LIVE = hand(3, H, "Your hand is K♠, K♦", f"{H} posts a small blind of 10", e
 
 def test_the_menu_lists_finished_hands_newest_first():
     log = log_of(*WON, *FOLDED, *LIVE)
-    decisions = {"h1:0:2": {"street": 0}, "h1:1:5": {"street": 1}}
+    claude = {"source": "Claude", "action": "BET $50 (2.5bb)"}
+    decisions = {"h1:0:2": {"street": 0}, "h1:1:5": {"street": 1, "advice": claude}}
     assert hand_list(log, HERO, decisions) == [
         {
             "key": "h2",
@@ -62,10 +63,11 @@ def test_the_menu_lists_finished_hands_newest_first():
             "resultBb": -1.0,
             "result": "$20 (1bb)",
             "folded": True,
-            "decisions": 0,
+            "aiDecisions": 0,
             "pot": "$40 (2bb)",
             "potBb": 2.0,
             "quiet": True,
+            "showdown": False,
             "big": False,
         },
         {
@@ -76,10 +78,11 @@ def test_the_menu_lists_finished_hands_newest_first():
             "resultBb": 2.5,
             "result": "$50 (2.5bb)",
             "folded": False,
-            "decisions": 2,
+            "aiDecisions": 1,
             "pot": "$100 (5bb)",
             "potBb": 5.0,
             "quiet": False,
+            "showdown": False,
             "big": False,
         },
     ]
@@ -161,7 +164,7 @@ def test_hands_from_before_the_record_show_claudes_logged_answers_with_real_name
     )
     entries = [logged("h1:1:5", "BB"), failed_ask]
     log = log_of(*WON)
-    assert hand_list(log, HERO, {}, entries)[0]["decisions"] == 1
+    assert hand_list(log, HERO, {}, entries)[0]["aiDecisions"] == 1
     detail = hand_detail(log, "h1", HERO, {}, entries)
     assert detail["partial"] is True
     [decision] = [e for e in detail["streets"][1]["events"] if e["kind"] == "decision"]
@@ -299,3 +302,48 @@ def test_the_menu_marks_the_sessions_biggest_pots_and_the_hands_without_action()
     }
     # The 100bb all in is the session's biggest pot; folding the big blind had no action.
     assert marks == {1: (False, False), 2: (True, False), 3: (False, True)}
+
+
+def test_the_menu_counts_only_the_decisions_vamos_ai_answered():
+    thinking = {"source": "Claude", "action": None, "state": "thinking"}
+    answered = {"source": "Claude", "action": "CHECK", "state": "done"}
+    # The first answer came; the deeper one failed: the replay still shows an answer.
+    deeper_failed = {"source": "Claude", "action": "FOLD", "state": "failed"}
+    rule = {"source": "Rule", "action": "RAISE TO $50 (2.5bb)"}
+
+    def ai(decisions, logged=()):
+        return {
+            e["number"]: e["aiDecisions"]
+            for e in hand_list(log_of(*WON, *FOLDED), HERO, decisions, logged)
+        }
+
+    # A rule's answer, the AI off and an answer that came after the hero acted are not AI answers.
+    off = {"h1:0:2": {"advice": rule}, "h1:1:5": {"advice": None, "aiOff": True}}
+    assert ai(off) == {1: 0, 2: 0}
+    assert ai({"h1:1:5": {"advice": thinking}}) == {1: 0, 2: 0}
+    assert ai({"h1:1:5": {"advice": answered}, "h2:0:3": {"advice": deeper_failed}}) == {1: 1, 2: 1}
+    # The advice log fills in only for decisions the card never recorded, as in the replay.
+    done = logged("h1:1:5", "BB")
+    failed = logged("h2:0:3", "BB", state="failed", answer=None, chosen=None)
+    assert ai({}, [done, failed]) == {1: 1, 2: 0}
+    assert ai({"h1:1:5": {"advice": thinking}}, [done]) == {1: 0, 2: 0}
+
+
+def test_the_menu_marks_hands_where_cards_were_shown():
+    shown = hand(
+        3,
+        D,
+        "Your hand is 9♠, 9♦",
+        f"{D} posts a small blind of 10",
+        f"{H} posts a big blind of 20",
+        f"{D} calls 20",
+        f"{H} checks",
+        "Flop:  [K♠, 7♦, 2♣]",
+        f"{H} bets 20",
+        f"{D} folds",
+        f"Uncalled bet of 20 returned to {H}",
+        f"{H} collected 40 from pot",
+        f"{H} shows a 9♠.",  # one card, after winning without a call
+    )
+    marks = {e["number"]: e["showdown"] for e in hand_list(log_of(*WON, *FOLDED, *shown), HERO, {})}
+    assert marks == {1: False, 2: False, 3: True}
