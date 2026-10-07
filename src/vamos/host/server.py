@@ -68,9 +68,9 @@ class Backend:
         self.record = record
         self.identity = IdentityMap(data_dir / "identity.json")
         self.sessions: dict[str, GameSession] = {}
-        # Each game's log rows, so a restarted backend picks the night up where it was.
+        # Each game's log rows, so a restarted backend picks the session up where it was.
+        # Every game is kept, for the user to analyze later.
         self.games_dir = data_dir / "games"
-        _prune(self.games_dir, KEEP_GAMES_DAYS)
         # The players each table last reported as seated, for pushing updated badges.
         self.seated: dict[str, list[Message]] = {}
         # Per table, the hero's turn in progress (the last "turn" message) and the facts last
@@ -789,28 +789,6 @@ class Backend:
         path = game_dir / f"dom_{message['capturedAt']}.html"
         path.write_text(message["html"])
         return {"type": "ack", "what": "dom_snapshot", "detail": path.name}
-
-
-KEEP_GAMES_DAYS = 3  # a game nothing was written to for this long is deleted at backend start
-
-
-def _prune(directory: Path, days: int) -> None:
-    """
-    Delete the games last written to more than `days` ago: each game's files together (its
-    log rows, notes and decision records), so its notes and replayer outlive no less than it.
-    """
-    cutoff = time.time() - days * 86400
-    games: dict[str, list[Path]] = {}
-    for path in directory.glob("*.json*") if directory.exists() else []:
-        games.setdefault(path.name.split(".")[0], []).append(path)
-    for paths in games.values():
-        try:
-            if max(path.stat().st_mtime for path in paths) >= cutoff:
-                continue
-            for path in paths:
-                path.unlink()
-        except OSError:
-            log.exception("[VAMOS] could not prune %s", paths[0].name.split(".")[0])
 
 
 def _slug(name: str) -> str:

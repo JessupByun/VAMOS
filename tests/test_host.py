@@ -14,7 +14,7 @@ from vamos.brain.provider import FakeProvider, Reply
 from vamos.config import VERSION
 from vamos.host.framing import MAX_OUTGOING_BYTES, read_message, write_message
 from vamos.host.install import EXTENSION_ID, HOST_NAME, install
-from vamos.host.server import KEEP_GAMES_DAYS, Backend, _prune, serve
+from vamos.host.server import Backend, serve
 
 
 def frame(message) -> bytes:
@@ -924,24 +924,14 @@ def test_hands_played_before_the_record_replay_claudes_answers_from_the_advice_l
     assert fake.requests == [] and not (tmp_path / "data" / "costs.jsonl").exists()
 
 
-def test_a_game_is_pruned_with_its_notes_and_decisions_once_none_was_written_for_days(tmp_path):
-    games = tmp_path / "games"
-    games.mkdir()
-    old, recent = time.time() - 4 * 86400, time.time() - 3600
-    for name, when in [
-        ("pglold.jsonl", old),
-        ("pglold.notes.json", old),
-        ("pglold.decisions.jsonl", old),
-        # The log is old, but a note was edited an hour ago: the whole game stays.
-        ("pglkept.jsonl", old),
-        ("pglkept.notes.json", recent),
-        ("pglkept.decisions.jsonl", old),
-    ]:
-        (games / name).write_text("{}")
-        os.utime(games / name, (when, when))
-    _prune(games, KEEP_GAMES_DAYS)
-    assert sorted(p.name for p in games.iterdir()) == [
-        "pglkept.decisions.jsonl",
-        "pglkept.jsonl",
-        "pglkept.notes.json",
-    ]
+def test_every_saved_game_is_kept_however_old(tmp_path):
+    games = tmp_path / "data" / "games"
+    games.mkdir(parents=True)
+    old = time.time() - 30 * 86400
+    names = ["pglold.decisions.jsonl", "pglold.jsonl", "pglold.notes.json"]
+    for name in names:
+        (games / name).write_text("{}\n")
+        os.utime(games / name, (old, old))
+    # A backend starting, as at every table opened, deletes nothing: the user analyzes them later.
+    Backend(tmp_path / "data", tmp_path / "profiles")
+    assert sorted(p.name for p in games.iterdir()) == names

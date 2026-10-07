@@ -41,7 +41,7 @@ Coverage on the saved games (`uv run python scripts/replay_preflop_routes.py`, 2
 | 5+ handed | 120 | 62% | 62% | 68 |
 | All | 350 | 68% | 71% | |
 
-The saved games are pruned after 3 days, so each run measures a different window; the script lists the games it read.
+Every saved game is kept, so each run measures all the games played so far; the script lists the games it read.
 
 ## Push/fold chart
 

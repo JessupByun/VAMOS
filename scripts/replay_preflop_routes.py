@@ -4,8 +4,8 @@ chart, a rule (fold, check or raise), or Claude. For tracking rule coverage over
 
 The split depends mostly on table size (heads-up nearly everything goes to Claude) and on
 the cards the hero was dealt, so it is broken down by players dealt and by situation, and
-each figure comes with what random cards would give at the same spots. Saved games are
-pruned after 3 days, so each run measures the games listed at the top.
+each figure comes with what random cards would give at the same spots. Every saved game is
+kept, so each run measures all of them, listed at the top.
 Run: uv run python scripts/replay_preflop_routes.py [data/games/<game>.jsonl ...]
 """
 

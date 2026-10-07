@@ -18,7 +18,7 @@ Everything else is maintained by Claude:
 |---|---|
 | `src/` | The backend that Chrome starts when a PokerNow table opens. |
 | `extension/` | The Chrome extension: the card and badges on the table, and the side panel. |
-| `data/` | VAMOS's own state: saved games (kept 3 days), settings, seat matches, costs and logs. The one thing to edit by hand is `heroNames` in `data/settings.json`: your real name and nicknames, which are replaced with "Hero" before anything reaches Claude. |
+| `data/` | VAMOS's own state: saved games (all kept, for analyzing later), settings, seat matches, costs and logs. The one thing to edit by hand is `heroNames` in `data/settings.json`: your real name and nicknames, which are replaced with "Hero" before anything reaches Claude. |
 | `docs/` | Reference notes: PokerNow's log and page, and how preflop advice works. |
 | `scripts/` | Developer tools. |
 | `tests/` | The test suite. |
@@ -30,7 +30,7 @@ Everything else is maintained by Claude:
 - Everything else, before or after the flop: Claude Opus 5.5 at low effort (`VAMOS! AI (Claude Opus 5.5 · low)`), with Ask deeper for a medium-effort second answer.
 - The side panel's Current hand has a "Replay an earlier hand" menu: pick one of this session's hands to open the hand replayer, street by street, with what VAMOS advised next to what you did (x closes it).
   In the menu the session's biggest pots are bold with their pot, results are green or red, and hands where you never called, bet or raised are dimmed.
-  Hands are kept on this Mac only (in `data/games/`, about 0.6 MB per session) and deleted 3 days after the game; the replayer makes no AI calls.
+  Hands are kept on this Mac only, in `data/games/` (under 1 MB per session), and never deleted, so every game stays there to analyze later; the replayer makes no AI calls.
 - The side panel's switches: AI Advice (with it off no Claude call is made; the preflop rules and chart still answer), VAMOS! HUD (the card on the table) and Per-Player Stats (the badges under each seat).
 - Amounts show in dollars and big blinds, e.g. `RAISE TO $0.60 (3bb)`.
 - Claude sees opponents only under pseudonyms (Player A, Player B, ...); no real name or nickname is sent.
