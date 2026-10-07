@@ -1,3 +1,5 @@
+import logging
+
 from vamos.session import Counts, GameSession
 
 A = '"Alice @ aaaaaaaaaa"'
@@ -56,6 +58,20 @@ def test_malformed_rows_are_ignored():
     assert not session.add_page({"logs": [{"msg": "no order"}, {"created_at": "x", "msg": "bad"}]})
     assert not session.add_page({"unexpected": True})
     assert not session.add_page(None)
+
+
+def test_rows_vamos_cannot_read_are_counted_and_logged_once_each(caplog):
+    session = GameSession("g")
+    session.add_page(body(*HAND_1, (109, "something new from PokerNow")))
+    with caplog.at_level(logging.WARNING, logger="vamos.session"):
+        assert session.unread == 1
+        # Rebuilt with more rows: the same row is not logged again.
+        session.add_page(body(*HAND_2, (206, "and another one")))
+        assert session.unread == 2
+    assert [r.getMessage() for r in caplog.records] == [
+        "[VAMOS] could not read log row 109 of game g: 'something new from PokerNow'",
+        "[VAMOS] could not read log row 206 of game g: 'and another one'",
+    ]
 
 
 def test_a_row_saved_after_a_half_written_last_line_survives_a_reload(tmp_path):

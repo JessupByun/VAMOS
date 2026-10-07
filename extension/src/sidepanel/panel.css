@@ -55,7 +55,7 @@ main {
 }
 
 /* The header: the wordmark in the action colors (the one flourish), the backend's state,
-   and the three switches. */
+   the three switches, and a warning when the log has lines VAMOS could not read. */
 .top {
   padding: 4px 4px 2px;
 }
@@ -191,6 +191,17 @@ button.switch:hover {
 
 .state.down {
   color: var(--bad);
+}
+
+.unread {
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: var(--warn);
+}
+
+.unread .where {
+  display: block;
+  color: var(--muted);
 }
 
 .card {

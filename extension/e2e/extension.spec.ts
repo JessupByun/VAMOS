@@ -88,6 +88,21 @@ test("side panel shows the backend status of an open table", async () => {
   await expectPanelRoundTrip(panel);
 });
 
+test("a log line VAMOS cannot read is logged and counted in the side panel", async () => {
+  await openTable();
+  const panel = await harness.context.newPage();
+  await panel.goto(PANEL_URL);
+  await expect(panel.locator(".state")).toHaveText(/active/);
+  const unread = panel.locator(".unread");
+  await expect(unread).toHaveCount(0);
+  harness.addLogLines(["Something PokerNow never wrote before."]);
+  await expect(unread).toHaveText(/^1 log line VAMOS could not read this session/);
+  await expect(unread.locator(".where")).toHaveText("Listed in data/logs/host.log");
+  expect(harness.hostLog()).toContain("could not read log row");
+  harness.addLogLines(["And another one."]);
+  await expect(unread).toHaveText(/^2 log lines VAMOS could not read this session/);
+});
+
 test("a damaged identity map is set aside and the side panel says so", async () => {
   mkdirSync(harness.dataDir, { recursive: true });
   writeFileSync(join(harness.dataDir, "identity.json"), '{"strange001": null,');

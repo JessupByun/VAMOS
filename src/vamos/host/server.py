@@ -775,6 +775,8 @@ class Backend:
             "gameId": game_id,
             "players": players,
             "profiles": [{"key": p.key, "name": p.name} for p in profiles.profiles.values()],
+            # This game's log rows VAMOS could not read, each logged in host.log.
+            "unreadRows": session.unread,
             "problems": [
                 *([self.identity.problem] if self.identity.problem else []),
                 *profiles.problems,

@@ -235,6 +235,8 @@ export interface Players {
   gameId: string;
   players: PlayerInfo[];
   profiles: { key: string; name: string }[];
+  /** This game's log rows VAMOS could not read; each is logged in data/logs/host.log. */
+  unreadRows: number;
   /** Files VAMOS could not use as they are: a profile, or a damaged identity map. */
   problems: string[];
 }

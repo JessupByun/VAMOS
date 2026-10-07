@@ -32,6 +32,8 @@ class GameSession:
         # Orders before which rows may be missing (see add_page).
         self._gaps: set[int] = set()
         self._log: HandLog | None = None
+        # Rows the grammar could not read, logged once each.
+        self._reported: set[int] = set()
         self._store = store
         if store is not None:
             self._load(store)
@@ -96,7 +98,21 @@ class GameSession:
     def log(self) -> HandLog:
         if self._log is None:
             self._log = build_hands(self._rows.items(), self._gaps)
+            for order, text in self._log.unknown:
+                if order not in self._reported:
+                    self._reported.add(order)
+                    log.warning(
+                        "[VAMOS] could not read log row %d of game %s: %r",
+                        order,
+                        self.game_id,
+                        text,
+                    )
         return self._log
+
+    @property
+    def unread(self) -> int:
+        """How many of this game's log rows VAMOS could not read (each logged in host.log)."""
+        return len(self.log.unknown)
 
     def counts(self) -> dict[str, Counts]:
         dealt: dict[str, int] = {}

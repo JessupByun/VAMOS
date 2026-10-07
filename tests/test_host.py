@@ -209,6 +209,14 @@ def test_a_damaged_identity_file_does_not_stop_the_backend(tmp_path):
     assert [p["status"] for p in players["players"]] == ["profile", "unknown"]
 
 
+def test_rows_vamos_cannot_read_are_counted_for_the_side_panel(backend):
+    backend.handle(SEATS)
+    [players] = backend.handle(page(*HAND))
+    assert players["unreadRows"] == 0
+    [players] = backend.handle(page(*HAND, (106, "something new from PokerNow")))
+    assert players["unreadRows"] == 1
+
+
 def test_install_writes_launcher_and_manifest(tmp_path):
     manifest_path = install(
         launcher_dir=tmp_path / "support", hosts_dir=tmp_path / "hosts", python="/py/bin/python"

@@ -956,6 +956,17 @@ function PlayersSection({ players }: { players: Players }) {
   );
 }
 
+/** Log rows VAMOS could not read in the shown game: said, never guessed at. */
+function UnreadRows({ count }: { count: number }) {
+  if (count === 0) return null;
+  return (
+    <p class="unread" role="status">
+      {plural(count, "log line")} VAMOS could not read this session
+      <span class="where">Listed in data/logs/host.log</span>
+    </p>
+  );
+}
+
 /** The wordmark's poker chip, edged along the action colors. */
 function Chip() {
   return (
@@ -1033,6 +1044,7 @@ function Panel() {
             />
           </div>
         )}
+        {players && <UnreadRows count={players.unreadRows} />}
       </header>
       {settings && <Dial settings={settings} />}
       {costs && <Spend costs={costs} />}
