@@ -29,7 +29,7 @@ from vamos.brain import prompt
 from vamos.brain.answer import BadAnswer, settle
 from vamos.brain.costs import Ledger
 from vamos.brain.provider import PRESETS, AnthropicProvider, CallFailed, Request
-from vamos.brain.pseudonyms import HERO, Pseudonyms
+from vamos.brain.pseudonyms import HERO, LeakError, Pseudonyms
 from vamos.brain.spot import betting, claude_facts, legal
 from vamos.config import DATA_DIR, PROFILES_DIR
 from vamos.engine.facts import facts as card_facts
@@ -109,6 +109,20 @@ def street_line(street: str, board: list[str]) -> str:
     return f"{street.capitalize()}: {', '.join(cards[:-1])} [{cards[-1]}]"
 
 
+def saved_nicknames() -> set[str]:
+    """Every PokerNow nickname in the saved games ("Name @ ID" in the log rows)."""
+    found: set[str] = set()
+    for path in (DATA_DIR / "games").glob("*.jsonl"):
+        if path.name.count(".") > 1:  # notes and decisions, not log rows
+            continue
+        for line in path.read_text().splitlines():
+            try:
+                found.update(re.findall(r'"(.+?) @ [A-Za-z0-9_-]+"', json.loads(line)["msg"]))
+            except (ValueError, KeyError, TypeError):
+                continue
+    return found
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--preset", default="standard", choices=list(PRESETS))
@@ -121,7 +135,11 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
-    logged = [json.loads(line) for line in (DATA_DIR / "advice.jsonl").read_text().splitlines()]
+    advice_log = DATA_DIR / "advice.jsonl"
+    if not advice_log.exists():
+        print("No logged spots yet (data/advice.jsonl is written once VAMOS has asked Claude).")
+        return
+    logged = [json.loads(line) for line in advice_log.read_text().splitlines()]
     if args.lines:
         wanted = {int(n) for n in args.lines.split(",")}
     else:
@@ -146,6 +164,10 @@ def main() -> None:
     for key in sorted(profiles.profiles):
         profile = profiles.profiles[key]
         names.add(key, [profile.name, *profile.aliases], shown=profile.name)
+    # Every nickname from the saved games, after the profiles so their letters stay put: the
+    # leak check below refuses a prompt that still names anyone.
+    for name in sorted(saved_nicknames()):
+        names.add(f"seen:{name}", [name], shown=name, nickname=True)
     provider = AnthropicProvider()
     results, spent = [], 0.0
     for number, entry in enumerate(logged, 1):
@@ -186,6 +208,13 @@ def main() -> None:
             notes.group(1) if notes else "",
             player_notes,
         )
+        # As at the table: profiles by profile names, the user's notes by every name seen.
+        try:
+            names.check(system.user_text, nicknames=False)
+            names.check("\n".join([notes.group(1) if notes else "", *player_notes.values()]))
+        except LeakError as error:
+            print(f"line {number}: skipped, {error}")
+            continue
         if args.dry_run:
             print(f"--- line {number}\n{message}\n")
             continue

@@ -25,6 +25,11 @@ let status: BackendStatus = { type: "backend", state: "down", detail: "no PokerN
 const retry = new HostRetry();
 let retryTimer: ReturnType<typeof setTimeout> | undefined;
 const HOST_GRACE_MS = 15000;
+// A tab showing the hero's turn closed: unless a tab on the game shows the turn again by then
+// (a reload), the turn is over for the backend, which stops its calls on it, and the side
+// panel stops offering Ask deeper on it.
+const TURN_GONE_MS = 10000;
+const turnGone = new Map<string, ReturnType<typeof setTimeout>>();
 let closeTimer: ReturnType<typeof setTimeout> | undefined;
 // What a side panel needs when it opens, replayed to it: the latest settings and costs,
 // and per table the players, the current hand, and every message about that hand's
@@ -43,7 +48,7 @@ const tabs = new GameTabs<chrome.runtime.Port>();
 // Per game, when polling last moved away from a tab that is still open: the next poller's
 // first request keeps clear of that tab's last.
 // When polling last moved, per game, and the retry time PokerNow asked for then, if any.
-const handedOverAt = new Map<string, { at: number; retryAt?: number }>();
+const handedOverAt = new Map<string, { at: number; retryAt?: number; problem?: string }>();
 // Per game, why its log poller is failing, for tabs and panels that open meanwhile.
 const logTrouble = new Map<string, LogStatus>();
 
@@ -99,12 +104,33 @@ function setLogStatus(status: LogStatus, from?: chrome.runtime.Port) {
   for (const port of panelPorts) port.postMessage(status satisfies WorkerToPanel);
 }
 
+function clearTurnSoon(gameId: string) {
+  clearTimeout(turnGone.get(gameId));
+  turnGone.set(
+    gameId,
+    setTimeout(() => {
+      turnGone.delete(gameId);
+      if (!tabs.turnShown(gameId)) {
+        host?.postMessage({ type: "turn", gameId, key: "", table: null } satisfies ContentToWorker);
+      }
+    }, TURN_GONE_MS),
+  );
+}
+
+/**
+ * The tab polling a game's log stopped: the next to poll it (another tab, or the same one
+ * reloaded) keeps the gap from its last request and any back-off PokerNow asked of it.
+ */
+function keepBackOff(gameId: string) {
+  const trouble = logTrouble.get(gameId)?.trouble;
+  handedOverAt.set(gameId, { at: Date.now(), retryAt: trouble?.retryAt, problem: trouble?.problem });
+}
+
 /** Polling a game's log starts in a tab or moves to it: the tab that polled stops, the next picks up. */
 function handOver({ gameId, from, to }: Handover<chrome.runtime.Port>) {
   if (from !== undefined) {
     from.postMessage({ type: "poll_stop", gameId } satisfies WorkerToContent);
-    // The next tab keeps to the back-off PokerNow asked of the last one.
-    handedOverAt.set(gameId, { at: Date.now(), retryAt: logTrouble.get(gameId)?.trouble?.retryAt });
+    keepBackOff(gameId);
     // Its retry countdown no longer stands; the next poller reports its own problems.
     setLogStatus({ type: "log_status", gameId, trouble: null });
   }
@@ -145,7 +171,11 @@ function connectHost() {
         const resume =
           movedAt === undefined
             ? message
-            : { ...message, handedOverAt: movedAt.at, ...(movedAt.retryAt ? { retryAt: movedAt.retryAt } : {}) };
+            : {
+                ...message,
+                handedOverAt: movedAt.at,
+                ...(movedAt.retryAt ? { retryAt: movedAt.retryAt, problem: movedAt.problem } : {}),
+              };
         tabs.poller(message.gameId)?.postMessage(resume satisfies WorkerToContent);
         return;
       }
@@ -238,8 +268,12 @@ chrome.runtime.onConnect.addListener((port) => {
       // back/forward cache" when the user navigates away from the table).
       void chrome.runtime.lastError;
       contentPorts.delete(port);
+      const gameId = tabs.gameOf(port);
+      const hadTurn = tabs.showsTurn(port);
       const handover = tabs.close(port);
+      if (gameId !== undefined && hadTurn && !tabs.turnShown(gameId)) clearTurnSoon(gameId);
       if (handover) {
+        keepBackOff(handover.gameId);
         setLogStatus({ type: "log_status", gameId: handover.gameId, trouble: null });
         // Another tab on the game polls in its place, from where the backend's rows end.
         handOver(handover);

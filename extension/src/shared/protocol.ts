@@ -479,6 +479,8 @@ export interface Resume {
   handedOverAt?: number;
   /** When PokerNow last asked the tab polling until now to wait until (epoch ms), if it did. */
   retryAt?: number;
+  /** Why it asked, so this tab says so while it keeps to the wait. */
+  problem?: string;
 }
 
 /** Why Claude's calls fail for the API key or its credits, in plain words with the fix; null once one gets through. */
@@ -595,7 +597,8 @@ export type PanelToWorker =
   /** Notes on one player for this session's prompts, saved with that game's log. */
   | { type: "notes"; text: string; playerId: string; gameId?: string }
   /** Re-run the decision on the table with another preset ("Ask deeper"). */
-  | { type: "ask"; gameId: string; preset: Preset }
+  /** `node` is the decision Ask deeper was clicked on; a later one is not asked about. */
+  | { type: "ask"; gameId: string; preset: Preset; node?: string }
   /** Write this session's read and notes on a player to drafts/ for the user to review. */
   | { type: "save_draft"; gameId: string; playerId: string }
   /** One earlier hand for the replayer. */

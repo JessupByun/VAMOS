@@ -5,9 +5,14 @@ Amounts are parsed with Decimal and stored as integer cents, so 0.10/0.20 pots n
 drift the way floats do. Conversion to big blinds happens only at the engine boundary.
 """
 
-from decimal import Decimal, InvalidOperation
+import re
+from decimal import Decimal
 
 type Cents = int
+
+# Digits with at most one decimal point: no exponents ("1e3"), signs, underscores or
+# non-ASCII digits, which Decimal would otherwise accept.
+_AMOUNT = re.compile(r"[0-9]+(\.[0-9]+)?")
 
 
 def parse_chips(text: str) -> Cents | None:
@@ -18,13 +23,9 @@ def parse_chips(text: str) -> Cents | None:
     label and blanks. Callers decide what None means for them.
     """
     cleaned = text.replace(",", "").strip()
-    if not cleaned:
+    if not _AMOUNT.fullmatch(cleaned):
         return None
-    try:
-        value = Decimal(cleaned)
-    except InvalidOperation:
-        return None
-    cents = value * 100
-    if not value.is_finite() or value < 0 or cents != cents.to_integral_value():
+    cents = Decimal(cleaned) * 100
+    if cents != cents.to_integral_value():
         return None
     return int(cents)

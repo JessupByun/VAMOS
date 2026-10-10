@@ -1059,7 +1059,7 @@ test("while the backend is down, the switches and the badges' profile picks are 
 });
 
 test("Save draft and the replayer say when they fail instead of waiting forever", async () => {
-  const page = await openTable();
+  await openTable();
   const panel = await openPanel();
   harness.addLogLines(HAND_START.map((line) => line.replace("A♠, 10♦", "A♠, A♦")));
   harness.addLogLines([
@@ -1212,6 +1212,19 @@ test("a call stopped before Claude answered is estimated in the costs, and test 
   );
   await expect(total).toHaveText("$0.03");
   await expect(panel.locator(".stat.month .value")).toHaveText("$0.03");
+});
+
+test("closing the tab that shows the hero's turn ends the turn once no tab shows it again", async () => {
+  const page = await openTable();
+  await harness.openWatching();
+  const panel = await openPanel();
+  await flopTurn(page);
+  await expect(panel.getByRole("button", { name: "Ask deeper" })).toBeVisible();
+  await page.close();
+  // The watching tab keeps the game open, so the backend stays; the turn is dropped once the
+  // closed tab's grace for a reload has passed, and nothing is left to ask deeper about.
+  await expect(panel.locator(".decision.live")).toHaveCount(0, { timeout: 15_000 });
+  await expect(panel.getByRole("button", { name: "Ask deeper" })).toHaveCount(0);
 });
 
 // Not a check: screenshots of the card and side panel for reviewing the design by eye.

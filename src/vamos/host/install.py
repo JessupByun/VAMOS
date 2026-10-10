@@ -11,15 +11,33 @@ HOST_NAME = "com.vamos.host"
 # Pinned by the public key in extension/manifest.config.ts.
 EXTENSION_ID = "hflgneiimkcoebdkfiblggbfklelebdn"
 
-CHROME_HOSTS_DIR = Path.home() / "Library/Application Support/Google/Chrome/NativeMessagingHosts"
-# Real Chrome on macOS will not start a host whose executable sits in a privacy-protected
-# folder such as ~/Desktop, so the launcher lives outside the repository.
-LAUNCHER_DIR = Path.home() / "Library/Application Support/VAMOS"
+
+def locations(platform: str = sys.platform) -> tuple[Path, list[Path]]:
+    """
+    Where the launcher goes, and the folders Chrome (and Chromium) read native messaging
+    hosts from. Windows registers hosts in the registry instead, which this does not do yet.
+    """
+    home = Path.home()
+    if platform == "darwin":
+        # Real Chrome on macOS will not start a host whose executable sits in a
+        # privacy-protected folder such as ~/Desktop, so the launcher lives outside the repo.
+        support = home / "Library/Application Support"
+        return support / "VAMOS", [support / "Google/Chrome/NativeMessagingHosts"]
+    if platform.startswith("linux"):
+        config = home / ".config"
+        return home / ".local/share/vamos", [
+            config / "google-chrome/NativeMessagingHosts",
+            config / "chromium/NativeMessagingHosts",
+        ]
+    raise SystemExit(
+        "[VAMOS] vamos install supports macOS and Linux. On Windows, Chrome finds native hosts "
+        "through the registry, which this installer does not write yet."
+    )
 
 
 def install(
-    launcher_dir: Path = LAUNCHER_DIR,
-    hosts_dir: Path = CHROME_HOSTS_DIR,
+    launcher_dir: Path,
+    hosts_dir: Path,
     python: str = sys.executable,
     record: bool = False,
 ) -> Path:

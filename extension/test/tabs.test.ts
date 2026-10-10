@@ -25,6 +25,21 @@ describe("GameTabs", () => {
     expect(tabs.poller("g2")).toBe("C");
   });
 
+  it("knows which tabs show the hero's turn, so a closed one's turn can be cleared", () => {
+    const tabs = new GameTabs<string>();
+    tabs.claim("A", "g1");
+    tabs.claim("B", "g1");
+    tabs.turn("A", "g1", true);
+    expect([tabs.gameOf("A"), tabs.showsTurn("A"), tabs.showsTurn("B")]).toEqual(["g1", true, false]);
+    expect(tabs.turnShown("g1")).toBe(true);
+    tabs.close("A");
+    expect(tabs.turnShown("g1")).toBe(false);
+    // The same turn showing in another tab on the game keeps it.
+    tabs.turn("B", "g1", true);
+    expect(tabs.turnShown("g1")).toBe(true);
+    expect(tabs.turnShown("g2")).toBe(false);
+  });
+
   it("hands polling to another tab on the game when the polling one goes", () => {
     const tabs = new GameTabs<string>();
     tabs.claim("A", "g1");

@@ -60,6 +60,23 @@ def test_one_letter_names_are_reported_not_substituted():
     assert p.hide("Q raises") == "Q raises"
 
 
+def test_a_player_called_player_is_reported_and_blocks_nothing():
+    p = Pseudonyms()
+    p.add("x", ["Player"], shown="Player", nickname=True)
+    p.add("y", ["bob"], shown="bob")
+    assert p.unusable == {"Player"}
+    hidden = p.hide("## Player A: bob raises")
+    assert hidden == "## Player A: Player B raises"
+    p.check(hidden)
+
+
+def test_a_pseudonym_put_in_is_never_matched_again():
+    p = Pseudonyms()
+    p.add("x", ["bob"], shown="bob")
+    p.add("y", ["Player A2"], shown="Player A2")  # matches "Player A" + "2" only as a whole
+    assert p.hide("bob and Player A2") == "Player A and Player B"
+
+
 def test_reveal_turns_pseudonyms_back_into_names():
     p = table()
     assert p.reveal("Player A overcalls; Hero should value bet thinner than vs Player B.") == (

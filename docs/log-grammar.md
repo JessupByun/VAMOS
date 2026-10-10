@@ -11,7 +11,7 @@ Only No-Limit Hold'em cash hands are parsed; every other variant is recognized a
 - J is Jaaaayden/pokernow-tracker `pnt/logs`: 25 real CSV exports from 2026-07-23 to 2026-09-12, 128,065 rows, 6,631 hands, all NLH cash, MIT licensed.
 - JT is the same repo's `tests/fixtures`: 6 unredacted copies of J games that differ from J only by extra `Your hand is` rows.
 - R is the VAMOS live recording from the P0 guest table: 23 unique rows from 2026-10-02.
-- S is the rows VAMOS saved live from the user's own games in `data/games/` (gitignored, never in the repository): 15 games and 21,643 rows from 2026-10-04 to 2026-10-07, every one of which fullmatches a pattern in this file.
+- S is the rows VAMOS saved live from the author's own games in `data/games/` (gitignored, never in the repository): 15 games and 21,643 rows from 2026-10-04 to 2026-10-07, every one of which fullmatches a pattern in this file.
 - L is 12 legacy CSV exports attached to GitHub issues (pn2ps, PokerNowKit, evo converter) from 2020-05 to 2023-10: 12,117 rows, including 88 PLO Hi and 48 PLO Hi/Lo hands.
 - J and JT are fetched into the gitignored `tests/corpus/` by `scripts/fetch_corpus.py`, and `tests/test_log_corpus.py` (`uv run pytest -m corpus`) re-checks the key invariants on every run: every row parses, every finished hand balances, and every all-in player puts in exactly their stack.
 - L was examined during research only and is not part of the repository.

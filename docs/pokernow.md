@@ -1,6 +1,6 @@
 # PokerNow reference
 
-What VAMOS relies on about PokerNow, verified in P0 against a live guest table (2026-10-02) and PokerNow's production bundle, plus open-source trackers where noted.
+What VAMOS relies on about PokerNow, observed at a live guest table of our own (2026-10-02), plus open-source trackers where noted.
 PokerNow publishes none of this; re-verify when something breaks.
 
 ## Navigation
@@ -79,6 +79,6 @@ Your hand is 4♠, 10♠
 
 ## Chrome and macOS
 
-- Chrome will not start a native messaging host whose executable sits in a privacy-protected folder such as `~/Desktop`; `vamos install` puts the launcher in `~/Library/Application Support/VAMOS/`.
+- Chrome will not start a native messaging host whose executable sits in a privacy-protected folder such as `~/Desktop`; `vamos install` puts the launcher in `~/Library/Application Support/VAMOS/` (on Linux, `~/.local/share/vamos/`).
 - Content scripts are never injected into tabs that were open before the extension was loaded or reloaded; reload the PokerNow tab after reloading the extension.
 - An open native messaging port keeps the service worker alive; content and panel ports do not, so both reconnect when the worker is stopped.

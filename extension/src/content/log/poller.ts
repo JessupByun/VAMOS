@@ -25,9 +25,10 @@ export interface LogPoller {
    * Start polling, or start over: from `after` (the newest row the backend already holds), or
    * from the newest rows when it holds none; rows above it are walked back to it, so none are
    * skipped. `handedOverAt` is when another tab on the game stopped polling for this one to
-   * take over: the first request keeps the minimum gap from that tab's last.
+   * take over: the first request keeps the minimum gap from that tab's last, and any wait
+   * PokerNow asked of it (`retryAt`, for `problem`), which is reported, not kept silent.
    */
-  resume: (after: string | null, handedOverAt?: number, retryAt?: number) => void;
+  resume: (after: string | null, handedOverAt?: number, retryAt?: number, problem?: string) => void;
   /** Poll nothing until the next resume(), e.g. while the backend is away. */
   pause: () => void;
   /** Poll as soon as the minimum gap allows, e.g. when the hero's turn starts. */
@@ -117,8 +118,11 @@ export function startLogPoller(
   let inFlight = false;
   let lastStart = -Infinity;
   let trouble: LogTrouble | null = null;
+  // The last problem reported, said again when a back-off outlasts a pause.
+  let lastProblem: string | undefined;
 
   function setTrouble(next: LogTrouble | null) {
+    if (next) lastProblem = next.problem;
     if (next?.problem === trouble?.problem && next?.retryAt === trouble?.retryAt) return;
     trouble = next;
     report(next);
@@ -213,7 +217,7 @@ export function startLogPoller(
       running = false;
       clearTimeout(timer);
     },
-    resume: (after, handedOverAt, retryAt) => {
+    resume: (after, handedOverAt, retryAt, problem) => {
       if (stopped) return;
       generation += 1;
       cursor = after;
@@ -232,6 +236,10 @@ export function startLogPoller(
         (handedOverAt ?? -Infinity) + MIN_GAP_MS,
         retryAt ?? -Infinity,
       );
+      // A wait longer than a poll (a back-off of this tab's from before a pause, or one carried
+      // over from the tab polling until now) says why, rather than leaving the card quiet.
+      const why = problem ?? lastProblem;
+      if (earliest - Date.now() > POLL_MS && why) setTrouble({ problem: why, retryAt: earliest });
       if (!inFlight) schedule(Math.max(0, earliest - Date.now()));
     },
     pause: () => {

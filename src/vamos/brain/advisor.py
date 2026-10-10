@@ -258,6 +258,17 @@ class Advisor:
             for call in self._calls.pop(game_id, []):
                 self._cancel(call)
 
+    def leave(self, game_id: str, node: str) -> None:
+        """
+        The hero is at `node`, which no call is needed for (a rule answered it, or the AI is
+        off): stop the calls about an earlier decision, which the hero has acted past.
+        """
+        with self._lock:
+            calls = self._calls.get(game_id, [])
+            if calls and calls[-1].job.node != node:
+                for call in self._calls.pop(game_id):
+                    self._cancel(call)
+
     def close(self, wait: float = 2.0) -> None:
         """
         The backend is closing: stop every call still running and give each a moment to end,

@@ -2,20 +2,20 @@
 
 The rulebook for VAMOS's opponent profiles, one file per player in `profiles/`.
 VAMOS owns these files and keeps them current after each session; they are the source of truth about each opponent.
-Whoever updates a profile (VAMOS's updater, or Claude working on the repo) follows this file exactly.
+Whoever updates a profile (the `update-profiles` skill, or Claude working on the repo) follows this file exactly.
 
 ## Who reads a profile
 
 - Claude reads the whole file at every decision while that player is at the table, to exploit them. Write for that reader: specific, ranked, actionable.
-- jes (the hero, the only user) reads it in the side panel. The panel shows the Summary's first sentence, the Key stats headline lines, and the frontmatter's `hands`, `sessions`, `net` and `last_updated`.
+- The hero (the person running VAMOS) reads it in the side panel. The panel shows the Summary's first sentence, the Key stats headline lines, and the frontmatter's `hands`, `sessions`, `net` and `last_updated`.
 - The next update reads it as the starting point. Never lose information the next update would need.
 
 ## Evidence, and how far to trust it
 
 1. **VAMOS's exact counts** from saved games (`data/games/`). Every number in a profile comes from counts, never from estimates or recall.
-2. **The hands themselves.** PokerNow's log shows every player's actions in every hand, whether or not jes played it. Hole cards are known only when shown (showdowns and voluntary shows), plus jes's own.
-3. **Older sessions from the joined logs** (HU, A, B, C and E, 2026-09-30 to 2026-10-03), where every hole card was known. Their findings stay unless newer evidence contradicts them; when describing hand ranges, say which sessions they come from.
-4. **jes's notes** on a player for a session (table talk, mood, tilt). Use them, attributed: "jes noted ...".
+2. **The hands themselves.** PokerNow's log shows every player's actions in every hand, whether or not the hero played it. Hole cards are known only when shown (showdowns and voluntary shows), plus the hero's own.
+3. **Older sessions from full hand histories** imported before VAMOS saved games, where every hole card may be known (the frontmatter's `hole_cards_known` says which). Their findings stay unless newer evidence contradicts them; when describing hand ranges, say which sessions they come from.
+4. **The hero's notes** on a player for a session (table talk, mood, tilt). Use them, attributed: "Hero noted ...".
 
 Never guess hole cards that were not shown. Never present a read as fact without its evidence.
 
@@ -30,11 +30,11 @@ name: alex                      # the file name without .md; the only name used 
 tag: Calling station            # 1 to 3 standard poker words, shown on the seat badge
 player_id: Qw3rTy7UiO           # the player's main PokerNow account only
 hands: 912                     # every hand counted in this profile, ring and heads-up
-sessions: [HU 2026-09-30, A 2026-09-30, ..., N 2026-10-07]
-games: {O: pglExampleGameId000000000 through hand 136}   # label -> PokerNow game and the last hand counted
-hole_cards_known: HU, A, B, C all (240); later sessions only showdowns and shows
-net: -42.60 (HU -12.00, A -18.50, ...)   # total, then each session by label, in dollars
-excluded: [Oct 3 by group decision]       # sessions left out and why; omit when none
+sessions: [A 2026-09-30, B 2026-10-01, ..., N 2026-10-07]
+games: {N: pglExampleGameId000000000 through hand 136}   # label -> PokerNow game and the last hand counted
+hole_cards_known: A, B all (240); later sessions only showdowns and shows
+net: -42.60 (A -12.00, B -18.50, ...)   # total, then each session by label, in dollars
+excluded: [C at the player's request]   # sessions left out and why; omit when none
 last_updated: 2026-10-07
 ---
 ```
@@ -52,8 +52,8 @@ Sections:
 4. `## Postflop`: `**Flop**`, `**Turn**`, `**River**` and `**Raises and slowplays**`: how often they bet, call, fold and raise, and with what (from shown cards).
 5. `## Bet sizing`: what their sizes mean.
 6. `## Bluffing`: how often, where, and with which hands.
-7. `## Heads-up`: their heads-up game (against jes and against others), counted separately from the ring stats. Omit the section entirely if they have never played heads-up.
-8. `## Versus jes`: anything they do differently against jes.
+7. `## Heads-up`: their heads-up game (against the hero and against others), counted separately from the ring stats. Omit the section entirely if they have never played heads-up.
+8. `## Versus Hero`: anything they do differently against the hero.
 9. `## Tilt and dynamics`: reactions to big losses, being bluffed, running hot, rebuys, mood.
 10. `## How to exploit`: concrete adjustments, most valuable first, each with its evidence and when it applies (table size, stack depth, position).
 11. `## Notable hands`: the most instructive hands, up to about eight, each one line.
@@ -85,22 +85,22 @@ Sections:
 
 - Describe the playstyle and tendencies in plain, standard poker terms (VPIP, c-bet, check-raise, overbet, thin value, bluff-catcher). No invented labels.
 - Back every read with counts or named hands. A hand is named by session label and hand number: `K112` is hand 112 of session K.
-- Say whether a hand range comes from shown cards in later sessions or from the joined logs.
+- Say whether a hand range comes from shown cards in later sessions or from older full hand histories.
 - When behavior changes, keep the old read, add the new one with dates and both numbers, and say which to trust now. Rewrite a read only when the evidence contradicts it, and note the rewrite in the Changelog.
 - No length limit: useful detail is worth its tokens. But no repetition and no filler: merge duplicate points, keep each section organized, and cap examples at about eight per bullet (describe the rest as a range).
 - No generic poker advice, and nothing that would apply to any player.
-- Refer to players only by their profile names (`alex`, `rj`, `sam`, `taylor`) and to the hero as `jes`. Never write a real name, a PokerNow nickname or a display name.
+- Refer to players only by their profile names and to the hero as `Hero`. Never write a real name, a PokerNow nickname or a display name.
 - Amounts: results and net in dollars ("+12.40"); bet sizes in big blinds or as a share of the pot ("3bb", "75% pot").
 - No em dashes; use a plain dash. One point per bullet.
 
 ## Exclusions
 
-Honor every exclusion: a player's request (sam: session D) or a group decision (Oct 3 for alex).
+Honor every exclusion, such as a player's request or a group decision to leave a session out.
 Never count, cite or describe an excluded session, and list it under `excluded` in the frontmatter.
 
 ## Updating after a session
 
-After a session, jes asks Claude in this project to update the profiles: the `update-profiles` skill (`.claude/skills/update-profiles/`) prepares the counts and hand records with `scripts/prepare_profile_update.py` and runs the `update-profiles` workflow, on jes's subscription and never his API credits.
+After a session, the hero asks Claude Code in this project to update the profiles: the `update-profiles` skill (`.claude/skills/update-profiles/`) prepares the counts and hand records with `scripts/prepare_profile_update.py` and runs the `update-profiles` workflow, on the hero's Claude subscription and never the API key VAMOS uses at the table.
 Session labels and excluded games live in `data/profile-sessions.json`.
 
 1. Take the session's exact counts, split ring and heads-up, and add them to the totals.
@@ -109,7 +109,7 @@ Session labels and excluded games live in `data/profile-sessions.json`.
 4. Update the frontmatter: `hands`, `sessions`, `games`, `hole_cards_known`, `net` and `last_updated`.
 5. Add the Changelog line.
 6. A session already listed in `games` is never added twice.
-   Each session is listed with the last hand counted, `O: pglExampleGameId000000000 through hand 136`, so a game that goes on after an update (a pause on the same link) adds only the hands after it.
+   Each session is listed with the last hand counted, `N: pglExampleGameId000000000 through hand 136`, so a game that goes on after an update (a pause on the same link) adds only the hands after it.
 
 ## Size and compaction
 
@@ -129,5 +129,5 @@ Nothing is lost by compacting: every earlier version of each profile is kept in 
 
 ## A new profile
 
-Only when jes asks for one, under the name jes chooses.
+Only when the hero asks for one, under the name the hero chooses.
 Build it from every saved game where the chosen accounts played, following this file.

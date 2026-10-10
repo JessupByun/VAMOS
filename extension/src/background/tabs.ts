@@ -40,6 +40,22 @@ export class GameTabs<Tab> {
     return this.outranks(tab, poller) ? this.move(gameId, tab) : null;
   }
 
+  /** The game `tab` is on, if it said. */
+  gameOf(tab: Tab): string | undefined {
+    return this.games.get(tab);
+  }
+
+  /** Whether `tab` shows the hero's turn. */
+  showsTurn(tab: Tab): boolean {
+    return this.turns.has(tab);
+  }
+
+  /** Whether some tab on the game shows the hero's turn. */
+  turnShown(gameId: string): boolean {
+    for (const tab of this.turns) if (this.games.get(tab) === gameId) return true;
+    return false;
+  }
+
   /** The tab polling the game's log, if any. */
   poller(gameId: string): Tab | undefined {
     return this.pollers.get(gameId);

@@ -358,7 +358,7 @@ class Backend:
         preset = message.get("preset", "deep")
         if game_id not in self.turns or preset not in PRESETS:
             return []
-        return [self._spot_facts(game_id, ask=preset)]
+        return [self._spot_facts(game_id, ask=preset, node=message.get("node"))]
 
     def _game_file(self, game_id: str, suffix: str) -> Path | None:
         # Game IDs come from the page; only plain ones name a file.
@@ -597,7 +597,7 @@ class Backend:
         self._hand_sent[game_id] = summary
         return [summary]
 
-    def _spot_facts(self, game_id: str, ask: str | None = None) -> Message:
+    def _spot_facts(self, game_id: str, ask: str | None = None, node: str | None = None) -> Message:
         turn = self.turns[game_id]
         payload = None
         try:
@@ -605,6 +605,10 @@ class Backend:
             game_log = self._session(game_id).log
             spot = current_spot(game_log, view) if view else None
             if spot is not None and view is not None:
+                # Ask deeper names the decision it was clicked on: a click that lands after
+                # the next decision began asks nothing about that one.
+                if node is not None and node != spot.node:
+                    ask = None
                 payload = self._spot_payload(game_id, game_log, view, spot, ask)
         except Exception:
             # The card says so rather than reading the hand forever.
@@ -642,6 +646,10 @@ class Backend:
             cached = (spot.node, found)
             self._facts[game_id] = cached
         payload = cached[1]
+        if payload.get("advice") is not None or not self.ai_on:
+            # No Claude call for this decision; one still running for an earlier decision
+            # (a turn can follow another with no gap) stops, as when the hero acts.
+            self.advisor.leave(game_id, spot.node)
         if payload.get("advice") is not None:
             return payload  # answered at once, no Claude call
         if not self.ai_on:
@@ -694,7 +702,7 @@ class Backend:
         )
         refuse = None
         try:
-            names.check(check)
+            check()
         except LeakError as error:
             log.error("[VAMOS] %s", error)
             refuse = "blocked: a real name was left in the prompt"
@@ -702,10 +710,11 @@ class Backend:
 
     def prompt_for(
         self, game_id: str, hand: Hand, hero: str, spot: Decision, card: Message
-    ) -> tuple[prompt.Prefix, str, Pseudonyms, str]:
+    ) -> tuple[prompt.Prefix, str, Pseudonyms, Callable[[], None]]:
         """
         What Claude is sent for the hero's decision: the cached prefix, the hand message, the
-        pseudonyms to reveal the answer with, and the user's own text to check for names.
+        pseudonyms to reveal the answer with, and the leak check for the user's own text (it
+        raises LeakError): profiles by profile names, notes by every name seen.
         Also used by scripts/replay_saved_preflop.py, so a replay sends what play would.
         """
         profiles = self.profiles()
@@ -746,7 +755,12 @@ class Backend:
         keys = {self._person(game_id, game_log.current_id(pid), profiles) for pid in at_table}
         keys.discard(self._person(game_id, hero, profiles))
         system = prompt.prefix(profiles, names, keys)
-        return system, message, names, "\n".join([system.user_text, *player_notes.values()])
+
+        def check() -> None:
+            names.check(system.user_text, nicknames=False)
+            names.check("\n".join(player_notes.values()))
+
+        return system, message, names, check
 
     def _person(self, game_id: str, pid: str, profiles: ProfileSet) -> str:
         """Who a player ID is for pseudonyms: their profile's key, or the ID itself."""
@@ -758,10 +772,14 @@ class Backend:
         names = self.names
         for name in self.hero_names:
             names.add_hero_name(name)
-        # Profiles first, in key order, so their letters do not depend on who sat first.
-        for key in sorted(profiles.profiles):
-            profile = profiles.profiles[key]
-            names.add(key, [profile.name, *profile.aliases], shown=profile.name)
+        # Profiles first, in key order, so their letters do not depend on who sat first. A
+        # file that could not be read still has its name hidden: the others mention it.
+        for key in sorted({*profiles.profiles, *profiles.unreadable}):
+            profile = profiles.profiles.get(key)
+            if profile is None:
+                names.add(key, [key], shown=key)
+            else:
+                names.add(key, [profile.name, *profile.aliases], shown=profile.name)
         for game_id, session in self.sessions.items():
             game_log = session.log
             for hand in game_log.hands:
@@ -774,7 +792,8 @@ class Backend:
                     if person != pid and names.knows(pid):
                         names.merge(pid, person)  # mapped to a profile since first seen
                     profile = profiles.profiles.get(person)
-                    names.add(person, [nickname], shown=profile.name if profile else nickname)
+                    shown = profile.name if profile else nickname
+                    names.add(person, [nickname], shown=shown, nickname=True)
         # Players seated but not yet dealt in (waiting for the big blind, sitting out) are in
         # no hand, but a note can still name them.
         for game_id, seated in self.seated.items():
@@ -784,7 +803,8 @@ class Backend:
                 person = self._person(game_id, pid, profiles)
                 profile = profiles.profiles.get(person)
                 nickname = seat.get("name", "")
-                names.add(person, [nickname], shown=profile.name if profile else nickname)
+                shown = profile.name if profile else nickname
+                names.add(person, [nickname], shown=shown, nickname=True)
         for seat in self.hero_seat.values():
             names.add_hero_name(seat.get("name", ""))
         return names

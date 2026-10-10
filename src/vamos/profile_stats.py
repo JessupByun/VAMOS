@@ -5,7 +5,7 @@ writes them to a work folder; the update itself runs as a Claude Code workflow o
 user's subscription, never through VAMOS's API calls.
 
 Hands are split into ring (3 or more players dealt in) and heads-up (2), per session.
-Players are named by profile name ("jes" for the hero); an account no profile claims is
+Players are named by profile name ("Hero" for the hero); an account no profile claims is
 "other player A", "other player B", ... so no nickname reaches the records.
 """
 
@@ -60,7 +60,7 @@ class PlayerData:
     digest: list[str] = field(default_factory=list)
 
 
-Who = Callable[[str, str], str | None]  # (account, nickname) -> profile name, "jes" or None
+Who = Callable[[str, str], str | None]  # (account, nickname) -> profile name, "Hero" or None
 
 
 def _card(c: str) -> str:
@@ -250,7 +250,7 @@ def _digest(hand, label, names, pos, big, players) -> None:
         + ", ".join(f"{names[p]} {pos.get(p, '?')} {_bb(stacks[p], big)}" for p in seats)
     ]
     if hand.hero_cards:
-        lines.append(f"jes holds {_cards(hand.hero_cards)}")
+        lines.append(f"Hero holds {_cards(hand.hero_cards)}")
     total = 0
     street = None
     for a in hand.actions:
@@ -290,7 +290,7 @@ def _digest(hand, label, names, pos, big, players) -> None:
     for pid in seats:
         who = names[pid]
         # A hand the player only folded before the flop is left to the counts.
-        if who != "jes" and (pid in voluntary or pid not in folded_pre or pid in hand.shows):
+        if who != "Hero" and (pid in voluntary or pid not in folded_pre or pid in hand.shows):
             players[who].digest.append(text)
 
 

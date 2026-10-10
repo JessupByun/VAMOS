@@ -381,7 +381,7 @@ function DecisionView(props: { decision: Decision; live: boolean; gameId: string
           class="secondary"
           disabled={paused !== null}
           title={paused ?? undefined}
-          onClick={() => send({ type: "ask", gameId, preset: "deep" })}
+          onClick={() => send({ type: "ask", gameId, preset: "deep", node: decision.node })}
         >
           Ask deeper
         </button>

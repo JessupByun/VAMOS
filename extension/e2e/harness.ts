@@ -120,7 +120,7 @@ export interface Harness {
   close: () => Promise<void>;
 }
 
-export async function launch(): Promise<Harness> {
+export async function launch({ record = true }: { record?: boolean } = {}): Promise<Harness> {
   const root = mkdtempSync(join(tmpdir(), "vamos-e2e-"));
   const userDataDir = join(root, "profile");
   const dataDir = join(root, "data");
@@ -132,7 +132,7 @@ export async function launch(): Promise<Harness> {
   const canned = join(root, "claude-answer.json");
   writeFileSync(canned, JSON.stringify(CLAUDE_ANSWER));
   const launcher = join(root, "vamos-host");
-  const launcherScript = `#!/bin/sh\nVAMOS_DATA_DIR="${dataDir}" VAMOS_PROFILES_DIR="${profilesDir}" VAMOS_CANNED_CLAUDE="${canned}" VAMOS_RECORD=1 exec "${PYTHON}" -m vamos host "$@"\n`;
+  const launcherScript = `#!/bin/sh\nVAMOS_DATA_DIR="${dataDir}" VAMOS_PROFILES_DIR="${profilesDir}" VAMOS_CANNED_CLAUDE="${canned}" ${record ? "VAMOS_RECORD=1 " : ""}exec "${PYTHON}" -m vamos host "$@"\n`;
   writeFileSync(launcher, launcherScript);
   chmodSync(launcher, 0o755);
   const hostsDir = join(userDataDir, "NativeMessagingHosts");

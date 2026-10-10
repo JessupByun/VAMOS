@@ -74,6 +74,9 @@ class ProfileSet:
     profiles: dict[str, Profile]
     # Human-readable problems to show in the side panel; a bad file never stops the others.
     problems: tuple[str, ...]
+    # Keys of the files that could not be read: their names are still hidden from Claude,
+    # since the other profiles mention them.
+    unreadable: tuple[str, ...] = ()
 
     def by_player_id(self, pn_id: str) -> Profile | None:
         for profile in self.profiles.values():
@@ -85,6 +88,7 @@ class ProfileSet:
 def load_profiles(directory: Path) -> ProfileSet:
     profiles: dict[str, Profile] = {}
     problems: list[str] = []
+    unreadable: list[str] = []
     for path in sorted(directory.glob("*.md")):
         if path.name.startswith("_"):
             continue
@@ -92,6 +96,7 @@ def load_profiles(directory: Path) -> ProfileSet:
             profiles[path.stem] = parse_profile(path.stem, path.read_text())
         except (OSError, UnicodeDecodeError, ValueError) as error:
             problems.append(f"{path.name}: {error}")
+            unreadable.append(path.stem)
 
     owners: dict[str, str] = {}
     for profile in profiles.values():
@@ -101,4 +106,4 @@ def load_profiles(directory: Path) -> ProfileSet:
                     f"player_id {pn_id} is in both {owners[pn_id]}.md and {profile.key}.md"
                 )
             owners.setdefault(pn_id, profile.key)
-    return ProfileSet(profiles, tuple(problems))
+    return ProfileSet(profiles, tuple(problems), tuple(unreadable))

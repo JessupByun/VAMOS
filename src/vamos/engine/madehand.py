@@ -111,9 +111,7 @@ def _made(hero: Sequence[str], board: Sequence[str]) -> str:
         return _two_pair(hero, board)
     if category == "High Card":
         return f"{_name(max(hero[0][0], hero[1][0], key=_value))} high"
-    return {"Two Pair": "two pair", "Quads": "quads", "Full House": "full house"}.get(
-        category, category.lower()
-    )
+    return category.lower()
 
 
 def _draws(hero: Sequence[str], board: Sequence[str], made: str) -> list[str]:
@@ -130,7 +128,9 @@ def _draws(hero: Sequence[str], board: Sequence[str], made: str) -> list[str]:
         for rank in RANKS:
             with_hole = _straights({c[0] for c in cards} | {rank})
             board_only = _straights({c[0] for c in board} | {rank})
-            if with_hole - board_only:
+            # An out gives a straight better than the board's own: a lower one that a hole
+            # card makes does not play.
+            if max(with_hole, default=-9) > max(board_only, default=-9):
                 outs.append(rank)
         if len(outs) >= 2:
             draws.append("open-ended straight draw" if _open_ended(cards) else "double gutshot")

@@ -4,7 +4,7 @@ from vamos.profile_stats import SessionSpec, collect, summary
 
 HERO, ALEX, RJ, GUEST = "heroid0001", "alexid0001", "rjid000001", "guestid001"
 H, D, K, G = f'"jes @ {HERO}"', f'"alex @ {ALEX}"', f'"rj @ {RJ}"', f'"Yuri @ {GUEST}"'
-WHO = {HERO: "jes", ALEX: "alex", RJ: "rj"}
+WHO = {HERO: "Hero", ALEX: "alex", RJ: "rj"}
 
 
 def game(tmp_path, *hands: list[str]):

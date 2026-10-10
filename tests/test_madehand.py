@@ -54,6 +54,20 @@ def test_a_draw_made_only_by_the_board_is_not_the_heros():
 @pytest.mark.parametrize(
     ("hero", "board", "expected"),
     [
+        # A 4 makes only the board's own 8-high straight, so ace-three draws to nothing.
+        (("Ad", "3h"), ("5c", "6d", "7s", "8h"), "Ace high"),
+        # Only a 9 makes a straight above the board's: a gutshot, not open-ended.
+        (("Ts", "3d"), ("5c", "6d", "7s", "8h"), "10 high + gutshot"),
+        (("Kd", "4c"), ("5h", "7d", "8s", "9c"), "King high"),
+    ],
+)
+def test_a_straight_below_the_boards_own_is_no_draw(hero, board, expected):
+    assert describe(hero, board) == expected
+
+
+@pytest.mark.parametrize(
+    ("hero", "board", "expected"),
+    [
         (("2c", "3d"), ("As", "Ks", "Qs", "Js", "Ts"), "straight flush on the board"),
         (("Ah", "Kh"), ("Qh", "Jh", "Th", "2c", "3d"), "straight flush"),
         (("9c", "9d"), ("9s", "9h", "Ks", "2c", "3d"), "quads"),

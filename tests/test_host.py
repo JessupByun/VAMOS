@@ -13,7 +13,7 @@ import pytest
 from vamos.brain.provider import FakeProvider, Reply
 from vamos.config import VERSION
 from vamos.host.framing import MAX_OUTGOING_BYTES, BadMessage, read_message, write_message
-from vamos.host.install import EXTENSION_ID, HOST_NAME, install
+from vamos.host.install import EXTENSION_ID, HOST_NAME, install, locations
 from vamos.host.server import Backend, serve
 
 
@@ -257,6 +257,19 @@ def test_install_writes_launcher_and_manifest(tmp_path):
     assert launcher.read_text().startswith("#!/bin/sh\nVAMOS_RECORD=1 exec")
 
 
+def test_install_knows_where_chrome_looks_on_macos_and_linux():
+    launcher, hosts = locations("darwin")
+    assert launcher.parts[-2:] == ("Application Support", "VAMOS")
+    assert [h.parts[-3:] for h in hosts] == [("Google", "Chrome", "NativeMessagingHosts")]
+    launcher, hosts = locations("linux")
+    assert [h.parts[-2:] for h in hosts] == [
+        ("google-chrome", "NativeMessagingHosts"),
+        ("chromium", "NativeMessagingHosts"),
+    ]
+    with pytest.raises(SystemExit, match="macOS and Linux"):
+        locations("win32")
+
+
 def test_a_player_whose_id_changed_is_still_recognized(backend):
     # The profile lists alex's guest ID; after logging in the seat shows the new ID.
     backend.handle(
@@ -470,9 +483,13 @@ def test_claude_answers_postflop_under_pseudonyms(tmp_path):
     assert again["facts"]["advice"]["action"] == "BET $60 (3bb)"
     assert len(fake.requests) == 1
 
+    # A click that names an earlier decision asks nothing about this one.
+    node = again["facts"]["node"]
+    backend.handle({"type": "ask", "gameId": GAME, "preset": "deep", "node": "h0:0:1"})
+    assert len(fake.requests) == 1
     # Asking deeper adds one call with the deep preset for the same decision.
     fake.script.append(Reply(BET_HALF, "end_turn", {}))
-    backend.handle({"type": "ask", "gameId": GAME, "preset": "deep"})
+    backend.handle({"type": "ask", "gameId": GAME, "preset": "deep", "node": node})
     assert [r.preset.name for r in fake.requests] == ["standard", "deep"]
 
 
@@ -835,17 +852,32 @@ def test_claude_gets_only_the_profiles_of_players_at_the_table(tmp_path):
     assert "Never folds the river." not in system  # zed, not at the table
 
 
+def test_a_profile_that_cannot_be_read_keeps_its_name_out_of_the_others(tmp_path):
+    backend, fake, _ = claude_backend(tmp_path, [])
+    # A typo in bobby's frontmatter skips his file; alex's profile still mentions him.
+    (tmp_path / "profiles" / "bobby.md").write_text("---\nname: [bobby\n---\nbody\n")
+    alex = tmp_path / "profiles" / "alex.md"
+    alex.write_text(alex.read_text() + "\nFolds to bobby's 3-bets.\n")
+    assert backend.profiles().unreadable == ("bobby",)
+    backend.handle(SEATS)
+    backend.handle(page(*FLOP_HAND))
+    backend.handle(FLOP_TURN)
+    [request] = fake.requests
+    system = json.dumps(request.system)
+    assert "Folds to Player " in system and "bobby" not in system
+
+
 def test_profile_stats_come_from_key_stats_before_the_summary():
     from vamos.host.server import _profile_view
     from vamos.profiles import parse_profile
 
     body = (
         "---\nname: x\n---\n## Summary\nTighter lately (recent VPIP 38%, 61/160).\n\n"
-        "## Key stats\n- VPIP 44% (264/600), PFR 15% (90/600)\n- Recent: VPIP 38% (61/160)\n"
+        "## Key stats\n- VPIP 52% (312/600), PFR 11% (66/600)\n- Recent: VPIP 38% (61/160)\n"
     )
     stats = _profile_view(parse_profile("x", body))["stats"]
-    assert stats["vpip"] == {"pct": "44", "count": "264/600"}
-    assert stats["pfr"] == {"pct": "15", "count": "90/600"}
+    assert stats["vpip"] == {"pct": "52", "count": "312/600"}
+    assert stats["pfr"] == {"pct": "11", "count": "66/600"}
 
 
 def test_a_player_keeps_one_draft_per_game_past_midnight_and_an_id_change(tmp_path, monkeypatch):

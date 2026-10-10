@@ -19,7 +19,24 @@ def test_parse_chips(text, cents):
     assert parse_chips(text) == cents
 
 
-@pytest.mark.parametrize("text", ["", "   ", "All In", "N/A", "-5", "0.005", "NaN", "inf"])
+@pytest.mark.parametrize(
+    "text",
+    [
+        "",
+        "   ",
+        "All In",
+        "N/A",
+        "-5",
+        "+5",
+        "0.005",
+        "NaN",
+        "inf",
+        "1E3",
+        "1e999999999",
+        "1_000",
+        "\u0661\u0662",
+    ],
+)
 def test_parse_chips_rejects_non_amounts(text):
     assert parse_chips(text) is None
 

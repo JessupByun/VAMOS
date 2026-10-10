@@ -1,9 +1,7 @@
 # VAMOS - Claude Code Project Guide
 
 VAMOS is a real-time poker assistant for PokerNow NLH cash games: a Chrome MV3 extension reads the table, a local Python backend (launched by Chrome native messaging) works out the stats, and Claude decides postflop and the close preflop spots with the user's opponent profiles in context.
-The approved plan, with every design decision and the phase list, is in `~/.claude/plans/im-starting-a-new-ticklish-yao.md`; where it and this file differ, this file is current.
-Current phase: P3 (Claude decides postflop and the close preflop spots; P0 to P2 are done).
-`README.md` is the user's map of the folder; keep it current when folders or setup change.
+`README.md` is the public overview (what VAMOS is, the setup, the design); keep it current when folders, setup or behavior change.
 
 ## Commands
 
@@ -25,7 +23,7 @@ uv run python scripts/gen_matchups.py && uv run python scripts/gen_preflop_table
 cd extension
 npm run typecheck && npm test && npm run build
 npx playwright test          # e2e: throwaway Chrome for Testing + real host + fake PokerNow
-node tools/test-seats.mjs <game url>   # test tables only: extra seats that play, for recordings
+VAMOS_README_IMAGES=1 npx playwright test readme   # the README's images, on a made-up table, into docs/images/
 ```
 
 After a rebuild, reload VAMOS in `chrome://extensions` and then reload the PokerNow tab.
@@ -33,8 +31,8 @@ After a backend change, the same reload restarts the backend (Chrome launches it
 
 ## Layout
 
-- `src/vamos/` backend package: `cards.py` card and hand-class helpers, `money.py` chip parsing, `config.py` paths, `identity.py` the seat-to-profile map (a damaged `data/identity.json` is set aside and reported, never fatal), `profiles.py` reads `profiles/`, `jsonl.py` appends to the JSON Lines files (a line a crash cut short never swallows the next one), `verify.py` (`vamos verify`), `host/` native messaging host and installer (a message that is not JSON is logged and skipped).
-- `extension/` the MV3 extension (`src/background` worker, `src/content` action card, seat badges, DOM readers and log poller, `src/sidepanel`), vitest unit tests in `test/`, the Playwright e2e suite in `e2e/`, and `tools/test-seats.mjs` (extra seats at our own test tables).
+- `src/vamos/` backend package: `cards.py` card and hand-class helpers, `money.py` chip parsing, `config.py` paths, `identity.py` the seat-to-profile map (a damaged `data/identity.json` is set aside and reported, never fatal), `profiles.py` reads `profiles/`, `jsonl.py` appends to the JSON Lines files (a line a crash cut short never swallows the next one), `verify.py` (`vamos verify`), `host/` native messaging host and installer (macOS and Linux; a message that is not JSON is logged and skipped).
+- `extension/` the MV3 extension (`src/background` worker, `src/content` action card, seat badges, DOM readers and log poller, `src/sidepanel`), vitest unit tests in `test/` and the Playwright e2e suite in `e2e/`.
 - `src/vamos/log/` the log parser: `grammar.py` (line -> event) and `hands.py` (events -> hands with chip accounting).
 - `src/vamos/engine/` live decision facts and preflop answers: `state.py` (decision state, turn order, positions), `madehand.py`, `facts.py` (the action card's facts), `advice.py` (the push/fold chart, else `preflop_rules.py`); `equity.py` is the weighted equity behind the preflop matchup tables.
 - `src/vamos/brain/` Claude's advice, before and after the flop: `pseudonyms.py` (names never reach the API), `prompt.py` (a short role plus the profiles of the players at the table as the cached prefix, then the hand as JSON; deliberately no strategy guide, Claude's own judgment does the rest), `provider.py` (streaming calls), `advisor.py` (background calls, deadline, stale-node cancel; every call, however it ended, goes to `data/advice.jsonl` and gets one line in `data/logs/host.log`), `answer.py` (schema and legal sizing), `spot.py` (legal actions), `costs.py` (ledger in `data/costs.jsonl`: a row per request whose usage is known, and one per request stopped before Claude's first event, estimated from the latest request on the same model and cached prefix or marked unknown when there is none).
@@ -48,7 +46,7 @@ After a backend change, the same reload restarts the backend (Chrome launches it
 - `tests/` pytest suite, one test file per module.
 - `profiles/` the opponent profiles, owned by VAMOS and written only under the rulebook `profiles/_GUIDELINES.md` (the one tracked file there); every earlier version is in `data/profile-history/<name>/`.
 - `drafts/` the side panel's Save draft output (`<date>-<name>.md`), gitignored except its `README.md`; the user reviews and merges them by hand.
-- `data/` VAMOS's own local state, gitignored and never pruned: identity map, advice log, cost ledger, logs, `settings.json` (the dial, the AI switch `aiOn`, the table switches `showCard` and `showBadges`, and the hero's own names to keep out of prompts), `games/` with each game's log rows, per-player notes (`<game>.notes.json`) and the advice shown at each of the hero's decisions (`<game>.decisions.jsonl`), `profile-history/<name>/` with every version of each profile, `profile-sessions.json` (session labels and excluded games) and `profile-work/` (each update's inputs and drafts), and when used `recordings/`, `replays/`, `reports/` and `test-seats/`.
+- `data/` VAMOS's own local state, gitignored and never pruned: identity map, advice log, cost ledger, logs, `settings.json` (the dial, the AI switch `aiOn`, the table switches `showCard` and `showBadges`, and the hero's own names to keep out of prompts), `games/` with each game's log rows, per-player notes (`<game>.notes.json`) and the advice shown at each of the hero's decisions (`<game>.decisions.jsonl`), `profile-history/<name>/` with every version of each profile, `profile-sessions.json` (session labels and excluded games) and `profile-work/` (each update's inputs and drafts), and when used `recordings/`, `replays/` and `reports/`.
 
 ## Rules
 
@@ -61,7 +59,7 @@ After a backend change, the same reload restarts the backend (Chrome launches it
 - The action card always sits at the top middle of the table, just above the pot, even over a seat.
 - Learning happens only through the profiles: exact per-player counts from the saved games plus written reads, under the rulebook. No other stats engine or automatic learning. Deferred features (range tables, HRC tables, review mode's adherence stats, training mode) are built only when the user asks; the hand replayer was built on request (2026-10-05).
 - Claude runs on Opus 5.5 only, before and after the flop: effort low by default, medium as the deeper option. Sonnet 5.5 and Haiku 4.5 were dropped after blind comparisons on logged spots; never Claude Fable 5.1.
-- Ask the user before any non-trivial design choice the plan does not cover.
+- Ask the user before any non-trivial design choice this file does not cover.
 
 ### Correctness
 - Amounts are parsed with `money.parse_chips` into integer cents; never use `float()` on PokerNow values. It returns `None` for non-amounts such as "All In"; handle `None` explicitly.
@@ -76,7 +74,7 @@ After a backend change, the same reload restarts the backend (Chrome launches it
 - Colors stay calm: only what an action says is colored, along the rainbow by how much money it puts in (orange-red fold, yellow call, blue bet, purple raise, pink all in; check stays neutral), and only on the action and the option drawn. Where advice came from is told by its label, never a color. Status (connection, warnings, errors, won or lost) keeps its own green, yellow and red; the wordmark uses the action colors as a gradient. The card (`overlay.css`) and the side panel (`panel.css`) define the same tokens.
 - "Ask deeper" adds its answer under the first one in the side panel; an earlier answer for the same decision is never replaced, and one still thinking keeps running (both are billed and logged) so the two can be compared. Asked before the first call's reply has begun, the deeper call waits for it (or for the first call to end): Anthropic's prompt cache is readable only from then, and sent sooner the deeper call paid the profiles' cache write a second time. The card shows the deeper answer once it comes. A backend error on a spot shows on the card instead of "reading the hand...".
 - Breakages say so: a problem with the API key or credits stays in the side panel's header until a call gets through, a backend Chrome cannot start shows the fix (`uv run vamos install`) on the card and in the side panel, and controls that need the backend are paused with the reason while it is not ready.
-- Prompts use pseudonyms; no real name, alias or PokerNow nickname may reach the API.
+- Prompts use pseudonyms; no real name, alias or PokerNow nickname may reach the API. Profiles are hidden and checked by profile names, aliases and the hero's names (the rulebook keeps nicknames out of them, and nicknames such as "67" or "trips" would rewrite their stats); the user's notes by every name seen. A profile file that cannot be read still has its name hidden.
 - Label approximations honestly where they are shown, and back claims with tests or sources.
 - Never call eval7's range helpers directly: `py_hand_vs_range_exact` does not deal the turn and river, and both it and `py_hand_vs_range_monte_carlo` silently ignore combo weights. Use `vamos.engine.equity.equity`, which is tested against brute force.
 

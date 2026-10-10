@@ -21,9 +21,12 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.command == "install":
-        from vamos.host.install import install
+        from vamos.host.install import install, locations
 
-        print(f"[VAMOS] registered native host: {install(record=args.record)}")
+        launcher_dir, hosts_dirs = locations()
+        for hosts_dir in hosts_dirs:
+            manifest = install(launcher_dir, hosts_dir, record=args.record)
+            print(f"[VAMOS] registered native host: {manifest}")
         print(f"[VAMOS] recording {'ON' if args.record else 'off'}; reload the PokerNow tab")
     elif args.command == "verify":
         from pathlib import Path

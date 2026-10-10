@@ -1,12 +1,12 @@
 ---
 name: update-profiles
-description: Update VAMOS's opponent profiles from the games played since the last update, or create a new profile, on jes's Claude subscription (never his API credits). Use when jes asks to update the profiles, absorb a session, or create a profile for a player.
+description: Update VAMOS's opponent profiles from the games played since the last update, or create a new profile, on the Claude subscription you use with Claude Code (never the API key VAMOS uses at the table). Use when the user asks to update the profiles, absorb a session, or create a profile for a player.
 ---
 
 # Update the opponent profiles
 
 VAMOS owns `profiles/<name>.md` and keeps them current under the rulebook `profiles/_GUIDELINES.md` (read it first).
-This runs here in Claude Code on jes's subscription: never call the Claude API and never run anything that does.
+This runs here in Claude Code on the user's subscription: never call the Claude API and never run anything that does.
 
 ## 1. Prepare
 
@@ -23,11 +23,11 @@ It writes a work folder under `data/profile-work/` with, for each player to upda
 
 It prints the work folder, the new sessions, the players to update, and any accounts it could not attribute.
 
-- **Unknown accounts:** ask jes who each one was (show the nickname, the game's date and the hands played). Then record the answer and run the prepare step again:
+- **Unknown accounts:** ask the user who each one was (show the nickname, the game's date and the hands played). Then record the answer and run the prepare step again:
   - a friend's phone or guest account: `--match <account>=<profile>` (written to `data/identity.json`);
   - a player without a profile: leave them out; nothing is needed;
   - a test or a game that should not count: `--exclude <game> "<reason>"`.
-- **No new games:** tell jes the profiles are already up to date, and stop.
+- **No new games:** tell the user the profiles are already up to date, and stop.
 
 ## 2. Write, check and correct
 
@@ -55,12 +55,12 @@ VAMOS picks the new profiles up the next time it needs them, even mid-session.
 
 ## 4. Report
 
-For each player, tell jes in a line or two what changed in the read and the new headline stats.
+For each player, tell the user in a line or two what changed in the read and the new headline stats.
 Mention anything a checker could not resolve.
 
 ## Creating a profile
 
-Only when jes asks, under the name jes chooses:
+Only when the user asks, under the name the user chooses:
 
 ```bash
 uv run python scripts/prepare_profile_update.py --create <name> --accounts <account>[,<account>]

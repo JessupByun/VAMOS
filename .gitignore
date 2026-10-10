@@ -11,9 +11,15 @@ node_modules/
 extension/dist/
 # Written only by a debugging run with --reporter=html
 extension/playwright-report/
+extension/test-results/
+# Local tooling that plays seats at PokerNow test tables: kept out of the public repo, since
+# PokerNow's terms forbid bots
+extension/tools/
 
-# Secrets
+# Secrets: the API key lives only in .env
 .env
+.env.*
+!.env.example
 
 # Private data: the profiles (only their rulebook is tracked), drafts and data/ stay local
 profiles/*
@@ -26,7 +32,9 @@ drafts/*
 
 # Editors and OS
 .vscode/
+.idea/
 .DS_Store
+*.log
 
 # Third-party data for the corpus checks (scripts/fetch_corpus.py, fetch_hrc_pushfold.py)
 tests/corpus/

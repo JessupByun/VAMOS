@@ -133,7 +133,7 @@ def prepare(registry: dict, create: tuple[str, list[str], str] | None) -> Path |
 
     def who(pid: str, nickname: str) -> str | None:
         if nickname.strip().lower() in heroes:
-            return "jes"
+            return "Hero"
         if create and pid in create[1]:
             return create[0]
         found = identity.resolve(pid, profiles)
@@ -212,7 +212,7 @@ def prepare(registry: dict, create: tuple[str, list[str], str] | None) -> Path |
 
 
 def report_unknown(unknown: dict) -> None:
-    print("Accounts no profile claims (ask jes who they were):")
+    print("Accounts no profile claims (ask who they were):")
     for pid, seen in unknown.items():
         print(f"- {pid}: {', '.join(seen['names'])}; hands {seen['hands']}")
 
@@ -238,7 +238,10 @@ def install(work: Path) -> None:
             if digest not in kept:
                 shutil.copy2(current, history / f"{stamp}-before.md")
         shutil.copy2(new, history / f"{stamp}-{labels}.md")
-        shutil.copy2(new, current)
+        # Swapped in whole, so VAMOS never reads a half-written profile mid-session.
+        staged = current.with_name(f".{current.name}.new")
+        shutil.copy2(new, staged)
+        os.replace(staged, current)
         stats = _headline_stats(profile.body)
         line = ", ".join(f"{k} {v['pct']}%" for k, v in stats.items())
         print(f"Installed {new.name} ({len(text.split())} words): {line}")

@@ -73,5 +73,5 @@ uv run python scripts/gen_preflop_tables.py   # the push/fold tables and manifes
 ## History
 
 - Until 2026-10-05 the solver also produced full-depth tables for 2-4 players (opens, 3-bets and limps, with a flop realization model and bucketed multiway equity).
-- An audit against real solver output (published 6-max charts, GTO Wizard heads-up 50bb, HoldemResources push/fold) found only heads-up push/fold reliable, so those tables were retired and their code removed; the write-up and code are in git history (commit 00c9426 and earlier).
+- An audit against real solver output (published 6-max charts, GTO Wizard heads-up 50bb, HoldemResources push/fold) found only heads-up push/fold reliable, so those tables were retired along with their flop realization and multiway code. The tree builder (`preflop/tree.py`) still takes the general menu of opens, 3-bets and limps, but only the heads-up push/fold game is built and solved.
 - An independent review of the rules on 2026-10-05 led to the all-in, price, squeeze and effective-stack fixes described above.

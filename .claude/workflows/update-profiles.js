@@ -15,14 +15,14 @@ export const meta = {
 //   create: true for a new profile (no current file), built from every game in the work folder.
 const { repo, work, date, players } = args
 
-const COMMON = (p) => `Context: VAMOS is jes's real-time poker assistant for a private PokerNow home game (NLH, blinds 0.10/0.20, 50bb buy-ins, rebuys and top-ups, 2 to 5 players). VAMOS owns the opponent profiles in ${repo}/profiles/; they are the source of truth about each player, and jes wants depth that can be relied on: exact stats, writing about playstyle and tendencies, and the exploits that work.
+const COMMON = (p) => `Context: VAMOS is a real-time poker assistant for private PokerNow home games (NLH cash; the hero is the person running it, called "Hero" in the hand records). VAMOS owns the opponent profiles in ${repo}/profiles/; they are the source of truth about each player, and the hero wants depth that can be relied on: exact stats, writing about playstyle and tendencies, and the exploits that work.
 Files (read them in full; page through long ones):
 - The rulebook: ${repo}/profiles/_GUIDELINES.md. Follow it exactly, including Size and compaction.
-- ${p.create ? `No profile exists yet: this is a new profile named "${p.key}", created at jes's request.` : `The current profile: ${repo}/profiles/${p.key}.md (its totals cover the sessions listed in its frontmatter).`}
+- ${p.create ? `No profile exists yet: this is a new profile named "${p.key}", created at the hero's request.` : `The current profile: ${repo}/profiles/${p.key}.md (its totals cover the sessions listed in its frontmatter).`}
 - Exact counts for the new sessions: ${work}/${p.key}.stats.json ("stats_by_session" per session split ring and heads-up, "stats_all_new_sessions" summed; each value "pct% (n/d)"; hands and net per session; open sizes; bet sizes as % of pot; hands where the player showed both cards). The keys follow the rulebook's definitions.
 - Every hand the player played in the new sessions: ${work}/${p.key}.digest.md (hands they only folded preflop are left to the counts), named by session label and hand number.
 - The sessions: ${work}/sessions.json.
-Rules: write only the one output file named below; never edit anything in ${repo}. Never write a real name, PokerNow nickname or display name: only profile names and "jes". Standard poker terms only. No em dashes.`
+Rules: write only the one output file named below; never edit anything in ${repo}. Never write a real name, PokerNow nickname or display name: only profile names and "Hero". Standard poker terms only. No em dashes.`
 
 const WRITE = (p) => `${COMMON(p)}
 
@@ -47,7 +47,7 @@ A checker reviewed ${p.key}'s profile at ${work}/new/${p.key}.md and found:
 ${review}
 
 Verify each correction against the files yourself; apply every one that holds up and reject any that does not (say why). Rewrite ${work}/new/${p.key}.md in place, then confirm its frontmatter parses: python3 -c "import yaml,sys; yaml.safe_load(open(sys.argv[1]).read().split('---')[1])" ${work}/new/${p.key}.md
-Return: the corrections applied, the ones rejected and why, the final headline stats, and a one-line "what changed" for jes.`
+Return: the corrections applied, the ones rejected and why, the final headline stats, and a one-line "what changed" for the hero.`
 
 const results = await pipeline(
   players,

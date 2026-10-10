@@ -7,9 +7,7 @@ from vamos.log.hands import build_hands
 from vamos.profiles import ProfileSet, parse_profile
 
 ALEX = "---\nname: alex\ntag: calling-station\naliases: [Alexander]\nplayer_id: alexid0001\n---\nCalls everything. Folds to jes on the river; rj bluffs him.\n"
-RJ = (
-    "---\nname: rj\naliases: [Ray]\nplayer_id: rjid000001\n---\nLoose floater; Alexander hates him.\n"
-)
+RJ = "---\nname: rj\naliases: [Ray]\nplayer_id: rjid000001\n---\nLoose floater; Alexander hates him.\n"
 
 
 def setup():
@@ -150,3 +148,18 @@ def test_the_history_shows_dead_posts_and_streets_dealt_with_no_action_yet():
         "dead_bb": 0.5,
     } in history
     assert history[-1] == {"street": "turn", "board": ["Ks", "7d", "2c", "9h"]}
+
+
+def test_nicknames_seen_at_the_table_leave_the_profiles_alone():
+    body = "---\nname: alex\n---\nVPIP 67% (20/30). Slowplays trips.\n"
+    profiles = ProfileSet({"alex": parse_profile("alex", body)}, ())
+    names = Pseudonyms()
+    names.add("alex", ["alex"], shown="alex")
+    names.add("alex", ["trips"], shown="alex", nickname=True)
+    names.add("guest", ["67"], shown="67", nickname=True)
+    built = prefix(profiles, names)
+    assert "VPIP 67% (20/30). Slowplays trips." in built.user_text
+    names.check(built.user_text, nicknames=False)
+    # The user's notes still hide every nickname; one with no letter is reported instead.
+    assert names.hide("trips is tilted") == "Player A is tilted"
+    assert names.unusable == {"67"}

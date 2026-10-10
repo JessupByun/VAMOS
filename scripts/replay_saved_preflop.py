@@ -117,7 +117,7 @@ def main() -> None:
                     game_id, hand, hero, spot, card
                 )
                 try:
-                    pseudonyms.check(check)
+                    check()
                 except LeakError as error:
                     print(f"{game_id} #{number}: skipped, {error}")
                     continue

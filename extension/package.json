@@ -2,6 +2,10 @@
   "name": "vamos-extension",
   "private": true,
   "version": "0.1.0",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.12"
+  },
   "type": "module",
   "scripts": {
     "build": "vite build",

@@ -479,6 +479,31 @@ describe("log poller", () => {
     poller.stop();
   });
 
+  it("says why while it keeps to a back-off carried over from another tab", async () => {
+    server.add(1);
+    const poller = startLogPoller("g1", deliver, report);
+    const retryAt = Date.now() + 60_000;
+    poller.resume(server.newest(), Date.now(), retryAt, "PokerNow's log is busy (HTTP 429)");
+    expect(reports).toEqual([{ problem: "PokerNow's log is busy (HTTP 429)", retryAt }]);
+    poller.stop();
+  });
+
+  it("says again why it waits when a back-off outlasts a pause", async () => {
+    server.respond = () => new Response("", { status: 429, headers: { "Retry-After": "60" } });
+    const poller = startLogPoller("g1", deliver, report);
+    poller.resume(null);
+    await vi.advanceTimersByTimeAsync(0);
+    const [busy] = reports;
+    expect(busy?.problem).toBe("PokerNow's log is busy (HTTP 429)");
+    poller.pause();
+    expect(reports.at(-1)).toBeNull();
+    poller.resume(null);
+    expect(reports.at(-1)).toEqual(busy);
+    await vi.advanceTimersByTimeAsync(60_000 - 1);
+    expect(server.requests).toHaveLength(1);
+    poller.stop();
+  });
+
   it("clears its report when paused, since nothing is being retried", async () => {
     server.respond = () => new Response("", { status: 404 });
     const poller = startLogPoller("g1", deliver, report);

@@ -433,6 +433,16 @@ def test_a_new_decision_stops_every_call_on_the_last_one(rig):
     ]
 
 
+def test_a_decision_that_needs_no_call_stops_the_calls_on_an_earlier_one(rig):
+    r = rig([(threading.Event(), BET)])
+    r.advisor.start("g", r.job(), r.clock.t + 20)
+    r.advisor.leave("g", "h1:1:8")  # still the same decision: the call goes on
+    assert r.advisor.view("g", "h1:1:8")["state"] == "thinking"
+    r.advisor.leave("g", "h2:1:3")  # the next hand's preflop spot, answered by a rule
+    assert [e["state"] for e in r.logged()] == ["cancelled"]
+    assert r.advisor.view("g", "h1:1:8") is None
+
+
 def test_a_clock_read_moves_the_deadline_of_every_call_on_the_decision(rig):
     first, deeper = threading.Event(), threading.Event()
     r = rig([(first, BET), (deeper, BET)])

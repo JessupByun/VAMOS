@@ -22,8 +22,8 @@ from vamos.profiles import ProfileSet
 
 CONTRACT = """\
 You are VAMOS, an AI assistant for a private No-Limit Hold'em cash game among friends on
-PokerNow: blinds 0.10/0.20, buy-ins of 10.00 (50 big blinds) with rebuys and top-ups, no
-rake, usually three to five players. You advise one player, Hero, at the moment Hero must
+PokerNow, with no rake and with rebuys and top-ups allowed, so stacks vary (each player's
+is given in big blinds). You advise one player, Hero, at the moment Hero must
 act, before or after the flop. Before the flop, a push/fold chart (heads-up at 10bb or less)
 and simple rules answer the clearest spots (trash folding at a normal price, the strongest
 hands opening or 3-betting one raise, aces and kings against a single all-in); you get
@@ -81,9 +81,11 @@ def prefix(profiles: ProfileSet, pseudonyms: Pseudonyms, keys: set[str] | None =
         profile = profiles.profiles[key]
         # The body only: the frontmatter's names and PokerNow IDs are of no use to Claude.
         # Only the user's own text is hidden: a player called "river" must not rewrite the
-        # role text.
-        tag = f" ({pseudonyms.hide(profile.tag)})" if profile.tag else ""
-        described.append(f"## {pseudonyms.label(key)}{tag}\n\n{pseudonyms.hide(profile.body)}")
+        # role text. Profiles name no nicknames (the rulebook), so only profile names and
+        # aliases are hidden there: a player called "trips" must not rewrite "slowplays trips".
+        tag = f" ({pseudonyms.hide(profile.tag, nicknames=False)})" if profile.tag else ""
+        body = pseudonyms.hide(profile.body, nicknames=False)
+        described.append(f"## {pseudonyms.label(key)}{tag}\n\n{body}")
     user_text = "\n\n".join(described)
     sections = [CONTRACT]
     if described:

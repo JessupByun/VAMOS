@@ -13,8 +13,9 @@ export default defineManifest({
   description: "Real-time poker assistant for PokerNow",
   version: "0.1.0",
   key: KEY,
+  // No host permissions: the content script reads the log with same-origin requests from
+  // the table's own page.
   permissions: ["nativeMessaging", "sidePanel"],
-  host_permissions: POKERNOW,
   background: { service_worker: "src/background/sw.ts", type: "module" },
   content_scripts: [
     {
