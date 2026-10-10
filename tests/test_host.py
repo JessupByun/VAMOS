@@ -873,11 +873,11 @@ def test_profile_stats_come_from_key_stats_before_the_summary():
 
     body = (
         "---\nname: x\n---\n## Summary\nTighter lately (recent VPIP 38%, 61/160).\n\n"
-        "## Key stats\n- VPIP 52% (312/600), PFR 11% (66/600)\n- Recent: VPIP 38% (61/160)\n"
+        "## Key stats\n- VPIP 44% (264/600), PFR 15% (90/600)\n- Recent: VPIP 38% (61/160)\n"
     )
     stats = _profile_view(parse_profile("x", body))["stats"]
-    assert stats["vpip"] == {"pct": "52", "count": "312/600"}
-    assert stats["pfr"] == {"pct": "11", "count": "66/600"}
+    assert stats["vpip"] == {"pct": "44", "count": "264/600"}
+    assert stats["pfr"] == {"pct": "15", "count": "90/600"}
 
 
 def test_a_player_keeps_one_draft_per_game_past_midnight_and_an_id_change(tmp_path, monkeypatch):
