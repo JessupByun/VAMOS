@@ -66,10 +66,28 @@ Some honesty about these numbers:
 - **Claude.** Every other decision, before and after the flop, goes to Claude Opus 5.5 at low effort, with the profiles of the opponents at the table, the whole hand so far, the stats and your notes. It answers with an action and a size, sometimes a mix ("bet 85%, check 15%"), one sentence on why, and a plan for the next street. "Ask deeper" asks again at medium effort and shows both answers so you can compare.
 - **The card.** On your turn, a small card above the pot shows the action, the size in dollars and big blinds, the mix, and where the advice came from (`Preflop chart`, `Preflop rule` or `VAMOS! AI (Claude Opus 5.5 · low)`).
 - **The badges.** Under each seat, the player's profile tag and this session's stats.
-- **The side panel.** The current hand with every AI decision and its reasoning, your notes on each player, their profile summary, a replayer for this session's earlier hands with what VAMOS said next to what you did, and what the AI has cost so far.
+- **The side panel.** Everything else: the current hand, a hand replayer, every player's stats, notes and profile, and the costs. More on it [below](#the-side-panel).
 - **Privacy.** Claude never sees a real name or nickname: opponents are "Player A", "Player B" and so on, and you're "Hero". Everything VAMOS saves stays on your computer, in `data/`.
 
-![The side panel's current hand: Claude's answer with its reasoning and plan](docs/images/panel-hand.png)
+## The side panel
+
+Click the VAMOS icon in Chrome and a side panel opens next to the table.
+
+- **Switches, model and costs.** Turn the AI advice, the card on the table and the seat badges on or off, pick low or medium thinking, and see what the AI has cost this session, this month and all time.
+- **Current hand.** Your cards, your made hand and position, and every AI decision in the hand street by street, each with Claude's reasoning and its plan for the next street. Ask deeper is here too.
+- **Hand replayer.** Pick any earlier hand from the session and go through it street by street: the board, everyone's cards that were shown, every action, and what VAMOS said before each of your decisions next to what you actually did. The menu marks the biggest pots and colors wins and losses, you can filter it to hands you played, big pots, AI decisions or showdowns, and previous and next buttons step through the session.
+- **Players.** Everyone at the table, with their profile tag and summary, this session's stats (VPIP, PFR, 3-bet, c-bet, bets to calls and fold to a bet), the same stats from their profile across every session, and their result in each session.
+- **Notes.** A notes box for each player this session, like "tilted" or "very bluffy". Your notes go to Claude with every decision, under the same pseudonyms.
+- **Profile viewer.** Open anyone's whole profile file right in the panel.
+- **Matching and drafts.** Match a new PokerNow account to an existing profile (friends switch devices and accounts), and Save draft writes a player's session numbers and your notes to `drafts/` so you can look them over.
+
+<table>
+<tr>
+<td valign="top" width="33%"><img src="docs/images/panel-top.png" alt="The switches, the model and the costs"><br><img src="docs/images/panel-hand.png" alt="The current hand: Claude's answer with its reasoning and plan"></td>
+<td valign="top" width="33%"><img src="docs/images/panel-player.png" alt="A player: this session's stats, the profile's stats, notes and the profile file"></td>
+<td valign="top" width="33%"><img src="docs/images/panel-replay.png" alt="The hand replayer: each street with what VAMOS said and what you did"></td>
+</tr>
+</table>
 
 ## Opponent profiles
 
