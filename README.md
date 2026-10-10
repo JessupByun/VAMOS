@@ -31,6 +31,12 @@ The serious versions won't run on a general model like Claude.
 They'll have a proprietary ML model as the decision engine, with the same kind of setup around it: something reading the table in real time, something tracking every player, and all of it fed to the model at every decision.
 VAMOS is just an at-home version of that, but I think it's a pretty good one.
 
+Right now it's built for PokerNow, but nothing about the approach is specific to it.
+The only parts tied to PokerNow are the ones that read its game log and its page, so this could be retrofitted onto pretty much any online site, either by writing a reader for that site or by few-shot prompting a model with a few examples of its hand histories.
+Same goes for the model: Claude sits behind one small provider class ([`src/vamos/brain/provider.py`](src/vamos/brain/provider.py)), so switching to another API provider is mostly a matter of writing one more of those.
+
+And these models are only going to keep getting cheaper and more intelligent, especially open-source models that you could potentially run locally.
+
 ## Results
 
 Across 15 sessions, from heads-up up to 5-handed, I'm up 765 big blinds over 1,493 hands.
@@ -133,7 +139,7 @@ The 15 sessions above came to about $11 in API costs, a bit under $1 an hour of 
 The side panel shows what this session, this month and all time have cost.
 With the AI switched off in the side panel there are no API calls at all; the preflop chart, the rules and the stats keep working.
 
-## Playing fair
+## Fair play and ethics
 
 Only use this in games where everyone knows about it and is fine with it.
 My friends knew.
