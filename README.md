@@ -8,16 +8,17 @@ Hello, and welcome to **VAMOS!**, a real-time poker AI assistant that gives you 
 At its core, **VAMOS!** does two things:
 
 1. **It reads the table as you play.** It records the full game state (stack sizes, blinds, every action, hole cards and runouts) and computes stats on every opponent, such as VPIP, PFR and c-bet %, shown on the table and in a side panel.
-2. **It exploits your opponents.** It keeps a written profile of each opponent's playstyle and tendencies, updated after every session, and feeds those profiles, the hand and the stats to an AI model that recommends the most exploitative play.
+2. **It learns your opponents and exploits them.** It keeps a written profile of each opponent's playstyle and tendencies and feeds those profiles, the hand and the stats to an AI model that recommends the most exploitative play.
+   This is *continual learning*: after each session, one click has the AI rewrite every profile from the new hands, so each one keeps getting sharper the more you play against that person.
 
 It also saves every hand you play, and its built-in *hand replayer* walks through any hand of the session street by street, with what **VAMOS!** advised next to what you actually did.
 
-**VAMOS!** is technically the second version of my poker AI assistant (*PAIv2*); the first, *PAIv1*, is [here](https://github.com/JessupByun/PAIv1).
+**VAMOS!** is technically the second version of my poker AI assistant (*PAIv2*); you can find the first, *PAIv1*, [here](https://github.com/JessupByun/PAIv1).
 The name comes from my friends' and my favorite poker celebration.
 
-![VAMOS! on a table: the action card above the pot and a stats badge under each seat](docs/images/table.png)
+![VAMOS! during a real hand on PokerNow: the overlay card above the pot, a stats badge under each seat, and the side panel open with the AI's advice and every player's stats](docs/images/live-table.png)
 
-*A sample table generated for this README. The card above the pot is the **VAMOS!** overlay.*
+*A real hand from my home game, with the side panel open. Player names, a profile's text and results, and the table chat are blurred.*
 
 ## Background and motivation
 
@@ -95,6 +96,10 @@ Every number comes from the hand histories **VAMOS!** saved.
 - **The card.** On your turn, a small card above the pot shows the action, the size in dollars and big blinds, the mix, and where the advice came from: `Preflop chart`, `Preflop rule`, or the AI with its model named, currently `VAMOS! AI (Claude Opus 5.5 · low)`.
 - **The badges.** Under each seat, the player's name and this session's VPIP and PFR.
 - **The side panel.** Everything else, covered [below](#side-panel).
+
+![The card above the pot and a stats badge under each seat, on a sample table](docs/images/table.png)
+
+*The card and the badges on a sample table made for this README.*
 - **Privacy.** The AI never sees a real name or nickname: opponents are "Player A", "Player B" and so on, and you're "Hero". Everything **VAMOS!** saves stays on your computer, in `data/`.
 
 ## Side panel
@@ -110,6 +115,7 @@ Click the **VAMOS!** icon in Chrome to open a side panel next to the table.
 - **Players.** Everyone at the table, with their profile tag and summary, this session's stats (VPIP, PFR, 3-bet, c-bet, bets to calls and fold to a bet), the same stats from their profile across every session, and their result in each session.
 - **Notes.** A notes box for each player this session, like "tilted" or "very bluffy". Your notes go to the AI with every decision, under the same pseudonyms.
 - **Profile viewer.** Open anyone's whole profile file right in the panel.
+- **Update profiles.** After a session, rewrite every profile from the new hands with one click (see [Opponent profiles](#opponent-profiles)), or start a profile for a new player with *New profile...* in their profile menu.
 - **Matching and drafts.** Match a new PokerNow account to an existing profile (friends switch devices and accounts), and *Save draft* writes a player's session numbers and your notes to `drafts/` so you can look them over.
 
 <table>
@@ -132,19 +138,21 @@ Each opponent gets one Markdown file in `profiles/` with:
 with every read backed by counts or specific hands.
 The AI reads the whole profile of everyone at the table at every decision.
 
-**Keeping them current.** After a session, open [Claude Code](https://claude.com/claude-code) in this folder and say *"update the profiles"*:
+**Continual learning.** This is how **VAMOS!** learns: the profiles are rewritten after every session from what actually happened, so the more you play someone, the sharper their profile gets.
+Every profile follows one rulebook, [`profiles/_GUIDELINES.md`](profiles/_GUIDELINES.md), which sets the sections, the stat definitions and how much evidence a read needs.
 
-1. A script counts the new hands exactly.
-2. AI agents rewrite each profile from those counts and every hand that player played.
-3. A second agent checks every number and hand against the data, and the corrections that hold up are applied.
-4. Old versions are kept, so nothing is lost.
+There are three ways to update them:
 
-This runs on your Claude subscription through Claude Code rather than your API key, since it uses a lot of tokens.
-It's the one part of **VAMOS!** tied to a specific tool.
+1. **The Update profiles button** (side panel, under Players). One click after a session:
+   - **VAMOS!** finds every profiled player with new hands, counts their stats exactly and gathers every hand they played.
+   - It shows you who will be updated and roughly what it will cost (about $0.50 per player), and runs only once you confirm.
+   - The AI model (currently Claude Opus 5.5, high thinking) rewrites each profile under the rulebook, with every name pseudonymized like at the table.
+   - Code then writes the profile's numbers itself (hands, sessions, net results and the headline stats) from the exact counts, so they never depend on the model's arithmetic.
+   - Every earlier version is kept in `data/profile-history/`, and *Undo* puts the last update back.
+2. **An agent session on a subscription plan.** Updating profiles uses a lot of tokens, so a coding agent on a subscription you already pay for (Claude Code, Codex or similar) is a good way to save API costs. `uv run python scripts/prepare_profile_update.py` writes each player's exact counts and hands to a work folder; the agent writes the new profiles under the rulebook, and `--install <work folder>` checks and installs them.
+3. **By hand.** The profiles are plain Markdown files and they're yours: edit them whenever you like.
 
-**Starting a profile.** Play a session or two with someone, then ask Claude Code to create a profile for them under whatever name you like.
-It needs their PokerNow player ID, which is in the `/players/<id>` link on their seat.
-The rules every profile follows are in [`profiles/_GUIDELINES.md`](profiles/_GUIDELINES.md).
+**Starting a profile.** Play a session or two with someone, then choose *New profile...* in their profile menu in the side panel and give it a name. The AI builds the profile from every hand of theirs **VAMOS!** has saved.
 
 ## Design principles
 
@@ -152,7 +160,7 @@ The rules every profile follows are in [`profiles/_GUIDELINES.md`](profiles/_GUI
 - **Exact state or nothing.** Every hand is rebuilt from the log, and advice is stamped with the exact decision it was for, so it never shows once the spot has moved on.
 - **Math in code, judgment in the model.** Anything that can be computed exactly is computed and handed to the AI, which is told to trust those numbers. The model only does what it's good at: reading people and making the call.
 - **A short prompt.** No strategy guide, no ranges, no solver output: just a short role, the profiles, the hand and the stats. *The model already knows poker; what it doesn't know is your friends.*
-- **Learning only through the profiles.** There's no other stats engine or model training. The profiles get rewritten after every session from exact counts, under one rulebook, and that's the whole learning loop.
+- **Continual learning through the profiles.** There's no other stats engine or model training. The profiles get rewritten after every session from exact counts, under one rulebook, and that's the whole learning loop.
 - **Say where advice came from, and say when something breaks.** Every piece of advice is labeled with its source. When the AI call fails, the API key is missing or PokerNow's log stops answering, the card says so instead of quietly falling back.
 - **Don't cut quality to save money.** Every AI decision uses a frontier model (currently Opus 5.5), and the profiles are cached so that stays affordable.
 - **Standard poker terms.** No made-up labels, and calm colors: only the action itself is colored.
@@ -165,7 +173,6 @@ The rules every profile follows are in [`profiles/_GUIDELINES.md`](profiles/_GUI
 - **[uv](https://docs.astral.sh/uv/)** for the Python side; it installs Python 3.12 for you.
 - **Node.js 22.12 or newer** to build the extension.
 - **An API key for the AI model.** Currently that's an Anthropic key with access to Claude Opus 5.5, from [platform.claude.com](https://platform.claude.com). Another provider needs its own provider class (see [The core idea](#the-core-idea)).
-- **[Claude Code](https://claude.com/claude-code)** *(optional)*, only if you want **VAMOS!** to keep the profiles up to date.
 
 **Install**
 
@@ -200,18 +207,18 @@ cd extension && npm ci && npm run build
 ## Costs
 
 The 15 sessions above came to about **$11 in API costs**, a bit under **$1 an hour** of play with the AI on.
-The side panel shows what this session, this month and all time have cost.
+Updating the profiles with the button costs about **$0.50 per player** per update, and the side panel shows the estimate before it runs.
+The side panel shows what this session, this month and all time have cost, profile updates included.
 With the AI switched off in the side panel there are no API calls at all; the preflop chart, the rules and the stats keep working.
 
 ## Fair play and ethics
 
 **Only use VAMOS! in games where everyone knows about it and agrees to it.**
-Using it on people who don't know is cheating.
+Using it on people who don't know can be classified as cheating.
 
 It's also likely against most online poker sites' terms of service.
 [PokerNow's](https://network.pokernow.com/service_terms), for example, prohibit automated scraping of the site and using it for real-money games.
 Use it at your own risk.
-**VAMOS!** isn't affiliated with PokerNow or Anthropic.
 
 ## Directory structure
 
@@ -220,8 +227,7 @@ Use it at your own risk.
 | `src/vamos/` | The backend Chrome starts: the log parser, the hand engine and stats, the preflop chart and rules, the AI calls, and the hand replayer. |
 | `extension/` | The Chrome extension: the card and badges on the table, and the side panel. |
 | `profiles/` | Your opponent profiles (kept out of git) and the rulebook they follow, `_GUIDELINES.md`. |
-| `.claude/` | The Claude Code skill and workflow that update the profiles. |
-| `scripts/` | Developer tools: the profile update's preparation, the preflop chart generators, and replays of logged spots. |
+| `scripts/` | Developer tools: preparing a profile update for an agent session, the preflop chart generators, and replays of logged spots. |
 | `docs/` | Notes on PokerNow's log and page, the full log grammar, and how preflop advice works. |
 | `tests/` | The test suite. |
 | `data/` | Created as you play, and kept out of git: saved games, settings, seat matches, every AI call, costs and logs. |

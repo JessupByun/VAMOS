@@ -6,7 +6,8 @@ user's subscription, never through VAMOS's API calls.
 
 Hands are split into ring (3 or more players dealt in) and heads-up (2), per session.
 Players are named by profile name ("Hero" for the hero); an account no profile claims is
-"other player A", "other player B", ... so no nickname reaches the records.
+"unknown player 1", "unknown player 2", ... so no nickname reaches the records (numbers, not
+letters, so they never read as the "Player A" pseudonyms a profile update sends).
 """
 
 from collections import defaultdict
@@ -81,7 +82,7 @@ def collect(sessions: list[SessionSpec], who: Who) -> tuple[dict[str, PlayerData
     unknown: dict[str, dict[str, Any]] = {}
     for spec in sessions:
         log = GameSession(spec.game, spec.path).log
-        others: dict[str, str] = {}  # this game's unclaimed accounts -> "other player A", ...
+        others: dict[str, str] = {}  # this game's unclaimed accounts -> "unknown player 1", ...
         for hand in log.hands:
             if not hand.ended or hand.number <= spec.after:
                 continue
@@ -90,7 +91,7 @@ def collect(sessions: list[SessionSpec], who: Who) -> tuple[dict[str, PlayerData
                 pid = log.current_id(seat.player.id)
                 claimed = who(pid, seat.player.name)
                 if not claimed:
-                    others.setdefault(pid, f"other player {chr(ord('A') + len(others))}")
+                    others.setdefault(pid, f"unknown player {len(others) + 1}")
                     seen = unknown.setdefault(pid, {"names": set(), "hands": defaultdict(int)})
                     seen["names"].add(seat.player.name)
                     seen["hands"][spec.label] += 1

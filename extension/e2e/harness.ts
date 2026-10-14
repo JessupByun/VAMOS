@@ -111,6 +111,8 @@ export interface Harness {
    * `usage` is the tokens Claude reports, to be billed.
    */
   setClaudeAnswer: (answer: object) => void;
+  /** Claude's next replies as plain text, such as a profile it writes for Update profiles. */
+  setClaudeText: (text: string) => void;
   /**
    * From the next launch on, Chrome cannot start the backend: it is not registered with
    * Chrome ("unregistered"), or it exits at once ("exits"); null works normally again.
@@ -127,6 +129,8 @@ export async function launch({ record = true }: { record?: boolean } = {}): Prom
   const profilesDir = join(root, "profiles");
   mkdirSync(profilesDir);
   writeFileSync(join(profilesDir, "alex.md"), PROFILE);
+  // The rulebook a profile update follows, as in the repo.
+  writeFileSync(join(profilesDir, "_GUIDELINES.md"), readFileSync(join(REPO, "profiles/_GUIDELINES.md")));
 
   // Claude's answer is canned, so no test ever reaches the API.
   const canned = join(root, "claude-answer.json");
@@ -206,6 +210,7 @@ export async function launch({ record = true }: { record?: boolean } = {}): Prom
   return {
     context,
     setClaudeAnswer: (answer) => writeFileSync(canned, JSON.stringify(answer)),
+    setClaudeText: (text) => writeFileSync(canned, text),
     breakHost: (how) => {
       if (how === "unregistered") rmSync(manifestPath, { force: true });
       else writeFileSync(manifestPath, manifest);

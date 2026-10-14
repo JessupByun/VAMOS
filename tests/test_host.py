@@ -1208,3 +1208,25 @@ def test_the_card_says_until_when_claude_is_waited_for(tmp_path):
     # Five of the table's 12 seconds are left for the hero to act.
     assert reply["facts"]["answerBy"] == round((wall.timestamp() + 2 + 7) * 1000)
     gate.set()
+
+
+def test_update_profiles_plans_on_a_thread_and_says_when_there_is_nothing_new(tmp_path):
+    backend, fake, sent = claude_backend(tmp_path, [])
+    [reply] = backend.handle({"type": "profiles_plan"})
+    assert reply == {"type": "profiles_update", "state": "planning", "players": []}
+    assert sent.get(timeout=5) == {"type": "profiles_update", "state": "none", "players": []}
+    # Nothing planned: nothing to run, nothing to undo, and the AI was never called.
+    [ran] = backend.handle({"type": "profiles_update"})
+    assert ran["state"] == "none"
+    [undone] = backend.handle({"type": "profiles_undo"})
+    assert undone == {"type": "profiles_update", "state": "undone", "players": []}
+    assert fake.requests == []
+
+
+def test_create_profile_refuses_a_bad_or_taken_name(tmp_path):
+    backend, _, _ = claude_backend(tmp_path, [])
+    for name, why in (("../x", "1 to 32 letters"), ("alex", "already a profile named alex")):
+        [reply] = backend.handle(
+            {"type": "profiles_plan", "create": {"name": name, "playerId": "strange001"}}
+        )
+        assert reply["state"] == "failed" and why in reply["message"]

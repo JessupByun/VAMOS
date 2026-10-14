@@ -1227,6 +1227,64 @@ test("closing the tab that shows the hero's turn ends the turn once no tab shows
   await expect(panel.getByRole("button", { name: "Ask deeper" })).toHaveCount(0);
 });
 
+test("Update profiles shows the plan and its cost, rewrites the profile with the AI, and can undo it", async () => {
+  await openTable();
+  const panel = await openPanel();
+  // Hand #1 played out, so alex has a new hand no profile has counted.
+  harness.addLogLines([...HAND_START, `${N} folds`, `${H} calls 0.20`, `${D} checks`, "Flop:  [K♠, 7♦, 2♣]", ...FLOP_BET_WINS]);
+  // alex's made-up profile already counts sessions A and B, so this game is C.
+  writeFileSync(
+    join(harness.dataDir, "profile-sessions.json"),
+    JSON.stringify({ sessions: { A: { date: "2026-09-01" }, B: { date: "2026-09-08" } }, excluded: {} }),
+  );
+  // The hand is saved once it has finished: the replayer lists it.
+  await expect(panel.getByRole("combobox", { name: "Replay an earlier hand" }).locator("option")).toHaveCount(2);
+  const updater = panel.locator(".updater");
+  await updater.getByRole("button", { name: "Update profiles" }).click();
+  await expect(updater).toContainText(/Update alex from 1 hand, about \$\d+\.\d\d of AI/);
+  harness.setClaudeText(
+    "TAG: Calling station\n## Summary\nPlayer A folds the big blind to a flop bet.\n\n## Key stats\nSource: A to C.\n" +
+      "- VPIP 1% (1/1), PFR 12% (14/120)\n- 3-bet vs an open 5% (1/20). Facing a 3-bet: fold 0% (0/1)\n" +
+      "- Flop: C-bets 50% (1/2). Faced a bet: fold 100% (1/1)\n\n## Changelog\n- added C.\n",
+  );
+  await updater.getByRole("button", { name: "Update", exact: true }).click();
+  await expect(updater).toContainText("1 profile updated");
+  await expect(updater.locator(".updater-rows")).toContainText("alex updated");
+  const file = join(harness.dataDir, "..", "profiles", "alex.md");
+  const written = readFileSync(file, "utf8");
+  expect(written).toContain("C: e2etest through hand 1");
+  expect(written).toContain("alex folds the big blind to a flop bet.");
+  // The headline line comes from the exact counts, not the model's.
+  expect(written).toMatch(/- VPIP \d+% \(\d+\/121\), PFR \d+% \(\d+\/121\)/);
+  await updater.getByRole("button", { name: "Undo" }).click();
+  await expect(updater).toContainText("Put back the earlier profile of alex.");
+  expect(readFileSync(file, "utf8")).not.toContain("C: e2etest");
+});
+
+test("New profile names a profile for a player without one, built by the AI from their saved hands", async () => {
+  await openTable();
+  const panel = await openPanel();
+  harness.addLogLines([...HAND_START, `${N} folds`, `${H} calls 0.20`, `${D} checks`, "Flop:  [K♠, 7♦, 2♣]", ...FLOP_BET_WINS]);
+  await expect(panel.getByRole("combobox", { name: "Replay an earlier hand" }).locator("option")).toHaveCount(2);
+  await panel.getByRole("combobox", { name: "Match a profile for new guy" }).selectOption({ label: "New profile..." });
+  await panel.getByRole("textbox", { name: "Name a new profile for new guy" }).fill("Newguy");
+  await panel.getByRole("button", { name: "Create", exact: true }).click();
+  const updater = panel.locator(".updater");
+  await expect(updater).toContainText(/Create a profile for newguy from 1 hand, about \$/);
+  harness.setClaudeText(
+    "TAG: Nit\n## Summary\nPlayer B folds a lot.\n\n## Key stats\n- VPIP 0% (0/1), PFR 0% (0/1)\n" +
+      "- 3-bet vs an open 0% (0/0). Facing a 3-bet: fold 0% (0/0)\n- Flop: C-bets 0% (0/0). Faced a bet: fold 0% (0/0)\n" +
+      "- Went to showdown 0% (0/0), won at showdown 0% (0/0)\n\n## Changelog\n- created.\n",
+  );
+  await updater.getByRole("button", { name: "Create", exact: true }).click();
+  await expect(updater).toContainText("1 profile updated");
+  const written = readFileSync(join(harness.dataDir, "..", "profiles", "newguy.md"), "utf8");
+  expect(written).toContain("player_id: strange001");
+  expect(written).toContain("newguy folds a lot.");
+  // The table now knows new guy by the new profile.
+  await expect(panel.locator(".players .who", { hasText: /^newguy$/ })).toBeVisible();
+});
+
 // Not a check: screenshots of the card and side panel for reviewing the design by eye.
 // Run with VAMOS_SHOTS=<dir> npx playwright test -g "screenshots".
 test("screenshots of the card and the side panel", async () => {

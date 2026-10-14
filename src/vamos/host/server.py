@@ -42,6 +42,7 @@ from vamos.identity import IdentityMap, Resolution
 from vamos.jsonl import append_lines
 from vamos.log.hands import Hand, HandLog, Street
 from vamos.money import parse_chips
+from vamos.profile_update import WRITER_TIMEOUT, Paths, Update, undo
 from vamos.profiles import Profile, ProfileSet, load_profiles
 from vamos.session import GameSession, Read, Showdown, reads
 
@@ -117,6 +118,11 @@ class Backend:
             clock=clock,
             advice_log=self.advice_log,
         )
+        # The side panel's Update profiles (and Create profile): one at a time, on its own
+        # thread; the AI model writes for minutes, with more time allowed per call than advice.
+        self._updater_provider = provider or AnthropicProvider(timeout=WRITER_TIMEOUT)
+        self._update: Update | None = None
+        self._updating = False
         # data/settings.json: the dial, and the hero's own names (real name, nicknames) so
         # they are kept out of prompts like everyone else's.
         self.settings_path = data_dir / "settings.json"
@@ -274,6 +280,12 @@ class Backend:
             return [{"type": "draft_failed", "playerId": pid, "error": why}]
         if kind == "ask":
             return self._ask(message)
+        if kind == "profiles_plan":
+            return self._profiles_plan(message)
+        if kind == "profiles_update":
+            return self._profiles_update()
+        if kind == "profiles_undo":
+            return self._profiles_undo()
         if kind == "hand_detail_request":
             return self._hand_detail(message["gameId"], str(message.get("key", "")))
         log.warning("unknown message type %r", kind)
@@ -312,6 +324,110 @@ class Backend:
     def _cost_changed(self) -> None:
         with self.lock:
             self.emit(self._costs())
+
+    def _profiles_report(self, status: Message) -> None:
+        with self.lock:
+            self.emit({"type": "profiles_update", **status})
+
+    def _profiles_busy(self) -> list[Message] | None:
+        if self._updating:
+            return [{"type": "profiles_update", "state": "busy", "players": []}]
+        return None
+
+    def _profiles_plan(self, message: Message) -> list[Message]:
+        """What Update profiles (or Create profile) would do: worked out on a thread, then sent."""
+        busy = self._profiles_busy()
+        if busy:
+            return busy
+        create = None
+        raw = message.get("create")
+        if isinstance(raw, dict):
+            name = str(raw.get("name", "")).strip().lower()
+            why = None
+            if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,31}", name):
+                why = "A profile name is 1 to 32 letters, digits, - or _."
+            elif (self.profiles_dir / f"{name}.md").exists():
+                why = f"There is already a profile named {name}."
+            if why:
+                return [
+                    {"type": "profiles_update", "state": "failed", "players": [], "message": why}
+                ]
+            create = (name, str(raw.get("playerId", "")))
+        update = Update(
+            Paths(self.data_dir, self.profiles_dir),
+            self._updater_provider,
+            self.ledger,
+            self._profiles_report,
+        )
+        self._update = update
+        self._updating = True
+
+        def plan() -> None:
+            try:
+                status = update.plan(create)
+                if status["state"] == "plan" and self.account_problem:
+                    problem = self.account_problem
+                    status["problem"] = ACCOUNT_TEXT.get(problem, problem)
+            except Exception:
+                log.exception("[VAMOS] could not prepare the profile update")
+                status = {
+                    "state": "failed",
+                    "players": [],
+                    "message": "Could not prepare the update (logged in data/logs/host.log).",
+                }
+            self._updating = False
+            self._profiles_report(status)
+
+        threading.Thread(target=plan, daemon=True).start()
+        return [{"type": "profiles_update", "state": "planning", "players": []}]
+
+    def _profiles_update(self) -> list[Message]:
+        """Run the update last planned: the AI model writes, code checks, the profiles install."""
+        busy = self._profiles_busy()
+        if busy:
+            return busy
+        update = self._update
+        if update is None or update.prepared is None:
+            return [{"type": "profiles_update", "state": "none", "players": []}]
+        self._update = None  # a plan is run once
+        self._updating = True
+
+        def run() -> None:
+            try:
+                update.run()
+            except Exception:
+                log.exception("[VAMOS] the profile update failed")
+                self._profiles_report(
+                    {
+                        "state": "failed",
+                        "players": [],
+                        "message": "The update hit an error (logged in data/logs/host.log).",
+                    }
+                )
+            finally:
+                self._updating = False
+            self._cost_changed()
+            self._players_changed()
+
+        threading.Thread(target=run, daemon=True).start()
+        return [{"type": "profiles_update", "state": "running", "players": []}]
+
+    def _profiles_undo(self) -> list[Message]:
+        busy = self._profiles_busy()
+        if busy:
+            return busy
+        restored = undo(Paths(self.data_dir, self.profiles_dir))
+        players = [{"key": key, "state": "restored", "summary": ""} for key in restored]
+        replies: list[Message] = [
+            {"type": "profiles_update", "state": "undone", "players": players}
+        ]
+        return replies + [self._players(game_id) for game_id in self.seated]
+
+    def _players_changed(self) -> None:
+        """Profiles changed on disk: every table's players again, with the new reads."""
+        with self.lock:
+            for game_id in list(self.seated):
+                self.emit(self._players(game_id))
 
     def _api_status(self) -> Message:
         problem = self.account_problem

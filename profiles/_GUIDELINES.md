@@ -100,7 +100,8 @@ Never count, cite or describe an excluded session, and list it under `excluded` 
 
 ## Updating after a session
 
-After a session, the hero asks Claude Code in this project to update the profiles: the `update-profiles` skill (`.claude/skills/update-profiles/`) prepares the counts and hand records with `scripts/prepare_profile_update.py` and runs the `update-profiles` workflow, on the hero's Claude subscription and never the API key VAMOS uses at the table.
+After a session the profiles are updated from the saved games: with the side panel's Update profiles button (the AI model writes each profile through the API, `src/vamos/profile_update.py`), or by an agent session that prepares the counts and hand records with `scripts/prepare_profile_update.py`, writes the profiles and installs them with `--install` (for example the `update-profiles` skill in `.claude/`).
+Either way, VAMOS's code writes the frontmatter numbers (`hands`, `sessions`, `games`, `net`, `last_updated`) and checks the headline lines against its exact counts.
 Session labels and excluded games live in `data/profile-sessions.json`.
 
 1. Take the session's exact counts, split ring and heads-up, and add them to the totals.

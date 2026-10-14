@@ -56,6 +56,9 @@ class Request:
     preset: Preset
     system: list[dict[str, Any]]  # cacheable prefix blocks
     messages: list[dict[str, Any]]
+    # The advice's JSON shape; None for a plain-text answer (a profile update).
+    schema: dict[str, Any] | None = field(default_factory=lambda: SCHEMA)
+    max_tokens: int = MAX_TOKENS
 
 
 @dataclass(frozen=True)
@@ -100,16 +103,20 @@ def api_key() -> str | None:
 def params(request: Request) -> dict[str, Any]:
     """The Messages API arguments for a request (separate so tests can check them)."""
     preset = request.preset
-    output_config: dict[str, Any] = {"format": {"type": "json_schema", "schema": SCHEMA}}
+    output_config: dict[str, Any] = {}
+    if request.schema is not None:
+        output_config["format"] = {"type": "json_schema", "schema": request.schema}
     out: dict[str, Any] = {
         "model": preset.model,
-        "max_tokens": MAX_TOKENS,
+        "max_tokens": request.max_tokens,
         "system": request.system,
         "messages": request.messages,
         "output_config": output_config,
     }
     if preset.effort:
         output_config["effort"] = preset.effort
+    if not output_config:
+        del out["output_config"]
     return out
 
 
@@ -133,8 +140,10 @@ def _usage_dict(usage: Any) -> dict[str, Any]:
 
 
 class AnthropicProvider:
-    def __init__(self, client: Any = None) -> None:
+    def __init__(self, client: Any = None, timeout: float = REQUEST_TIMEOUT) -> None:
         self._client = client  # built lazily from the API key unless given (tests)
+        # Seconds the stream may go without an event; a profile update thinks for minutes.
+        self._timeout = timeout
 
     def _client_or_fail(self):
         if self._client is None:
@@ -143,7 +152,7 @@ class AnthropicProvider:
                 raise CallFailed("no API key")
             import anthropic
 
-            self._client = anthropic.Anthropic(api_key=key, max_retries=0, timeout=REQUEST_TIMEOUT)
+            self._client = anthropic.Anthropic(api_key=key, max_retries=0, timeout=self._timeout)
         return self._client
 
     def run(

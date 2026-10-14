@@ -62,7 +62,12 @@ function table(gameId: string): TableMemory {
 }
 
 function remember(message: HostToWorker) {
-  if (message.type === "settings" || message.type === "costs" || message.type === "api_status") {
+  if (
+    message.type === "settings" ||
+    message.type === "costs" ||
+    message.type === "api_status" ||
+    message.type === "profiles_update"
+  ) {
     latest.set(message.type, message);
   }
   else if (message.type === "players") table(message.gameId).players = message;

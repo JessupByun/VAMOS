@@ -1408,3 +1408,65 @@ details.file .body {
   font-weight: 700;
   color: var(--muted);
 }
+
+/* Update profiles: a quiet row at the top of Players; a plan to confirm, then progress. */
+.updater {
+  margin: 4px 0 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--soft);
+  border: 1px solid var(--border);
+}
+
+.updater p {
+  margin: 0 0 8px;
+}
+
+.updater p:last-child {
+  margin-bottom: 0;
+}
+
+.updater .warn {
+  color: var(--warn);
+}
+
+.updater .buttons {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.updater-rows {
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+  font-size: 12.5px;
+}
+
+.updater-rows li {
+  padding: 2px 0;
+}
+
+.updater-rows .who {
+  font-weight: 700;
+}
+
+.updater-rows .state.failed {
+  color: var(--warn);
+}
+
+.updater code {
+  font: 11.5px ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.create-profile {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin: 6px 0;
+}
+
+.create-profile input {
+  flex: 1;
+  min-width: 0;
+}

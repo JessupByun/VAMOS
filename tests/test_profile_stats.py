@@ -86,7 +86,7 @@ def test_heads_up_hands_are_kept_apart_and_unclaimed_players_are_not_named(tmp_p
     assert "O/ring" not in rj["stats_by_session"]
     assert unknown == {GUEST: {"names": ["Yuri"], "hands": {"O": 1}}}
     assert "Yuri" not in "\n".join(players["rj"].digest)
-    assert "other player A" in "\n".join(players["rj"].digest)
+    assert "unknown player 1" in "\n".join(players["rj"].digest)
 
 
 def test_hands_counted_already_are_skipped(tmp_path):

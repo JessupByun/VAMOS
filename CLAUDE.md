@@ -17,7 +17,7 @@ uv run vamos verify <game_id> <export.csv>   # live-built hands vs PokerNow's ex
 uv run python scripts/replay_preflop_routes.py   # preflop coverage on the saved games: chart, rule or Claude
 uv run python scripts/replay_advice.py --dry-run # each logged spot once through today's prompt (without --dry-run it calls Claude and costs money, up to --budget, $3 by default)
 uv run python scripts/replay_saved_preflop.py --dry-run   # saved games' Claude preflop spots through Claude (costs money without --dry-run, up to --budget, $3 by default)
-uv run python scripts/prepare_profile_update.py   # profile update, step 1: new games' counts and hand records in data/profile-work/ (the update-profiles skill runs the rest)
+uv run python scripts/prepare_profile_update.py   # a profile update for an agent session: new games' counts and hand records in data/profile-work/ (--install installs what it wrote)
 uv run python scripts/gen_matchups.py && uv run python scripts/gen_preflop_tables.py   # regenerate the push/fold chart
 
 cd extension
@@ -41,7 +41,7 @@ After a backend change, the same reload restarts the backend (Chrome launches it
 - `src/vamos/preflop/` the heads-up push/fold chart: `lookup.py` and `tables.py` load it at the table, with the hand-class constants in `matchups.py` and the positions in `tree.py`; `payoffs.py`, the solving code in `solver.py` and the tree building only regenerate and check it. `docs/preflop.md` says what answers each preflop spot and how each part was checked; read it before changing the chart or the rules.
 - `scripts/` developer tools, one purpose each (listed under Commands): corpus fetchers, the push/fold generators, the three replays, and the profile update's preparation and install.
 - `src/vamos/profile_stats.py` exact per-player counts (the rulebook's definitions) and hand records from saved games, for updating the profiles.
-- `.claude/skills/update-profiles/` and `.claude/workflows/update-profiles.js` the profile update: after a session the user asks Claude in this project to update the profiles; it runs as Claude Code agents on the user's subscription (write, check against every hand, correct), never through VAMOS's API calls, which are only for live advice.
+- `src/vamos/profile_update.py` the profile update (continual learning): the side panel's Update profiles and New profile... (the backend runs it on a thread: plan with a cost estimate, one AI call per player at high effort, pseudonymized like advice, then code writes the frontmatter numbers and the four headline lines from the exact counts, installs with every version kept, and can undo the last update). `scripts/prepare_profile_update.py` is the same preparation and install for an agent session on a subscription; `.claude/skills/update-profiles/` and `.claude/workflows/update-profiles.js` are such a session for Claude Code (write, check against every hand, correct).
 - `docs/pokernow.md` verified facts about PokerNow's log endpoint, log lines and DOM; `docs/log-grammar.md` the full line grammar with evidence. Read both before touching parsing or DOM code.
 - `tests/` pytest suite, one test file per module.
 - `profiles/` the opponent profiles, owned by VAMOS and written only under the rulebook `profiles/_GUIDELINES.md` (the one tracked file there); every earlier version is in `data/profile-history/<name>/`.
@@ -52,13 +52,13 @@ After a backend change, the same reload restarts the backend (Chrome launches it
 
 ### Scope
 - VAMOS only reads and displays. It never clicks, types into, or otherwise operates PokerNow.
-- VAMOS owns the opponent profiles (the user's decision, 2026-10-07): they are the source of truth about each player, kept current after sessions from the saved games and written only under `profiles/_GUIDELINES.md`, with every earlier version kept in `data/profile-history/<name>/`. A profile is created only when the user asks, under the name the user chooses. The profile loader skips files that start with `_`.
+- VAMOS owns the opponent profiles (the user's decision, 2026-10-07): they are the source of truth about each player, kept current after sessions from the saved games and written only under `profiles/_GUIDELINES.md`, with every earlier version kept in `data/profile-history/<name>/`. Updates run only when the user asks: the Update profiles button (after showing what it will cost), an agent session, or by hand. A profile is created only when the user asks, under the name the user chooses. The profile loader skips files that start with `_`.
 - Save draft writes this session's read and notes to `drafts/` only; it never creates or edits a profile.
 - This session's read is counted from the current game's log only; it is the one stats count in v1. "This session" API cost runs back to the last 3-hour pause between calls, so restarts do not reset it. The three cost figures count play at the table only (test replays stay in the ledger but are left out), stopped calls included as estimates the side panel labels (the user's decision, 2026-10-07).
 - The extension closes the backend 15 s after the last table tab goes away, so a refresh keeps the same backend.
 - The action card always sits at the top middle of the table, just above the pot, even over a seat.
-- Learning happens only through the profiles: exact per-player counts from the saved games plus written reads, under the rulebook. No other stats engine or automatic learning. Deferred features (range tables, HRC tables, review mode's adherence stats, training mode) are built only when the user asks; the hand replayer was built on request (2026-10-05).
-- Claude runs on Opus 5.5 only, before and after the flop: effort low by default, medium as the deeper option. Sonnet 5.5 and Haiku 4.5 were dropped after blind comparisons on logged spots; never Claude Fable 5.1.
+- Learning happens only through the profiles (continual learning): exact per-player counts from the saved games plus written reads, under the rulebook. No other stats engine or model training. Deferred features (range tables, HRC tables, review mode's adherence stats, training mode) are built only when the user asks; the hand replayer was built on request (2026-10-05).
+- Claude runs on Opus 5.5 only, before and after the flop: effort low by default, medium as the deeper option; profile updates use high effort. Sonnet 5.5 and Haiku 4.5 were dropped after blind comparisons on logged spots; never Claude Fable 5.1.
 - Ask the user before any non-trivial design choice this file does not cover.
 
 ### Correctness

@@ -120,6 +120,37 @@ export interface TonightRead {
   facedBets: number;
 }
 
+/** One player in a profile update: how many new hands, and how writing their profile went. */
+export interface ProfileUpdatePlayer {
+  key: string;
+  hands?: number;
+  state?: "waiting" | "writing" | "written" | "failed" | "updated" | "restored";
+  /** The new tag and VPIP once written, or why it failed. */
+  summary?: string;
+}
+
+/**
+ * Update profiles (and Create profile) as it goes: worked out ("planning", then "plan" or
+ * "none"), confirmed and run ("running", then "done" or "failed"), or undone ("undone").
+ * "busy" means another update is under way.
+ */
+export interface ProfilesUpdate {
+  type: "profiles_update";
+  state: "planning" | "plan" | "none" | "busy" | "running" | "done" | "failed" | "undone";
+  players: ProfileUpdatePlayer[];
+  create?: boolean;
+  /** Rough dollars for the whole update, before it runs. */
+  estimate?: number;
+  /** Accounts in the new games that no profile claims (left out). */
+  unknown?: number;
+  /** A problem with the API key or credits. */
+  problem?: string;
+  /** Dollars spent so far. */
+  cost?: number;
+  canUndo?: boolean;
+  message?: string;
+}
+
 /** A draft was written to drafts/ for the user to review. */
 export interface DraftSaved {
   type: "draft_saved";
@@ -604,7 +635,13 @@ export type PanelToWorker =
   /** One earlier hand for the replayer. */
   | { type: "hand_detail_request"; gameId: string; key: string }
   /** The cost figures as of now: "this session" ends after a long pause with no call. */
-  | { type: "costs_request" };
+  | { type: "costs_request" }
+  /** What Update profiles would do, or Create profile for one player under `name`. */
+  | { type: "profiles_plan"; create?: { name: string; playerId: string } }
+  /** Run the update last planned. */
+  | { type: "profiles_update" }
+  /** Put back the profiles the last update replaced. */
+  | { type: "profiles_undo" };
 export type WorkerToPanel =
   | BackendStatus
   | HostAck
@@ -619,6 +656,7 @@ export type WorkerToPanel =
   | HandHistory
   | HandDetail
   | HandDetailFailed
+  | ProfilesUpdate
   | LogStatus;
 export type HostToWorker =
   | { type: "ready"; version: string; recording: boolean }
@@ -634,4 +672,5 @@ export type HostToWorker =
   | HandHistory
   | HandDetail
   | HandDetailFailed
+  | ProfilesUpdate
   | Resume;

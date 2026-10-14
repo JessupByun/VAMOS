@@ -20,6 +20,7 @@ import {
   type PlayerInfo,
   type Players,
   type PreflopAdvice,
+  type ProfilesUpdate,
   type ReplayAction,
   type ReplayDecision,
   type ProfileView,
@@ -107,6 +108,10 @@ const playersByGame = new Map<string, Players>();
 const logTroubles = new Map<string, LogTrouble>();
 // The table last heard from; a table with a live decision is shown before it.
 let lastGame: string | null = null;
+// Update profiles (and Create profile): the backend's latest word on it, until closed.
+let profileUpdate: ProfilesUpdate | null = null;
+// The player a new profile is being named for, from the profile menu's "New profile...".
+let creatingFor: string | null = null;
 let retryDelay = RECONNECT_MIN_MS;
 const subscribers = new Set<() => void>();
 
@@ -207,6 +212,7 @@ function connect() {
       if (message.trouble) logTroubles.set(message.gameId, message.trouble);
       else logTroubles.delete(message.gameId);
     } else if (message.type === "ack") acks = [message, ...acks].slice(0, 20);
+    else if (message.type === "profiles_update") profileUpdate = message;
     notifyAll();
   });
   next.onDisconnect.addListener(() => {
@@ -886,6 +892,7 @@ function Spend({ costs }: { costs: Costs }) {
 
 const NO_PROFILE = "__none__";
 const ASK_AGAIN = "__ask__";
+const CREATE = "__create__";
 const MATCH = "Match existing player profile";
 
 function pct(count: number, of: number): string {
@@ -897,7 +904,11 @@ function IdentityPicker(props: { player: PlayerInfo; profiles: Players["profiles
   const change = (event: Event) => {
     const value = (event.currentTarget as HTMLSelectElement).value;
     if (!value) return;
-    if (value === ASK_AGAIN) {
+    if (value === CREATE) {
+      creatingFor = player.id;
+      (event.currentTarget as HTMLSelectElement).value = current;
+      notifyAll();
+    } else if (value === ASK_AGAIN) {
       send({ type: "forget_identity", playerId: player.id });
     } else {
       send({ type: "assign_identity", playerId: player.id, profile: value === NO_PROFILE ? null : value });
@@ -919,8 +930,183 @@ function IdentityPicker(props: { player: PlayerInfo; profiles: Players["profiles
         </option>
       ))}
       <option value={NO_PROFILE}>No profile</option>
+      {!player.profile && <option value={CREATE}>New profile...</option>}
       {player.status !== "unknown" && <option value={ASK_AGAIN}>Unmatch (ask again)</option>}
     </select>
+  );
+}
+
+const ROW_STATE: Record<string, string> = {
+  waiting: "waiting",
+  writing: "writing...",
+  written: "written",
+  failed: "failed",
+  updated: "updated",
+  restored: "put back",
+};
+
+/** Names in plain English: "alex", "alex and sam", "alex, sam and rj". */
+function names(keys: string[]): string {
+  return keys.length < 2 ? (keys[0] ?? "") : `${keys.slice(0, -1).join(", ")} and ${keys.at(-1)}`;
+}
+
+/**
+ * Update profiles: the AI model rewrites each profile from the hands played since its last
+ * update, under the rulebook, after the user confirms what it will cost.
+ */
+function ProfileUpdater({ paused }: { paused: string | null }) {
+  const update = profileUpdate;
+  const close = () => {
+    profileUpdate = null;
+    notifyAll();
+  };
+  const disabled = paused !== null;
+  const ask = (
+    <button
+      type="button"
+      class="secondary"
+      disabled={disabled}
+      title={paused ?? "Rewrite each profile from the hands played since its last update, with the AI model"}
+      onClick={() => send({ type: "profiles_plan" })}
+    >
+      Update profiles
+    </button>
+  );
+  if (update === null) return <div class="updater">{ask}</div>;
+  const keys = update.players.map((p) => p.key);
+  const hands = update.players.reduce((sum, p) => sum + (p.hands ?? 0), 0);
+  const rows = (
+    <ul class="updater-rows">
+      {update.players.map((p) => (
+        <li key={p.key}>
+          <span class="who">{p.key}</span> <span class={`state ${p.state ?? ""}`}>{ROW_STATE[p.state ?? ""] ?? ""}</span>
+          {p.summary && <span class="muted"> · {p.summary}</span>}
+        </li>
+      ))}
+    </ul>
+  );
+  const closeButton = (
+    <button type="button" class="mini" onClick={close}>
+      Close
+    </button>
+  );
+  let body;
+  if (update.state === "planning") body = <p class="muted small">Working out what is new...</p>;
+  else if (update.state === "busy") body = <p class="muted small">Another update is running.</p>;
+  else if (update.state === "none") {
+    body = (
+      <>
+        <p class="muted small">Every profile is up to date: no new hands since the last update.</p>
+        {closeButton}
+      </>
+    );
+  } else if (update.state === "plan") {
+    body = (
+      <>
+        <p class="small">
+          {update.create ? "Create a profile for " : "Update "}
+          <b>{names(keys)}</b> from {plural(hands, "hand")}, about <b>{dollars(update.estimate ?? 0)}</b> of AI (Opus
+          5.5, high thinking).
+        </p>
+        {(update.unknown ?? 0) > 0 && (
+          <p class="muted small">
+            {plural(update.unknown ?? 0, "account")} no profile claims {update.unknown === 1 ? "is" : "are"} left out;
+            match them to a profile under Players to count them.
+          </p>
+        )}
+        {update.problem && <p class="small warn">{update.problem}</p>}
+        <div class="buttons">
+          <button type="button" disabled={disabled} onClick={() => send({ type: "profiles_update" })}>
+            {update.create ? "Create" : "Update"}
+          </button>
+          <button type="button" class="mini" onClick={close}>
+            Cancel
+          </button>
+        </div>
+      </>
+    );
+  } else if (update.state === "running") {
+    body = (
+      <>
+        <p class="small">Writing profiles with the AI model, one player at a time...</p>
+        {rows}
+        {(update.cost ?? 0) > 0 && <p class="muted small">{dollars(update.cost ?? 0)} so far</p>}
+      </>
+    );
+  } else if (update.state === "done") {
+    const updated = update.players.filter((p) => p.state === "updated").length;
+    body = (
+      <>
+        <p class="small">
+          {plural(updated, "profile")} updated for {dollars(update.cost ?? 0)}. Every earlier version is kept in{" "}
+          <code>data/profile-history/</code>.
+        </p>
+        {rows}
+        <div class="buttons">
+          {update.canUndo && (
+            <button type="button" class="mini" disabled={disabled} onClick={() => send({ type: "profiles_undo" })}>
+              Undo
+            </button>
+          )}
+          {closeButton}
+        </div>
+      </>
+    );
+  } else if (update.state === "undone") {
+    body = (
+      <>
+        <p class="small">
+          {keys.length ? `Put back the earlier ${keys.length === 1 ? "profile" : "profiles"} of ${names(keys)}.` : "Nothing to undo."}
+        </p>
+        {closeButton}
+      </>
+    );
+  } else {
+    body = (
+      <>
+        <p class="small warn">{update.message ?? "The update failed."}</p>
+        {update.players.length > 0 && rows}
+        {closeButton}
+      </>
+    );
+  }
+  return <div class="updater">{body}</div>;
+}
+
+/** Naming a new profile for a player with none: the AI model builds it from every saved hand. */
+function CreateProfile({ player, paused }: { player: PlayerInfo; paused: string | null }) {
+  const [name, setName] = useState("");
+  const create = () => {
+    if (!name.trim()) return;
+    send({ type: "profiles_plan", create: { name: name.trim(), playerId: player.id } });
+    creatingFor = null;
+    notifyAll();
+  };
+  return (
+    <div class="create-profile">
+      <input
+        type="text"
+        aria-label={`Name a new profile for ${player.name}`}
+        placeholder="Profile name, e.g. alex"
+        maxLength={32}
+        value={name}
+        onInput={(event) => setName((event.currentTarget as HTMLInputElement).value)}
+        onKeyDown={(event) => event.key === "Enter" && create()}
+      />
+      <button type="button" class="mini" disabled={paused !== null || !name.trim()} onClick={create}>
+        Create
+      </button>
+      <button
+        type="button"
+        class="mini"
+        onClick={() => {
+          creatingFor = null;
+          notifyAll();
+        }}
+      >
+        Cancel
+      </button>
+    </div>
   );
 }
 
@@ -1148,6 +1334,7 @@ function PlayerRow(props: { player: PlayerInfo; profiles: Players["profiles"]; g
         )}
       </div>
       {!player.hero && <Identity player={player} />}
+      {creatingFor === player.id && <CreateProfile player={player} paused={paused} />}
       {profile?.summary && <p class="summary">{profile.summary}</p>}
       <TonightStats t={player.tonight} />
       {profile && <ProfileStats profile={profile} />}
@@ -1181,6 +1368,7 @@ function PlayersSection({ players, paused }: { players: Players; paused: string 
         {plural(players.profiles.length, "profile")} loaded from history · click <span class="kbd">Save draft</span>{" "}
         to keep this game's read and notes for history
       </p>
+      <ProfileUpdater paused={paused} />
       {players.problems.length > 0 && (
         <ul class="problems">
           {players.problems.map((problem) => (

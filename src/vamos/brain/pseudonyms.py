@@ -99,6 +99,10 @@ class Pseudonyms:
     def label(self, person: str) -> str:
         return self._labels[person]
 
+    def labels(self) -> dict[str, str]:
+        """Every person registered -> their pseudonym."""
+        return dict(self._labels)
+
     def _replacements(self, nicknames: bool) -> dict[str, str]:
         """Each name to hide (lowercase) -> its pseudonym; the first registered wins."""
         pairs = [(name, HERO) for name in self.hero_names]
