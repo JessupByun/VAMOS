@@ -86,7 +86,8 @@ def test_what_a_profile_has_absorbed(script):
 
 
 def test_a_new_game_is_labelled_and_prepared_for_the_players_in_it(script):
-    add_game(script, "pglNEW", 179_135_497_287_200)
+    # Noon UTC, so the game is dated 2026-10-07 in every time zone the date is taken in.
+    add_game(script, "pglNEW", 179_137_440_000_000)
     registry = {"sessions": {"A": {"date": "2026-09-30"}}, "excluded": {}}
     assert script.register_new_games(registry) == ["B"]
     assert registry["sessions"]["B"] == {"game": "pglNEW", "date": "2026-10-07"}

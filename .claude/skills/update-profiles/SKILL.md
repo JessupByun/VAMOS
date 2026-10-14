@@ -40,6 +40,8 @@ Workflow({ name: "update-profiles", args: { repo: "<repo path>", work: "<work fo
 For each player it writes the updated profile, checks every number and every hand cited against the counts and the hand records, and applies the corrections that hold up.
 The results land in `<work folder>/new/`.
 
+Without the Workflow tool, run the same three steps yourself for each player, one subagent each (the Agent tool), using the `WRITE`, `CHECK` and `CORRECT` prompts in `.claude/workflows/update-profiles.js` with the same arguments: write the profile, have a second subagent check it, then a third apply the corrections that hold up.
+
 ## 3. Install
 
 ```bash
