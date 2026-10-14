@@ -1240,7 +1240,7 @@ test("Update profiles shows the plan and its cost, rewrites the profile with the
   // The hand is saved once it has finished: the replayer lists it.
   await expect(panel.getByRole("combobox", { name: "Replay an earlier hand" }).locator("option")).toHaveCount(2);
   const updater = panel.locator(".updater");
-  await updater.getByRole("button", { name: "Update profiles" }).click();
+  await panel.getByRole("button", { name: "Update profiles" }).click();
   await expect(updater).toContainText(/Update alex from 1 hand, about \$\d+\.\d\d of AI/);
   harness.setClaudeText(
     "TAG: Calling station\n## Summary\nPlayer A folds the big blind to a flop bet.\n\n## Key stats\nSource: A to C.\n" +

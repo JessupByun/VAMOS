@@ -961,18 +961,22 @@ function ProfileUpdater({ paused }: { paused: string | null }) {
     notifyAll();
   };
   const disabled = paused !== null;
-  const ask = (
-    <button
-      type="button"
-      class="secondary"
-      disabled={disabled}
-      title={paused ?? "Rewrite each profile from the hands played since its last update, with the AI model"}
-      onClick={() => send({ type: "profiles_plan" })}
-    >
-      Update profiles
-    </button>
-  );
-  if (update === null) return <div class="updater">{ask}</div>;
+  if (update === null) {
+    return (
+      <p class="updater-idle muted small">
+        <button
+          type="button"
+          class="mini"
+          disabled={disabled}
+          title={paused ?? undefined}
+          onClick={() => send({ type: "profiles_plan" })}
+        >
+          Update profiles
+        </button>{" "}
+        rewrites each profile from the hands played since its last update
+      </p>
+    );
+  }
   const keys = update.players.map((p) => p.key);
   const hands = update.players.reduce((sum, p) => sum + (p.hands ?? 0), 0);
   const rows = (

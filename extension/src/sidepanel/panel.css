@@ -1409,7 +1409,12 @@ details.file .body {
   color: var(--muted);
 }
 
-/* Update profiles: a quiet row at the top of Players; a plan to confirm, then progress. */
+/* Update profiles: a small button at the top of Players; a box only for a plan to confirm
+   and the progress after. */
+.updater-idle {
+  margin: 2px 0 10px;
+}
+
 .updater {
   margin: 4px 0 12px;
   padding: 10px 12px;
