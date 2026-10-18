@@ -2,14 +2,14 @@
 
 **A real-time, exploitative poker AI assistant for online home games.**
 
-*Last updated: 10/13/2026*
+*Last updated: 10/18/2026*
 
 Hello, and welcome to **VAMOS!**, a real-time poker AI assistant that gives you decision advice and insights while you play, to help you win and to learn the game.
 At its core, **VAMOS!** does two things:
 
 1. **It reads the table as you play.** It records the full game state (stack sizes, blinds, every action, hole cards and runouts) and computes stats on every opponent, such as VPIP, PFR and c-bet %, shown on the table and in a side panel.
 2. **It learns your opponents and exploits them.** It keeps a written profile of each opponent's playstyle and tendencies and feeds those profiles, the hand and the stats to an AI model that recommends the most exploitative play.
-   This is *continual learning*: after each session, one click has the AI rewrite every profile from the new hands, so each one keeps getting sharper the more you play against that person.
+   This is *continual learning*: after each session, one click has the AI rewrite every profile from the new hands, so each profile becomes more refined the more you play against that person.
 
 It also saves every hand you play, and its built-in *hand replayer* walks through any hand of the session street by street, with what **VAMOS!** advised next to what you actually did.
 
@@ -66,9 +66,8 @@ It only reads and shows you things: it never clicks or types anything into Poker
 
 **It's built to be modular:**
 
-- **The site.** It's built for PokerNow today, but nothing in the pipeline depends on PokerNow except the parts that read the game state. Any site whose game state can be read in real time could be supported, and a coding agent could likely do most of that port from a few example hand histories.
-- **The model.** The AI sits behind one small provider class ([`src/vamos/brain/provider.py`](src/vamos/brain/provider.py)), so switching to another model or API provider is mostly a matter of writing one more. **VAMOS!** currently runs on *Claude Opus 5.5* at low thinking effort.
-- **The trend.** These models will only keep getting cheaper and smarter, especially open-source models you could run locally.
+- **The host site.** It's built for PokerNow today, but nothing in the pipeline depends on PokerNow except the parts that read the game state. Any site whose game state can be read in real time could be supported, and a coding agent could likely do most of that port from a few example hand histories.
+- **The model.** The AI sits behind one small provider class ([`src/vamos/brain/provider.py`](src/vamos/brain/provider.py)), so switching to another model or API provider is mostly a matter of writing one more. **VAMOS!** currently runs on *Claude Opus 5.5* at low thinking effort. These models will only keep getting cheaper and smarter, especially open-source models you could run locally.
 
 ## Results
 
@@ -150,7 +149,7 @@ There are three ways to update them:
    - Code then writes the profile's numbers itself (hands, sessions, net results and the headline stats) from the exact counts, so they never depend on the model's arithmetic.
    - Every earlier version is kept in `data/profile-history/`, and *Undo* puts the last update back.
 2. **An agent session on a subscription plan.** Updating profiles uses a lot of tokens, so a coding agent on a subscription you already pay for (Claude Code, Codex or similar) is a good way to save API costs. `uv run python scripts/prepare_profile_update.py` writes each player's exact counts and hands to a work folder; the agent writes the new profiles under the rulebook, and `--install <work folder>` checks and installs them.
-3. **By hand.** The profiles are plain Markdown files and they're yours: edit them whenever you like.
+3. **By hand.** The profiles are plain Markdown files and you may edit them whenever you like.
 
 **Starting a profile.** Play a session or two with someone, then choose *New profile...* in their profile menu in the side panel and give it a name. The AI builds the profile from every hand of theirs **VAMOS!** has saved.
 
@@ -159,7 +158,7 @@ There are three ways to update them:
 - **Read only.** **VAMOS!** never touches the game. You see the advice and you decide.
 - **Exact state or nothing.** Every hand is rebuilt from the log, and advice is stamped with the exact decision it was for, so it never shows once the spot has moved on.
 - **Math in code, judgment in the model.** Anything that can be computed exactly is computed and handed to the AI, which is told to trust those numbers. The model only does what it's good at: reading people and making the call.
-- **A short prompt.** No strategy guide, no ranges, no solver output: just a short role, the profiles, the hand and the stats. *The model already knows poker; what it doesn't know is your friends.*
+- **A short prompt.** No strategy guide, no ranges, no solver output: just a short role, the profiles, the hand and the stats.
 - **Continual learning through the profiles.** There's no other stats engine or model training. The profiles get rewritten after every session from exact counts, under one rulebook, and that's the whole learning loop.
 - **Say where advice came from, and say when something breaks.** Every piece of advice is labeled with its source. When the AI call fails, the API key is missing or PokerNow's log stops answering, the card says so instead of quietly falling back.
 - **Don't cut quality to save money.** Every AI decision uses a frontier model (currently Opus 5.5), and the profiles are cached so that stays affordable.
