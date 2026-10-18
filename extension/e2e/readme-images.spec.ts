@@ -289,7 +289,6 @@ test("README images", async () => {
       .getByPlaceholder("Notes for this session, e.g. very bluffy")
       .fill("Called the river with fives two hands ago.");
     await page.bringToFront();
-    await page.screenshot({ path: `${OUT}/table.png` });
     await panel.bringToFront();
     await panel.locator("section.advice").screenshot({ path: `${OUT}/panel-hand.png` });
     await alex.locator("details.file summary").click();

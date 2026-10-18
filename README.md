@@ -96,9 +96,9 @@ Every number comes from the hand histories **VAMOS!** saved.
 - **The badges.** Under each seat, the player's name and this session's VPIP and PFR.
 - **The side panel.** Everything else, covered [below](#side-panel).
 
-![The card above the pot and a stats badge under each seat, on a sample table](docs/images/table.png)
+![The VAMOS! card above the pot advising a call, with a stats badge under each seat, during a hand on PokerNow](docs/images/card-on-table.png)
 
-*The card and the badges on a sample table made for this README.*
+*The card and the badges during a hand on PokerNow: the AI advises calling 80% of the time and raising 20% with top pair, weak kicker.*
 - **Privacy.** The AI never sees a real name or nickname: opponents are "Player A", "Player B" and so on, and you're "Hero". Everything **VAMOS!** saves stays on your computer, in `data/`.
 
 ## Side panel
